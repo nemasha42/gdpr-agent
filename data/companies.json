@@ -1,1 +1,38 @@
-{}
+{
+  "meta": {
+    "version": "1.0",
+    "last_updated": "2026-03-14",
+    "total_companies": 1
+  },
+  "companies": {
+    "glassdoor.com": {
+      "company_name": "Glassdoor",
+      "legal_entity_name": "Glassdoor LLC",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-14",
+      "contact": {
+        "dpo_email": "dpo@glassdoor.com",
+        "privacy_email": "gdpr@glassdoor.com",
+        "gdpr_portal_url": "https://help.glassdoor.com/s/privacyrequest?language=en_US",
+        "postal_address": {
+          "line1": "2261 Market Street, #10389",
+          "city": "San Francisco",
+          "postcode": "CA 94114",
+          "country": "USA"
+        },
+        "preferred_method": "portal"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "SARs and all data rights requests (access, delete, export, rectify) should be submitted via the Privacy Requests Page portal at https://help.glassdoor.com/s/privacyrequest. Identity verification is required: a verification email with a confirmation link will be sent to the registered email address upon submission. The DPO can be contacted at dpo@glassdoor.com. For GDPR-specific enquiries, gdpr@glassdoor.com was the published contact. EU GDPR representative: Glassdoor Hiring Solutions Ireland Ltd. UK GDPR representative: Glassdoor Global Ltd.",
+        "identity_verification_required": true,
+        "known_response_time_days": 30
+      }
+    }
+  }
+}
