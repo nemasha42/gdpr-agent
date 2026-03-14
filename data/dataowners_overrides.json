@@ -1,4 +1,33 @@
 {
+  "glassdoor.com": {
+    "company_name": "Glassdoor",
+    "legal_entity_name": "Glassdoor LLC",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "dpo@glassdoor.com",
+      "privacy_email": "privacysupport@glassdoor.com",
+      "gdpr_portal_url": "https://help.glassdoor.com/s/privacyrequest?language=en_US",
+      "postal_address": {
+        "line1": "Glassdoor LLC, c/o CT Corporation, 330 North Brand Boulevard",
+        "city": "Glendale",
+        "postcode": "CA 91203-2336",
+        "country": "United States"
+      },
+      "preferred_method": "portal"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Glassdoor's preferred channel for Subject Access Requests is their self-service Privacy Requests portal. Identity verification required via link sent to registered email. EU GDPR representative: Glassdoor Hiring Solutions Ireland Ltd, 70 Sir John Rogerson's Quay, Dublin 2, D02 R296, Ireland. UK GDPR representative: Glassdoor Global Ltd.",
+      "identity_verification_required": true,
+      "known_response_time_days": 30
+    }
+  },
   "google.com": {
     "company_name": "Google",
     "legal_entity_name": "Google LLC",

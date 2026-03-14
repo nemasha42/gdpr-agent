@@ -3,9 +3,12 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-# Pricing for claude-sonnet-4-6 per the spec
-_INPUT_COST_PER_TOKEN: float = 3.0 / 1_000_000   # $3 per million
-_OUTPUT_COST_PER_TOKEN: float = 15.0 / 1_000_000  # $15 per million
+# Per-model pricing (input $/token, output $/token)
+_PRICING: dict[str, tuple[float, float]] = {
+    "claude-haiku-4-5-20251001": (0.80 / 1_000_000, 4.00 / 1_000_000),
+    "claude-sonnet-4-6":         (3.00 / 1_000_000, 15.0 / 1_000_000),
+}
+_DEFAULT_PRICING: tuple[float, float] = (3.00 / 1_000_000, 15.0 / 1_000_000)
 
 # Table column content widths (excludes leading "  " padding)
 _W_COMPANY = 12
@@ -41,7 +44,8 @@ def record_llm_call(
     model: str,
 ) -> None:
     """Append one LLM API call to the session log."""
-    cost = (input_tokens * _INPUT_COST_PER_TOKEN) + (output_tokens * _OUTPUT_COST_PER_TOKEN)
+    in_price, out_price = _PRICING.get(model, _DEFAULT_PRICING)
+    cost = (input_tokens * in_price) + (output_tokens * out_price)
     _session_log.append(
         _LLMCall(
             timestamp=datetime.now().isoformat(timespec="seconds"),

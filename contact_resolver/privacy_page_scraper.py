@@ -51,6 +51,30 @@ _TIMEOUT = 10
 # ---------------------------------------------------------------------------
 
 
+def fetch_privacy_text(
+    domain: str,
+    *,
+    http_get: Any = None,
+) -> str:
+    """Return stripped plain text from the first reachable privacy page URL.
+
+    Unlike :func:`scrape_privacy_page`, this does not require GDPR-specific
+    patterns — it returns whatever text can be fetched, for LLM processing.
+
+    Returns an empty string if all URLs fail or return non-200.
+    """
+    get = http_get or requests.get
+    for template in _PRIVACY_URL_TEMPLATES:
+        url = template.format(domain=domain)
+        try:
+            resp = get(url, timeout=_TIMEOUT)
+        except Exception:
+            continue
+        if resp.status_code == 200 and resp.text.strip():
+            return _strip_html(resp.text)
+    return ""
+
+
 def scrape_privacy_page(
     domain: str,
     company_name: str,

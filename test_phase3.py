@@ -6,6 +6,10 @@ test_companies = [
     ("Glassdoor", "glassdoor.com"),
     ("Google", "google.com"),
     ("PayPal", "paypal.com"),
+    ("Substack", "substack.com"),
+    ("Hardware FYI", "hardwarefyi.com"),
+    ("ProxyDocs", "proxydocs.com"),
+    ("Reflexivity", "reflexivity.com"),
     ("Polymarket", "polymarket.com"),
 ]
 

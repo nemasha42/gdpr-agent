@@ -2,24 +2,24 @@
   "meta": {
     "version": "1.0",
     "last_updated": "2026-03-14",
-    "total_companies": 4
+    "total_companies": 6
   },
   "companies": {
     "glassdoor.com": {
       "company_name": "Glassdoor",
       "legal_entity_name": "Glassdoor LLC",
-      "source": "llm_search",
+      "source": "dataowners_override",
       "source_confidence": "high",
       "last_verified": "2026-03-14",
       "contact": {
         "dpo_email": "dpo@glassdoor.com",
-        "privacy_email": "gdpr@glassdoor.com",
+        "privacy_email": "privacysupport@glassdoor.com",
         "gdpr_portal_url": "https://help.glassdoor.com/s/privacyrequest?language=en_US",
         "postal_address": {
-          "line1": "Glassdoor Inc. c/o CT Corporation, 330 North Brand Boulevard",
+          "line1": "Glassdoor LLC, c/o CT Corporation, 330 North Brand Boulevard",
           "city": "Glendale",
           "postcode": "CA 91203-2336",
-          "country": "US"
+          "country": "United States"
         },
         "preferred_method": "portal"
       },
@@ -29,7 +29,7 @@
         "auto_send_possible": false
       },
       "request_notes": {
-        "special_instructions": "EU GDPR representative: Glassdoor Hiring Solutions Ireland Ltd. UK GDPR representative: Glassdoor Global Ltd. Data rights requests (access, delete, rectify, export) should be submitted via the self-service Privacy Requests portal. Identity verification is required via registered email address upon submission. DPO email (dpo@glassdoor.com) is for policy/data processing inquiries only. GDPR-specific queries can also be directed to gdpr@glassdoor.com.",
+        "special_instructions": "Glassdoor's preferred channel for Subject Access Requests is their self-service Privacy Requests portal. Identity verification required via link sent to registered email. EU GDPR representative: Glassdoor Hiring Solutions Ireland Ltd, 70 Sir John Rogerson's Quay, Dublin 2, D02 R296, Ireland. UK GDPR representative: Glassdoor Global Ltd.",
         "identity_verification_required": true,
         "known_response_time_days": 30
       }
@@ -89,6 +89,64 @@
       "request_notes": {
         "special_instructions": "Send SAR to dpo@paypal.com. Include your PayPal email address and any relevant transaction details to help locate your data.",
         "identity_verification_required": true,
+        "known_response_time_days": 30
+      }
+    },
+    "substack.com": {
+      "company_name": "Substack",
+      "legal_entity_name": "",
+      "source": "privacy_scrape",
+      "source_confidence": "medium",
+      "last_verified": "2026-03-14",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "privacy@substackinc.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      }
+    },
+    "reflexivity.com": {
+      "company_name": "Reflexivity",
+      "legal_entity_name": "",
+      "source": "privacy_scrape",
+      "source_confidence": "medium",
+      "last_verified": "2026-03-14",
+      "contact": {
+        "dpo_email": "dpo@reflexivity.com",
+        "privacy_email": "privacy@reflexivity.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "",
+        "identity_verification_required": false,
         "known_response_time_days": 30
       }
     },
