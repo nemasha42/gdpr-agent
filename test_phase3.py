@@ -19,3 +19,5 @@ for company_name, domain in test_companies:
         print(f"  Portal:  {result.contact.gdpr_portal_url}")
     else:
         print("  Not found — needs manual entry")
+from contact_resolver.cost_tracker import print_cost_summary
+print_cost_summary()

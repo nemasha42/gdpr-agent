@@ -8,6 +8,7 @@ from typing import Any
 import anthropic
 
 from config.settings import settings
+from contact_resolver import cost_tracker
 from contact_resolver.models import (
     CompanyRecord,
     Contact,
@@ -17,10 +18,28 @@ from contact_resolver.models import (
 )
 
 _MODEL = "claude-sonnet-4-6"
-_MAX_TOKENS = 2048
+_MAX_TOKENS = 1024
 
 # Contact fields that constitute a "usable" contact method
 _CONTACT_FIELDS = ("dpo_email", "privacy_email", "gdpr_portal_url")
+
+# System prompt: schema + rules, loaded once.  Kept under 300 tokens.
+_SYSTEM_PROMPT = """\
+You are a GDPR contact data extractor. Perform ONE web search for the \
+company's GDPR/privacy contacts, then reply with ONLY a valid JSON object \
+matching this schema — no prose, no markdown fences:
+{"company_name":"","legal_entity_name":"","source_confidence":"high",\
+"contact":{"dpo_email":"","privacy_email":"","gdpr_portal_url":"",\
+"postal_address":{"line1":"","city":"","postcode":"","country":""},\
+"preferred_method":"email"},\
+"flags":{"portal_only":false,"email_accepted":true,"auto_send_possible":false},\
+"request_notes":{"special_instructions":"","identity_verification_required":false,\
+"known_response_time_days":30}}
+confidence rules: \
+high=official privacy/GDPR page with clear contacts found; \
+medium=contacts found from indirect source; \
+low=could not find reliable GDPR contact. \
+preferred_method must be one of: email, portal, postal."""
 
 
 # ---------------------------------------------------------------------------
@@ -54,17 +73,25 @@ def search_company(
         return None
 
     client = anthropic.Anthropic(api_key=key)
-    prompt = _build_prompt(company_name, domain)
+    user_message = _build_prompt(company_name, domain)
 
     try:
         response = client.messages.create(
             model=_MODEL,
             max_tokens=_MAX_TOKENS,
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
-            messages=[{"role": "user", "content": prompt}],
+            system=_SYSTEM_PROMPT,
+            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 1}],
+            messages=[{"role": "user", "content": user_message}],
         )
     except anthropic.APIError:
         return None
+
+    cost_tracker.record_llm_call(
+        company_name=company_name,
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+        model=_MODEL,
+    )
 
     text = _extract_text(response)
     if not text:
@@ -83,47 +110,7 @@ def search_company(
 
 
 def _build_prompt(company_name: str, domain: str) -> str:
-    return f"""\
-Search the web for GDPR / data protection contact details for {company_name} \
-(website: {domain}).
-
-Find:
-1. DPO (Data Protection Officer) email address
-2. General privacy / GDPR contact email
-3. Any dedicated GDPR / Subject Access Request web portal URL
-4. Legal data controller name and registered postal address
-5. Preferred channel for submitting Subject Access Requests
-
-Return ONLY a valid JSON object with this exact structure — no prose, no markdown:
-{{
-  "company_name": "{company_name}",
-  "legal_entity_name": "",
-  "source_confidence": "high",
-  "contact": {{
-    "dpo_email": "",
-    "privacy_email": "",
-    "gdpr_portal_url": "",
-    "postal_address": {{"line1": "", "city": "", "postcode": "", "country": ""}},
-    "preferred_method": "email"
-  }},
-  "flags": {{
-    "portal_only": false,
-    "email_accepted": true,
-    "auto_send_possible": false
-  }},
-  "request_notes": {{
-    "special_instructions": "",
-    "identity_verification_required": false,
-    "known_response_time_days": 30
-  }}
-}}
-
-Rules:
-- source_confidence = "high"   → found official privacy/GDPR page with clear contact details
-- source_confidence = "medium" → found contact details from indirect sources
-- source_confidence = "low"    → could NOT find reliable GDPR contact information
-- preferred_method must be one of: "email", "portal", "postal"
-- Return ONLY the JSON object, nothing else."""
+    return f"GDPR contacts for {company_name} ({domain})"
 
 
 def _extract_text(response: Any) -> str:

@@ -35,7 +35,7 @@ class RequestNotes(BaseModel):
 class CompanyRecord(BaseModel):
     company_name: str
     legal_entity_name: str = ""
-    source: Literal["datarequests", "llm_search", "user_manual"]
+    source: Literal["datarequests", "llm_search", "user_manual", "dataowners_override", "privacy_scrape"]
     source_confidence: Literal["high", "medium", "low"]
     last_verified: str  # ISO date: YYYY-MM-DD
     contact: Contact = Field(default_factory=Contact)

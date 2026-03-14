@@ -2,7 +2,7 @@
   "meta": {
     "version": "1.0",
     "last_updated": "2026-03-14",
-    "total_companies": 1
+    "total_companies": 4
   },
   "companies": {
     "glassdoor.com": {
@@ -16,10 +16,10 @@
         "privacy_email": "gdpr@glassdoor.com",
         "gdpr_portal_url": "https://help.glassdoor.com/s/privacyrequest?language=en_US",
         "postal_address": {
-          "line1": "2261 Market Street, #10389",
-          "city": "San Francisco",
-          "postcode": "CA 94114",
-          "country": "USA"
+          "line1": "Glassdoor Inc. c/o CT Corporation, 330 North Brand Boulevard",
+          "city": "Glendale",
+          "postcode": "CA 91203-2336",
+          "country": "US"
         },
         "preferred_method": "portal"
       },
@@ -29,8 +29,95 @@
         "auto_send_possible": false
       },
       "request_notes": {
-        "special_instructions": "SARs and all data rights requests (access, delete, export, rectify) should be submitted via the Privacy Requests Page portal at https://help.glassdoor.com/s/privacyrequest. Identity verification is required: a verification email with a confirmation link will be sent to the registered email address upon submission. The DPO can be contacted at dpo@glassdoor.com. For GDPR-specific enquiries, gdpr@glassdoor.com was the published contact. EU GDPR representative: Glassdoor Hiring Solutions Ireland Ltd. UK GDPR representative: Glassdoor Global Ltd.",
+        "special_instructions": "EU GDPR representative: Glassdoor Hiring Solutions Ireland Ltd. UK GDPR representative: Glassdoor Global Ltd. Data rights requests (access, delete, rectify, export) should be submitted via the self-service Privacy Requests portal. Identity verification is required via registered email address upon submission. DPO email (dpo@glassdoor.com) is for policy/data processing inquiries only. GDPR-specific queries can also be directed to gdpr@glassdoor.com.",
         "identity_verification_required": true,
+        "known_response_time_days": 30
+      }
+    },
+    "google.com": {
+      "company_name": "Google",
+      "legal_entity_name": "Google LLC",
+      "source": "dataowners_override",
+      "source_confidence": "high",
+      "last_verified": "2026-03-14",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "",
+        "gdpr_portal_url": "https://support.google.com/accounts/contact/dsar_webform",
+        "postal_address": {
+          "line1": "1600 Amphitheatre Parkway",
+          "city": "Mountain View, CA 94043",
+          "postcode": "",
+          "country": "USA"
+        },
+        "preferred_method": "portal"
+      },
+      "flags": {
+        "portal_only": true,
+        "email_accepted": false,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "Use the Google DSAR webform. You must be signed in to your Google Account. UK users: Google LLC is the data controller; UK Representative is Google UK Ltd.",
+        "identity_verification_required": true,
+        "known_response_time_days": 30
+      }
+    },
+    "paypal.com": {
+      "company_name": "PayPal",
+      "legal_entity_name": "PayPal (Europe) S.à r.l. et Cie, S.C.A.",
+      "source": "dataowners_override",
+      "source_confidence": "high",
+      "last_verified": "2026-03-14",
+      "contact": {
+        "dpo_email": "dpo@paypal.com",
+        "privacy_email": "privacy@paypal.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "22-24 Boulevard Royal",
+          "city": "Luxembourg",
+          "postcode": "L-2449",
+          "country": "Luxembourg"
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "Send SAR to dpo@paypal.com. Include your PayPal email address and any relevant transaction details to help locate your data.",
+        "identity_verification_required": true,
+        "known_response_time_days": 30
+      }
+    },
+    "polymarket.com": {
+      "company_name": "Polymarket",
+      "legal_entity_name": "Adventure One QSS Inc. (international) / Blockratize Inc.",
+      "source": "dataowners_override",
+      "source_confidence": "medium",
+      "last_verified": "2026-03-14",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "hello@polymarket.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": true
+      },
+      "request_notes": {
+        "special_instructions": "WARNING: Polymarket's international platform is operated by Adventure One QSS Inc. (Panama). No dedicated privacy/DPO contact is publicly available. Send to hello@polymarket.com referencing GDPR Article 15. Note: GDPR enforcement against this entity is uncertain given Panama jurisdiction. Consider also contacting UK ICO if no response within 30 days.",
+        "identity_verification_required": false,
         "known_response_time_days": 30
       }
     }

@@ -1,0 +1,466 @@
+{
+  "google.com": {
+    "company_name": "Google",
+    "legal_entity_name": "Google LLC",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://support.google.com/accounts/contact/dsar_webform",
+      "postal_address": {
+        "line1": "1600 Amphitheatre Parkway",
+        "city": "Mountain View, CA 94043",
+        "postcode": "",
+        "country": "USA"
+      },
+      "preferred_method": "portal"
+    },
+    "flags": {
+      "portal_only": true,
+      "email_accepted": false,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Use the Google DSAR webform. You must be signed in to your Google Account. UK users: Google LLC is the data controller; UK Representative is Google UK Ltd.",
+      "identity_verification_required": true,
+      "known_response_time_days": 30
+    }
+  },
+  "youtube.com": {
+    "company_name": "YouTube (Google)",
+    "legal_entity_name": "Google LLC",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://support.google.com/accounts/contact/dsar_webform",
+      "postal_address": {
+        "line1": "1600 Amphitheatre Parkway",
+        "city": "Mountain View, CA 94043",
+        "postcode": "",
+        "country": "USA"
+      },
+      "preferred_method": "portal"
+    },
+    "flags": {
+      "portal_only": true,
+      "email_accepted": false,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "YouTube is operated by Google LLC. Submit DSAR via the Google DSAR webform.",
+      "identity_verification_required": true,
+      "known_response_time_days": 30
+    }
+  },
+  "paypal.com": {
+    "company_name": "PayPal",
+    "legal_entity_name": "PayPal (Europe) S.à r.l. et Cie, S.C.A.",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "dpo@paypal.com",
+      "privacy_email": "privacy@paypal.com",
+      "gdpr_portal_url": "",
+      "postal_address": {
+        "line1": "22-24 Boulevard Royal",
+        "city": "Luxembourg",
+        "postcode": "L-2449",
+        "country": "Luxembourg"
+      },
+      "preferred_method": "email"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Send SAR to dpo@paypal.com. Include your PayPal email address and any relevant transaction details to help locate your data.",
+      "identity_verification_required": true,
+      "known_response_time_days": 30
+    }
+  },
+  "apple.com": {
+    "company_name": "Apple",
+    "legal_entity_name": "Apple Distribution International Ltd",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@apple.com",
+      "gdpr_portal_url": "https://privacy.apple.com",
+      "postal_address": {
+        "line1": "Hollyhill Industrial Estate, Hollyhill",
+        "city": "Cork",
+        "postcode": "",
+        "country": "Ireland"
+      },
+      "preferred_method": "portal"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Use the Apple Privacy portal at https://privacy.apple.com to submit a Data & Privacy request. Requires Apple ID login. Alternatively email privacy@apple.com.",
+      "identity_verification_required": true,
+      "known_response_time_days": 30
+    }
+  },
+  "amazon.com": {
+    "company_name": "Amazon",
+    "legal_entity_name": "Amazon EU SARL, UK Branch",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://www.amazon.co.uk/gp/privacyprefs/datarequests",
+      "postal_address": {
+        "line1": "1 Principal Place, Worship Street",
+        "city": "London",
+        "postcode": "EC2A 2FA",
+        "country": "United Kingdom"
+      },
+      "preferred_method": "portal"
+    },
+    "flags": {
+      "portal_only": true,
+      "email_accepted": false,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Submit SAR via the Amazon Privacy portal. You must be signed in to your Amazon account. For UK users the data controller is Amazon EU SARL, UK Branch.",
+      "identity_verification_required": true,
+      "known_response_time_days": 30
+    }
+  },
+  "amazon.co.uk": {
+    "company_name": "Amazon UK",
+    "legal_entity_name": "Amazon EU SARL, UK Branch",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://www.amazon.co.uk/gp/privacyprefs/datarequests",
+      "postal_address": {
+        "line1": "1 Principal Place, Worship Street",
+        "city": "London",
+        "postcode": "EC2A 2FA",
+        "country": "United Kingdom"
+      },
+      "preferred_method": "portal"
+    },
+    "flags": {
+      "portal_only": true,
+      "email_accepted": false,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Submit SAR via the Amazon Privacy portal. Requires Amazon account login.",
+      "identity_verification_required": true,
+      "known_response_time_days": 30
+    }
+  },
+  "linkedin.com": {
+    "company_name": "LinkedIn",
+    "legal_entity_name": "LinkedIn Ireland Unlimited Company",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "dpo@linkedin.com",
+      "privacy_email": "privacy@linkedin.com",
+      "gdpr_portal_url": "https://www.linkedin.com/help/linkedin/answer/a1339765",
+      "postal_address": {
+        "line1": "Wilton Plaza, Wilton Place",
+        "city": "Dublin 2",
+        "postcode": "",
+        "country": "Ireland"
+      },
+      "preferred_method": "email"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Email your SAR to privacy@linkedin.com or use the LinkedIn help portal. Include your account email address.",
+      "identity_verification_required": false,
+      "known_response_time_days": 30
+    }
+  },
+  "facebook.com": {
+    "company_name": "Meta (Facebook)",
+    "legal_entity_name": "Meta Platforms Ireland Limited",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://www.facebook.com/dsar/portal/",
+      "postal_address": {
+        "line1": "4 Grand Canal Square, Grand Canal Harbour",
+        "city": "Dublin 2",
+        "postcode": "",
+        "country": "Ireland"
+      },
+      "preferred_method": "portal"
+    },
+    "flags": {
+      "portal_only": true,
+      "email_accepted": false,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Submit SAR via the Facebook DSAR portal. Requires login. For Meta products (Instagram, WhatsApp) use separate portals.",
+      "identity_verification_required": true,
+      "known_response_time_days": 30
+    }
+  },
+  "instagram.com": {
+    "company_name": "Instagram (Meta)",
+    "legal_entity_name": "Meta Platforms Ireland Limited",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://help.instagram.com/contact/453193681456917",
+      "postal_address": {
+        "line1": "4 Grand Canal Square, Grand Canal Harbour",
+        "city": "Dublin 2",
+        "postcode": "",
+        "country": "Ireland"
+      },
+      "preferred_method": "portal"
+    },
+    "flags": {
+      "portal_only": true,
+      "email_accepted": false,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Submit SAR via the Instagram help contact form. Requires login.",
+      "identity_verification_required": true,
+      "known_response_time_days": 30
+    }
+  },
+  "netflix.com": {
+    "company_name": "Netflix",
+    "legal_entity_name": "Netflix International B.V.",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@netflix.com",
+      "gdpr_portal_url": "https://www.netflix.com/account/gdpr",
+      "postal_address": {
+        "line1": "Papá Karman 4",
+        "city": "Amsterdam",
+        "postcode": "1076 AZ",
+        "country": "Netherlands"
+      },
+      "preferred_method": "email"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Email privacy@netflix.com with subject 'Data Subject Access Request' or use the Netflix privacy portal. Include your Netflix account email.",
+      "identity_verification_required": true,
+      "known_response_time_days": 30
+    }
+  },
+  "spotify.com": {
+    "company_name": "Spotify",
+    "legal_entity_name": "Spotify AB",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@spotify.com",
+      "gdpr_portal_url": "https://www.spotify.com/account/privacy/",
+      "postal_address": {
+        "line1": "Regeringsgatan 19",
+        "city": "Stockholm",
+        "postcode": "SE-111 53",
+        "country": "Sweden"
+      },
+      "preferred_method": "email"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Email privacy@spotify.com with your Spotify username/email and state the request type (access, deletion, portability, etc.).",
+      "identity_verification_required": false,
+      "known_response_time_days": 30
+    }
+  },
+  "whatsapp.com": {
+    "company_name": "WhatsApp",
+    "legal_entity_name": "WhatsApp Ireland Limited",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@whatsapp.com",
+      "gdpr_portal_url": "",
+      "postal_address": {
+        "line1": "4 Grand Canal Square, Grand Canal Harbour",
+        "city": "Dublin 2",
+        "postcode": "",
+        "country": "Ireland"
+      },
+      "preferred_method": "email"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Email privacy@whatsapp.com. You can also request your account data directly in the WhatsApp app: Settings → Account → Request Account Info.",
+      "identity_verification_required": false,
+      "known_response_time_days": 30
+    }
+  },
+  "twitter.com": {
+    "company_name": "X (Twitter)",
+    "legal_entity_name": "Twitter International Unlimited Company",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "dpo@twitter.com",
+      "privacy_email": "privacy@twitter.com",
+      "gdpr_portal_url": "https://help.twitter.com/forms/privacy",
+      "postal_address": {
+        "line1": "One Cumberland Place, Fenian Street",
+        "city": "Dublin 2",
+        "postcode": "D02 AX07",
+        "country": "Ireland"
+      },
+      "preferred_method": "email"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Email dpo@twitter.com or use the privacy form. EU/UK controller is Twitter International Unlimited Company (Ireland). Brand has rebranded to X but legal entity name unchanged.",
+      "identity_verification_required": false,
+      "known_response_time_days": 30
+    }
+  },
+  "x.com": {
+    "company_name": "X (formerly Twitter)",
+    "legal_entity_name": "Twitter International Unlimited Company",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "dpo@twitter.com",
+      "privacy_email": "privacy@twitter.com",
+      "gdpr_portal_url": "https://help.twitter.com/forms/privacy",
+      "postal_address": {
+        "line1": "One Cumberland Place, Fenian Street",
+        "city": "Dublin 2",
+        "postcode": "D02 AX07",
+        "country": "Ireland"
+      },
+      "preferred_method": "email"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Email dpo@twitter.com. The platform operates as X.com but the legal entity for EU/UK is still Twitter International Unlimited Company.",
+      "identity_verification_required": false,
+      "known_response_time_days": 30
+    }
+  },
+  "reddit.com": {
+    "company_name": "Reddit",
+    "legal_entity_name": "Reddit, Inc.",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "redditdatarequests@reddit.com",
+      "gdpr_portal_url": "https://www.reddit.com/settings/data-request",
+      "postal_address": {
+        "line1": "548 Market St. #16093",
+        "city": "San Francisco, CA 94104-5401",
+        "postcode": "",
+        "country": "USA"
+      },
+      "preferred_method": "email"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": false
+    },
+    "request_notes": {
+      "special_instructions": "Email redditdatarequests@reddit.com with your Reddit username and the type of request. You can also submit via the Reddit account settings data request page.",
+      "identity_verification_required": false,
+      "known_response_time_days": 30
+    }
+  },
+  "polymarket.com": {
+    "company_name": "Polymarket",
+    "legal_entity_name": "Adventure One QSS Inc. (international) / Blockratize Inc.",
+    "source": "dataowners_override",
+    "source_confidence": "medium",
+    "last_verified": "2026-03-14",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "hello@polymarket.com",
+      "gdpr_portal_url": "",
+      "postal_address": {
+        "line1": "",
+        "city": "",
+        "postcode": "",
+        "country": ""
+      },
+      "preferred_method": "email"
+    },
+    "flags": {
+      "portal_only": false,
+      "email_accepted": true,
+      "auto_send_possible": true
+    },
+    "request_notes": {
+      "special_instructions": "WARNING: Polymarket's international platform is operated by Adventure One QSS Inc. (Panama). No dedicated privacy/DPO contact is publicly available. Send to hello@polymarket.com referencing GDPR Article 15. Note: GDPR enforcement against this entity is uncertain given Panama jurisdiction. Consider also contacting UK ICO if no response within 30 days.",
+      "identity_verification_required": false,
+      "known_response_time_days": 30
+    }
+  }
+}
