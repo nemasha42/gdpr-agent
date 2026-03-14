@@ -7,3 +7,5 @@ __pycache__/
 *.db
 token.json
 credentials.json
+user_data/*
+!user_data/.gitkeep
