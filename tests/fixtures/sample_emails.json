@@ -1,0 +1,62 @@
+[
+  {
+    "message_id": "msg_001",
+    "sender": "no-reply@netflix.com",
+    "subject": "Your Netflix receipt for March",
+    "date": "Mon, 10 Mar 2025 09:00:00 +0000"
+  },
+  {
+    "message_id": "msg_002",
+    "sender": "receipts@spotify.com",
+    "subject": "Spotify Premium — your receipt",
+    "date": "Tue, 11 Mar 2025 08:15:00 +0000"
+  },
+  {
+    "message_id": "msg_003",
+    "sender": "noreply@amazon.co.uk",
+    "subject": "Your Amazon.co.uk order has shipped",
+    "date": "Wed, 12 Mar 2025 14:32:00 +0000"
+  },
+  {
+    "message_id": "msg_004",
+    "sender": "no-reply@linkedin.com",
+    "subject": "You have 3 new connection requests",
+    "date": "Thu, 13 Mar 2025 07:00:00 +0000"
+  },
+  {
+    "message_id": "msg_005",
+    "sender": "security@twitter.com",
+    "subject": "New sign-in to your X account",
+    "date": "Fri, 14 Mar 2025 11:45:00 +0000"
+  },
+  {
+    "message_id": "msg_006",
+    "sender": "noreply@deliveroo.co.uk",
+    "subject": "Your order from Wagamama is on its way!",
+    "date": "Fri, 14 Mar 2025 19:05:00 +0000"
+  },
+  {
+    "message_id": "msg_007",
+    "sender": "no-reply@monzo.com",
+    "subject": "You just spent £42.00 at Tesco",
+    "date": "Sat, 15 Mar 2025 10:20:00 +0000"
+  },
+  {
+    "message_id": "msg_008",
+    "sender": "hello@wise.com",
+    "subject": "Your transfer of £200 to EUR is complete",
+    "date": "Sat, 15 Mar 2025 16:00:00 +0000"
+  },
+  {
+    "message_id": "msg_009",
+    "sender": "noreply@github.com",
+    "subject": "[GitHub] A third-party OAuth application has been added",
+    "date": "Sun, 16 Mar 2025 09:30:00 +0000"
+  },
+  {
+    "message_id": "msg_010",
+    "sender": "no-reply@apple.com",
+    "subject": "Your receipt from Apple",
+    "date": "Sun, 16 Mar 2025 18:00:00 +0000"
+  }
+]
