@@ -1,5 +1,6 @@
-"""Gmail OAuth2 authentication — desktop app flow."""
+"""Gmail OAuth2 authentication — desktop app flow, per-account token storage."""
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -9,43 +10,153 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SEND_SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 _PROJECT_ROOT = Path(__file__).parent.parent
 _CREDENTIALS_PATH = _PROJECT_ROOT / "credentials.json"
-_TOKEN_PATH = _PROJECT_ROOT / "user_data" / "token.json"
+_TOKENS_DIR = _PROJECT_ROOT / "user_data" / "tokens"
+
+# Legacy flat token paths — migrated automatically on first run
+_LEGACY_TOKEN_PATH = _PROJECT_ROOT / "user_data" / "token.json"
+_LEGACY_SEND_TOKEN_PATH = _PROJECT_ROOT / "user_data" / "token_send.json"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _safe_email(email: str) -> str:
+    """Return a filesystem-safe version of an email address."""
+    return email.replace("@", "_at_").replace(".", "_")
+
+
+def _get_account_email(service: Any) -> str:
+    """Return the authenticated account's email address via Gmail API."""
+    return service.users().getProfile(userId="me").execute()["emailAddress"]
+
+
+def _load_creds(token_path: Path, scopes: list[str]) -> Credentials | None:
+    if token_path.exists():
+        return Credentials.from_authorized_user_file(str(token_path), scopes)
+    return None
+
+
+def _refresh_or_auth(
+    creds: Credentials | None,
+    scopes: list[str],
+    credentials_path: Path,
+    login_hint: str | None,
+) -> Credentials:
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        return creds
+    flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), scopes)
+    kwargs: dict = {}
+    if login_hint:
+        kwargs["login_hint"] = login_hint
+    return flow.run_local_server(port=0, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def get_gmail_service(
+    email_hint: str | None = None,
     credentials_path: Path = _CREDENTIALS_PATH,
-    token_path: Path = _TOKEN_PATH,
-) -> Any:
-    """Return an authenticated Gmail API service object.
+    tokens_dir: Path = _TOKENS_DIR,
+) -> tuple[Any, str]:
+    """Return (service, authenticated_email) for a Gmail readonly connection.
 
-    On first run, opens a browser for the user to approve access and saves
-    the token to token_path. Subsequent runs load and auto-refresh the token.
+    On first run, opens a browser for OAuth consent and saves the token under
+    user_data/tokens/{email}_readonly.json.  Subsequent runs load the cached
+    token silently.
 
     Args:
-        credentials_path: Path to the OAuth2 credentials JSON file.
-        token_path: Path where the user token is persisted.
-
-    Returns:
-        Authenticated Gmail API service (googleapiclient Resource).
+        email_hint: Gmail address to use (e.g. "user@gmail.com").  If omitted
+                    and exactly one token exists, that account is used.  If
+                    multiple tokens exist, the tool exits with a list of known
+                    accounts and asks the caller to re-run with --gmail EMAIL.
     """
-    creds: Credentials | None = None
+    tokens_dir.mkdir(parents=True, exist_ok=True)
 
-    if token_path.exists():
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+    # ── Auto-migrate legacy flat token ──────────────────────────────────────
+    existing_readonly = list(tokens_dir.glob("*_readonly.json"))
+    if _LEGACY_TOKEN_PATH.exists() and not existing_readonly:
+        creds = _load_creds(_LEGACY_TOKEN_PATH, SCOPES)
+        if creds:
+            tmp_service = build("gmail", "v1", credentials=creds)
+            email = _get_account_email(tmp_service)
+            new_path = tokens_dir / f"{_safe_email(email)}_readonly.json"
+            new_path.write_text(_LEGACY_TOKEN_PATH.read_text())
+            _LEGACY_TOKEN_PATH.unlink()
+            print(f"Migrated existing token for {email} to per-account storage.")
+            return tmp_service, email
+
+    # ── Resolve token path ───────────────────────────────────────────────────
+    if email_hint:
+        token_path = tokens_dir / f"{_safe_email(email_hint)}_readonly.json"
+    else:
+        existing_readonly = list(tokens_dir.glob("*_readonly.json"))
+        if len(existing_readonly) == 1:
+            token_path = existing_readonly[0]
+        elif len(existing_readonly) > 1:
+            known = [p.stem.replace("_readonly", "").replace("_at_", "@").replace("_", ".", 1)
+                     for p in existing_readonly]
+            print("Multiple Gmail accounts found:")
+            for a in known:
+                print(f"  {a}")
+            print("Re-run with --gmail EMAIL to choose one.")
+            sys.exit(1)
+        else:
+            token_path = tokens_dir / "_pending_readonly.json"  # temp name
+
+    # ── Load / refresh / auth ────────────────────────────────────────────────
+    creds = _load_creds(token_path, SCOPES)
+    if not creds or not creds.valid:
+        creds = _refresh_or_auth(creds, SCOPES, credentials_path, email_hint)
+
+    service = build("gmail", "v1", credentials=creds)
+    email = _get_account_email(service)
+
+    # Save under the correct email-based filename
+    final_path = tokens_dir / f"{_safe_email(email)}_readonly.json"
+    if token_path != final_path:
+        token_path.unlink(missing_ok=True)
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    final_path.write_text(creds.to_json())
+
+    return service, email
+
+
+def get_gmail_send_service(
+    email: str,
+    credentials_path: Path = _CREDENTIALS_PATH,
+    tokens_dir: Path = _TOKENS_DIR,
+) -> Any:
+    """Return an authenticated Gmail API service with send permission.
+
+    Args:
+        email: The Gmail account address — must match the scan account so that
+               the send token is isolated per account.
+    """
+    tokens_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Auto-migrate legacy flat send token ──────────────────────────────────
+    existing_send = list(tokens_dir.glob("*_send.json"))
+    if _LEGACY_SEND_TOKEN_PATH.exists() and not existing_send:
+        new_path = tokens_dir / f"{_safe_email(email)}_send.json"
+        new_path.write_text(_LEGACY_SEND_TOKEN_PATH.read_text())
+        _LEGACY_SEND_TOKEN_PATH.unlink()
+        print(f"Migrated existing send token for {email} to per-account storage.")
+
+    token_path = tokens_dir / f"{_safe_email(email)}_send.json"
+    creds = _load_creds(token_path, SEND_SCOPES)
 
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(credentials_path), SCOPES
-            )
-            creds = flow.run_local_server(port=0)
-
-        token_path.parent.mkdir(parents=True, exist_ok=True)
+        creds = _refresh_or_auth(creds, SEND_SCOPES, credentials_path, email)
         token_path.write_text(creds.to_json())
 
     return build("gmail", "v1", credentials=creds)
