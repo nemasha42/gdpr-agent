@@ -3,13 +3,15 @@
 # Ordered longest-first so that more-specific prefixes match before shorter ones
 # (e.g. "no-reply." before a hypothetical "reply.")
 _SUBDOMAIN_PREFIXES: tuple[str, ...] = (
+    "communications.",
     "notifications.",
-    "no-reply.",
-    "marketing.",
     "newsletter.",
-    "noreply.",
+    "marketing.",
+    "no-reply.",
     "accounts.",
     "security.",
+    "messages.",
+    "noreply.",
     "support.",
     "updates.",
     "mailer.",
@@ -18,10 +20,13 @@ _SUBDOMAIN_PREFIXES: tuple[str, ...] = (
     "reply.",
     "email.",
     "hello.",
+    "deals.",
     "alert.",
     "info.",
     "mail.",
     "news.",
+    "em.",
+    "e.",
 )
 
 # Two-part TLDs that should not be treated as the company name segment
@@ -52,6 +57,33 @@ _KNOWN_EXCEPTIONS: dict[str, str] = {
     "paypal.com": "PayPal",
     "github.com": "GitHub",
     "linkedin.com": "LinkedIn",
+    "interactivebrokers.com": "Interactive Brokers",
+    "facebook.com": "Facebook",
+    "twitter.com": "Twitter/X",
+    "microsoft.com": "Microsoft",
+}
+
+# Canonical domain → list of alias domains (same GDPR data controller)
+_COMPANY_GROUPS: dict[str, list[str]] = {
+    "google.com": [
+        "youtube.com",
+        "gmail.com",
+        "googlemail.com",
+        "googlegroups.com",
+        "accounts.google.com",
+    ],
+    "paypal.com": ["communications.paypal.com"],
+    "interactivebrokers.com": ["ibkr.com"],
+    "facebook.com": ["facebookmail.com", "instagram.com"],
+    "twitter.com": ["t.co"],
+    "microsoft.com": ["linkedin.com", "outlook.com", "hotmail.com"],
+}
+
+# Reverse map: alias → canonical  (built once at import time, free at runtime)
+_CANONICAL: dict[str, str] = {
+    alias: canonical
+    for canonical, aliases in _COMPANY_GROUPS.items()
+    for alias in aliases
 }
 
 
@@ -82,6 +114,23 @@ def _root_to_name(domain: str) -> str:
     return name_part.capitalize()
 
 
+def canonical_domain(domain: str) -> str:
+    """Return the canonical domain for *domain*.
+
+    Strips noise subdomain prefixes (Level 1), then maps alias domains to
+    their canonical parent (Level 2).  Unknown domains are returned as-is
+    after subdomain stripping.
+
+    Examples:
+        ``accounts.google.com`` → ``google.com``
+        ``youtube.com``         → ``google.com``
+        ``ibkr.com``            → ``interactivebrokers.com``
+        ``spotify.com``         → ``spotify.com``
+    """
+    cleaned = _strip_subdomains(domain.lower().strip())
+    return _CANONICAL.get(cleaned, cleaned)
+
+
 def normalize_domain(domain: str) -> str:
     """Return a clean company display name for *domain*.
 
@@ -98,9 +147,9 @@ def normalize_domain(domain: str) -> str:
     if domain in _KNOWN_EXCEPTIONS:
         return _KNOWN_EXCEPTIONS[domain]
 
-    cleaned = _strip_subdomains(domain)
+    canon = canonical_domain(domain)
 
-    if cleaned in _KNOWN_EXCEPTIONS:
-        return _KNOWN_EXCEPTIONS[cleaned]
+    if canon in _KNOWN_EXCEPTIONS:
+        return _KNOWN_EXCEPTIONS[canon]
 
-    return _root_to_name(cleaned)
+    return _root_to_name(canon)

@@ -2,7 +2,7 @@
 
 import pytest
 
-from scanner.company_normalizer import normalize_domain
+from scanner.company_normalizer import canonical_domain, normalize_domain
 
 
 # ---------------------------------------------------------------------------
@@ -113,3 +113,46 @@ def test_known_exception_linkedin() -> None:
 def test_known_exception_after_stripping() -> None:
     """mail.github.com → github.com → hits exception → GitHub."""
     assert normalize_domain("mail.github.com") == "GitHub"
+
+
+# ---------------------------------------------------------------------------
+# canonical_domain
+# ---------------------------------------------------------------------------
+
+
+def test_canonical_domain_strips_subdomain() -> None:
+    assert canonical_domain("accounts.google.com") == "google.com"
+
+
+def test_canonical_domain_maps_alias() -> None:
+    assert canonical_domain("youtube.com") == "google.com"
+
+
+def test_canonical_domain_maps_ibkr() -> None:
+    assert canonical_domain("ibkr.com") == "interactivebrokers.com"
+
+
+def test_canonical_domain_passthrough() -> None:
+    assert canonical_domain("spotify.com") == "spotify.com"
+
+
+def test_canonical_domain_strips_then_maps() -> None:
+    """communications.paypal.com → strip → paypal.com → already canonical."""
+    assert canonical_domain("communications.paypal.com") == "paypal.com"
+
+
+# ---------------------------------------------------------------------------
+# normalize_domain with company groups
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_youtube_returns_google() -> None:
+    assert normalize_domain("youtube.com") == "Google"
+
+
+def test_normalize_ibkr_returns_interactive_brokers() -> None:
+    assert normalize_domain("ibkr.com") == "Interactive Brokers"
+
+
+def test_normalize_instagram_returns_facebook() -> None:
+    assert normalize_domain("instagram.com") == "Facebook"

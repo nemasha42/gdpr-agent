@@ -103,7 +103,7 @@ def test_extract_services_all_fixture_domains_present() -> None:
         "netflix.com",
         "spotify.com",
         "amazon.co.uk",
-        "linkedin.com",
+        "microsoft.com",   # linkedin.com canonicalises to microsoft.com
         "twitter.com",
         "deliveroo.co.uk",
         "monzo.com",
@@ -280,3 +280,45 @@ def test_required_fields_present_in_output() -> None:
     result = extract_services(emails)[0]
     for field in ("domain", "company_name_raw", "confidence", "signal_type", "first_seen", "last_seen"):
         assert field in result, f"Missing field: {field}"
+
+
+# ---------------------------------------------------------------------------
+# Cross-domain deduplication (company groups)
+# ---------------------------------------------------------------------------
+
+
+def _email(sender: str, subject: str = "Hello") -> dict[str, str]:
+    return {"message_id": sender, "sender": sender, "subject": subject, "date": "Mon, 10 Mar 2025 09:00:00 +0000"}
+
+
+def test_dedup_subdomain_same_company() -> None:
+    """accounts.google.com + google.com → one entry with domain google.com."""
+    emails = [
+        _email("noreply@accounts.google.com", "Welcome to Google"),
+        _email("alerts@google.com", "Security alert"),
+    ]
+    results = extract_services(emails)
+    assert len(results) == 1
+    assert results[0]["domain"] == "google.com"
+
+
+def test_dedup_cross_domain_same_company() -> None:
+    """youtube.com + google.com → one entry with domain google.com."""
+    emails = [
+        _email("noreply@youtube.com", "Welcome to YouTube"),
+        _email("noreply@google.com", "Sign-in alert"),
+    ]
+    results = extract_services(emails)
+    assert len(results) == 1
+    assert results[0]["domain"] == "google.com"
+
+
+def test_dedup_alias_ibkr() -> None:
+    """ibkr.com + interactivebrokers.com → one entry with canonical domain."""
+    emails = [
+        _email("noreply@ibkr.com", "Your account statement"),
+        _email("alerts@interactivebrokers.com", "Login notification"),
+    ]
+    results = extract_services(emails)
+    assert len(results) == 1
+    assert results[0]["domain"] == "interactivebrokers.com"

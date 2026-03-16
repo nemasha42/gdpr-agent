@@ -5,7 +5,7 @@ No LLM — pure regex and heuristics only.
 
 from email.utils import parseaddr, parsedate_to_datetime
 
-from scanner.company_normalizer import normalize_domain
+from scanner.company_normalizer import canonical_domain, normalize_domain
 
 # ---------------------------------------------------------------------------
 # Signal definitions — checked in order, first match wins per email
@@ -123,9 +123,11 @@ def extract_services(
         confidence, signal_type = _classify(email.get("subject", ""))
         date_iso = _parse_date_iso(email.get("date", ""))
 
-        if domain not in seen:
-            seen[domain] = {
-                "domain": domain,
+        canon = canonical_domain(domain)
+
+        if canon not in seen:
+            seen[canon] = {
+                "domain": canon,
                 "company_name_raw": normalize_domain(domain),
                 "confidence": confidence,
                 "signal_type": signal_type,
@@ -133,7 +135,7 @@ def extract_services(
                 "last_seen": date_iso,
             }
         else:
-            record = seen[domain]
+            record = seen[canon]
             # Upgrade confidence if this email is stronger evidence
             if _CONFIDENCE_RANK[confidence] > _CONFIDENCE_RANK[record["confidence"]]:
                 record["confidence"] = confidence
