@@ -252,22 +252,28 @@ All tests use dependency injection or `unittest.mock`. The LLM, Gmail API, and H
 
 ## Cost of building this project with Claude Code
 
-This project was built in a single Claude Code session (claude-sonnet-4-6) across 4 phases.
+Built across **3 sessions over 2 days** (Mar 14–16 2026), all using claude-sonnet-4-6.
+
+| Session | Date | Duration | Work |
+|---|---|---|---|
+| 1 | Mar 14, 01:12–02:45 UTC | ~1.5 hrs | Scaffold, Phase 1 (Gmail), Phase 2 (scanner), Phase 3 initial |
+| 2 | Mar 14, 14:24–14:41 UTC | ~20 min | Phase 3 improvements + web_search fix |
+| 3 | Mar 16, ~00:30–01:15 UTC | ~1.5 hrs | Phase 3 Tavily removal, Phase 4 (letter engine), run.py, README |
+| **Total** | | **~3.5–4 hours** | |
 
 | Item | Estimate |
 |---|---|
 | Model | claude-sonnet-4-6 |
 | Pricing | $3.00 / M input tokens · $15.00 / M output tokens |
-| Estimated input tokens | ~600,000–900,000 (context grows with each turn) |
-| Estimated output tokens | ~60,000–80,000 (code + explanations) |
-| **Estimated total cost** | **~$2.70–$3.90** |
-| Session length | ~2–3 hours |
+| Estimated input tokens | ~1,200,000–1,800,000 across all 3 sessions |
+| Estimated output tokens | ~80,000–100,000 (code + explanations) |
+| **Estimated total cost** | **~$5–8** |
 | Lines of production code | ~1,100 |
 | Lines of test code | ~2,000 |
 
-> Note: these are rough estimates — Claude Code does not expose exact per-session token counts in the conversation. The input cost dominates because the full conversation history is re-sent with every message as context grows.
+> Note: these are rough estimates — Claude Code does not expose exact per-session token counts. Input cost dominates because the full conversation history is re-sent with each message as context grows. Each session starts fresh, so prior sessions add separately to the total.
 
-What you got for ~$3–4 in AI API costs:
+What you got for ~$5–8 in AI API costs:
 - A fully working Gmail → SAR pipeline
 - 5-tier contact resolution (free paths first, LLM last resort)
 - Per-session cost tracking with formatted output
