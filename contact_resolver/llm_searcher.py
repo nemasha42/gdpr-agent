@@ -95,6 +95,7 @@ def _extract_with_websearch(
         output_tokens=response.usage.output_tokens,
         model=_MODEL,
         found=record is not None,
+        source="contact_resolver",
     )
     return record
 

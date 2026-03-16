@@ -37,7 +37,9 @@ def preview_and_send(letter: SARLetter, *, dry_run: bool = False, scan_email: st
         return True
 
     if letter.method == "email":
-        _dispatch_email(letter, scan_email)
+        msg_id, thread_id = _dispatch_email(letter, scan_email)
+        letter.gmail_message_id = msg_id
+        letter.gmail_thread_id = thread_id
     elif letter.method == "portal":
         print(f"\nPlease submit your SAR manually at:\n  {letter.portal_url}")
         print("\nCopy the letter body above to paste into the portal form.")
@@ -72,8 +74,12 @@ def _print_preview(letter: SARLetter) -> None:
     print("═" * _WIDTH)
 
 
-def _dispatch_email(letter: SARLetter, scan_email: str) -> None:
-    """Send via Gmail API; fall back to printing instructions on failure."""
+def _dispatch_email(letter: SARLetter, scan_email: str) -> tuple[str, str]:
+    """Send via Gmail API; fall back to printing instructions on failure.
+
+    Returns:
+        (message_id, thread_id) on success, ("", "") on failure.
+    """
     try:
         from auth.gmail_oauth import get_gmail_send_service
         service = get_gmail_send_service(scan_email)
@@ -81,10 +87,12 @@ def _dispatch_email(letter: SARLetter, scan_email: str) -> None:
         msg["to"] = letter.to_email
         msg["subject"] = letter.subject
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        result = service.users().messages().send(userId="me", body={"raw": raw}).execute()
         print(f"\nEmail sent to {letter.to_email}")
+        return result.get("id", ""), result.get("threadId", "")
     except Exception as exc:
         print(f"\nCould not send via Gmail API ({exc}).")
         print(f"Please send manually to: {letter.to_email}")
         print("\nLetter body:\n")
         print(letter.body)
+        return "", ""

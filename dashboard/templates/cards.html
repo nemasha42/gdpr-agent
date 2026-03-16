@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Data Cards{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">Data Cards</h2>
+  <div class="d-flex gap-2 align-items-center">
+    <label class="mb-0 text-muted small">Account:</label>
+    <select class="form-select form-select-sm" style="width:auto;"
+            onchange="location.href='/cards?account='+this.value+'&tab={{ tab }}'">
+      {% for acc in accounts %}
+      <option value="{{ acc }}" {% if acc == account %}selected{% endif %}>{{ acc }}</option>
+      {% endfor %}
+    </select>
+    <a href="/?account={{ account }}" class="btn btn-sm btn-outline-secondary">&#x2190; Dashboard</a>
+  </div>
+</div>
+
+<ul class="nav nav-tabs mb-3" id="cardsTabs">
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'with_data' %}active{% endif %}"
+       href="/cards?account={{ account }}&tab=with_data">
+      With Data <span class="badge bg-success ms-1">{{ with_data | length }}</span>
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'without_data' %}active{% endif %}"
+       href="/cards?account={{ account }}&tab=without_data">
+      Without Data <span class="badge bg-secondary ms-1">{{ without_data | length }}</span>
+    </a>
+  </li>
+</ul>
+
+{% if tab == 'with_data' %}
+  {% if with_data %}
+  <div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for item in with_data %}
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-1">{{ item.company_name }}</h5>
+          <div class="text-muted small mb-2">{{ item.domain }}</div>
+          {% if item.services_preview %}
+          <div class="text-muted small mb-2">{{ item.services_preview | join(" &middot; ") }}</div>
+          {% endif %}
+          <div class="small">
+            <span class="badge bg-light text-dark me-1">{{ item.category_count }} categories</span>
+            <span class="badge bg-light text-dark me-1">{{ item.file_count }} files</span>
+            <span class="badge bg-light text-dark">{{ (item.size_bytes / 1024) | round(1) }} KB</span>
+          </div>
+          {% if item.received_at %}
+          <div class="text-muted small mt-1">{{ item.received_at }}</div>
+          {% endif %}
+        </div>
+        <div class="card-footer bg-transparent">
+          <a href="/data/{{ item.domain }}?account={{ account }}" class="btn btn-sm btn-primary w-100">View Card &#x2192;</a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-muted text-center py-5">
+    <p>No data cards yet. Send SARs and wait for responses with data attachments.</p>
+    <a href="/?account={{ account }}" class="btn btn-outline-secondary">View Dashboard</a>
+  </div>
+  {% endif %}
+
+{% else %}
+  {% if without_data %}
+  <div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for item in without_data %}
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-1">{{ item.company_name }}</h5>
+          <div class="text-muted small mb-2">{{ item.domain }}</div>
+          <div class="mb-2">
+            <span class="badge bg-{{ item.status_color or 'secondary' }}">{{ item.status }}</span>
+            {% if item.days_remaining is not none %}
+            <span class="text-muted small ms-2">{{ item.days_remaining }}d remaining</span>
+            {% endif %}
+          </div>
+          {% if item.latest_tag %}
+          <div class="small text-muted">Latest: {{ item.latest_tag }}</div>
+          {% endif %}
+        </div>
+        <div class="card-footer bg-transparent">
+          <a href="/company/{{ item.domain }}?account={{ account }}" class="btn btn-sm btn-outline-secondary w-100">View Replies &#x2192;</a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-muted text-center py-5">
+    <p>All companies with tracked SARs have data available.</p>
+  </div>
+  {% endif %}
+{% endif %}
+{% endblock %}

@@ -18,6 +18,8 @@ def record_sent(letter: SARLetter, *, path: Path = _TRACKER_PATH) -> None:
         "method": letter.method,
         "to_email": letter.to_email,
         "subject": letter.subject,
+        "gmail_message_id": letter.gmail_message_id,
+        "gmail_thread_id": letter.gmail_thread_id,
     })
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(log, indent=2))

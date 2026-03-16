@@ -2,7 +2,7 @@
   "meta": {
     "version": "1.0",
     "last_updated": "2026-03-16",
-    "total_companies": 16
+    "total_companies": 18
   },
   "companies": {
     "glassdoor.com": {
@@ -466,6 +466,64 @@
       "request_notes": {
         "special_instructions": "",
         "identity_verification_required": false,
+        "known_response_time_days": 30
+      }
+    },
+    "substackinc.com": {
+      "company_name": "Substack Inc",
+      "legal_entity_name": "Substack Inc.",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-16",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "privacy@substackinc.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "Contact privacy@substackinc.com for GDPR data subject access requests (DSAR) and privacy rights inquiries",
+        "identity_verification_required": true,
+        "known_response_time_days": 30
+      }
+    },
+    "whop.com": {
+      "company_name": "Whop",
+      "legal_entity_name": "Whop, Inc.",
+      "source": "llm_search",
+      "source_confidence": "medium",
+      "last_verified": "2026-03-16",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "support@whop.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "Identity verification required - company will match provided information with records",
+        "identity_verification_required": true,
         "known_response_time_days": 30
       }
     }

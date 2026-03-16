@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}{{ company_name }} — Data Card{% endblock %}
+
+{% block content %}
+<style>
+/* Sticky section nav */
+.section-nav {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 100;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 2rem;
+  padding: 0.5rem 0;
+}
+.section-nav a {
+  color: #6b7280;
+  text-decoration: none;
+  font-size: 0.85rem;
+  padding: 4px 12px;
+  border-radius: 4px;
+}
+.section-nav a:hover { color: #111827; background: #f3f4f6; }
+
+/* Section headings */
+.section-heading {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9ca3af;
+  padding: 0.5rem 0 0.75rem;
+  margin-top: 2.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+.section-heading:first-of-type { margin-top: 0; border-top: none; }
+
+/* Field table */
+.field-row {
+  display: grid;
+  grid-template-columns: 180px 80px minmax(120px, 1fr) 2fr;
+  gap: 12px;
+  padding: 6px 2px;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 0.82rem;
+  align-items: start;
+}
+.field-name { font-family: monospace; font-weight: 600; color: #111827; }
+
+/* Type badges */
+.tb { border-radius: 4px; padding: 1px 7px; font-size: 0.72rem; font-weight: 500; white-space: nowrap; }
+.tb-string  { background: #dbeafe; color: #1d4ed8; }
+.tb-number  { background: #fef3c7; color: #92400e; }
+.tb-boolean { background: #d1fae5; color: #065f46; }
+.tb-date    { background: #ede9fe; color: #6d28d9; }
+.tb-array   { background: #fee2e2; color: #991b1b; }
+.tb-object  { background: #f3f4f6; color: #374151; }
+.tb-email   { background: #e0f2fe; color: #075985; }
+
+/* Copyable values */
+.copyable { cursor: pointer; color: #374151; }
+.copyable:hover { color: #2563eb; text-decoration: underline; }
+
+/* Details/summary */
+details > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  cursor: pointer;
+  list-style: none;
+  border-bottom: 1px solid #f3f4f6;
+}
+details > summary::-webkit-details-marker { display: none; }
+.tri { display: inline-block; font-size: 0.55rem; color: #9ca3af; transition: transform 0.15s; }
+details[open] > summary .tri { transform: rotate(90deg); }
+.cat-count { background: #f3f4f6; border-radius: 10px; padding: 1px 8px; font-size: 0.72rem; color: #6b7280; margin-left: auto; }
+.nested { border-left: 2px solid #e5e5e5; margin-left: 1rem; padding-left: 1rem; }
+.tree-node { margin: 3px 0; }
+
+/* Stat tiles */
+.stat-tile { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 16px; min-width: 90px; text-align: center; }
+.stat-tile .label { font-size: 0.72rem; color: #64748b; }
+.stat-tile .value { font-size: 1rem; font-weight: 700; color: #1e293b; }
+
+/* Company info table */
+.info-table td:first-child { width: 160px; color: #6b7280; font-size: 0.85rem; vertical-align: top; padding: 6px 12px 6px 0; }
+.info-table td:last-child { font-size: 0.85rem; padding: 6px 0; }
+
+/* Services list */
+.svc-item { display: flex; gap: 10px; margin-bottom: 1rem; }
+.svc-dot { color: #6366f1; font-size: 0.6rem; margin-top: 5px; flex-shrink: 0; }
+</style>
+
+<!-- Header -->
+<div class="mb-4">
+  <div class="d-flex align-items-start justify-content-between">
+    <div>
+      <h3 class="mb-0">{{ company_name }}</h3>
+      {% if legal_name %}<div class="text-muted small">{{ legal_name }}</div>{% endif %}
+      <div class="text-muted small">{{ domain }}</div>
+    </div>
+    <div class="d-flex flex-column align-items-end gap-1">
+      {% if catalog %}
+        <span class="badge bg-success">Data Received</span>
+        {% if catalog.received_at %}<span class="text-muted small">{{ catalog.received_at }}</span>{% endif %}
+      {% elif data_link %}
+        <span class="badge bg-warning text-dark">Awaiting Download</span>
+      {% else %}
+        <span class="badge bg-secondary">No Data Yet</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if download_error %}
+<div class="alert alert-warning mb-3">
+  {% if download_error == "too_large" %}
+    File is too large (&gt;100 MB) for auto-download. Download manually and place in
+    <code>user_data/received/{{ domain }}/</code>.
+    {% if data_link %}<a href="{{ data_link }}" target="_blank" class="btn btn-sm btn-outline-secondary ms-2">Open link &#x2197;</a>{% endif %}
+  {% elif download_error == "expired" %}
+    Download link has expired.
+    {% if data_link %}<button class="btn btn-sm btn-outline-secondary ms-2" onclick="navigator.clipboard.writeText('{{ data_link }}')">Copy URL &#x29c9;</button>{% endif %}
+  {% else %}
+    Download failed: {{ download_error }}
+  {% endif %}
+</div>
+{% endif %}
+
+{% if scan_error == "no_files" %}
+<div class="alert alert-warning py-2 small mb-3">
+  No ZIP / JSON / CSV found in <code>user_data/received/{{ domain }}/</code> yet.
+</div>
+{% endif %}
+
+{% if data_link and not catalog %}
+<div class="p-3 mb-4 border rounded bg-light">
+  <strong>Data link available</strong>
+  <div class="mt-2 d-flex gap-2">
+    <a href="{{ data_link }}" target="_blank" class="btn btn-sm btn-outline-primary">Open link &#x2197;</a>
+    <a href="/download/{{ domain }}?account={{ account }}" class="btn btn-sm btn-primary">Download &amp; Analyze</a>
+  </div>
+</div>
+{% endif %}
+
+<!-- Action buttons -->
+<div class="mb-3 d-flex gap-2 flex-wrap">
+  <a href="/refresh?account={{ account }}" class="btn btn-sm btn-outline-secondary">&#x21BA; Refresh</a>
+  <a href="/scan/{{ domain }}?account={{ account }}" class="btn btn-sm btn-outline-secondary">&#x1F50D; Scan folder</a>
+  {% if data_link %}
+  <a href="{{ data_link }}" target="_blank" class="btn btn-sm btn-outline-primary">&#x2197; Open link</a>
+  {% endif %}
+  <a href="/?account={{ account }}" class="btn btn-sm btn-outline-secondary">&#x2190; Dashboard</a>
+</div>
+
+<!-- Sticky section nav -->
+<div class="section-nav">
+  <div class="d-flex gap-1 flex-wrap">
+    <a href="#data-description">Data Description</a>
+    <a href="#company-info">Company Info</a>
+    <a href="#services">Services</a>
+    <a href="#export-info">Export Info</a>
+  </div>
+</div>
+
+<!-- ─── DATA DESCRIPTION ─────────────────────────────────────────────── -->
+<div id="data-description">
+  <div class="section-heading">Data Description</div>
+
+  {% if catalog and catalog.schema %}
+    <div class="mb-3 d-flex gap-2">
+      <button id="expand-all" class="btn btn-sm btn-outline-secondary">Expand All</button>
+      <button id="collapse-all" class="btn btn-sm btn-outline-secondary">Collapse All</button>
+    </div>
+
+    {% for cat in catalog.schema %}
+    <details {% if loop.first %}open{% endif %}>
+      <summary>
+        <span class="tri">&#x25B6;</span>
+        <strong>{{ cat.name }}</strong>
+        {% if cat.description %}<span class="text-muted small ms-2">{{ cat.description }}</span>{% endif %}
+        <span class="cat-count">{{ cat.fields | length }} fields</span>
+      </summary>
+      <div class="nested">
+        {% if cat.fields %}
+        <div class="field-row" style="font-weight:600; font-size:0.75rem; color:#6b7280; border-bottom:2px solid #e5e7eb;">
+          <div>Field</div><div>Type</div><div>Example</div><div>Description</div>
+        </div>
+        {% for f in cat.fields %}
+        <div class="field-row">
+          <div class="field-name">{{ f.name }}</div>
+          <div><span class="tb tb-{{ f.type | lower | replace(' ', '-') }}">{{ f.type }}</span></div>
+          <div class="copyable" data-copy="{{ f.example }}">{{ f.example }}{% if f.example %} &#x29c9;{% endif %}</div>
+          <div class="text-muted">{{ f.description }}</div>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </details>
+    {% endfor %}
+
+    {% if catalog.files %}
+    <details class="mt-2">
+      <summary>
+        <span class="tri">&#x25B6;</span>
+        <span class="text-muted">All files ({{ catalog.files | length }})</span>
+      </summary>
+      <div class="nested mt-2">
+        {% for f in catalog.files %}
+        <div class="tree-node small text-muted">
+          &#x1F4C4; {{ f.filename or f.path }}
+          {% if f.size_bytes %}<span class="ms-2">{{ (f.size_bytes / 1024) | round(1) }} KB</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
+
+  {% elif catalog %}
+    <p class="text-muted">Schema not yet analyzed. Use <strong>Scan folder</strong> below.</p>
+  {% else %}
+    <p class="text-muted">No data received yet.</p>
+  {% endif %}
+</div>
+
+<!-- ─── COMPANY INFO ──────────────────────────────────────────────────── -->
+<div id="company-info">
+  <div class="section-heading">Company Info</div>
+  <table class="info-table" style="border-collapse:collapse; max-width:600px;">
+    <tbody>
+      <tr><td>SAR sent to</td><td>{{ to_email or "—" }}</td></tr>
+      <tr><td>SAR sent at</td><td>{{ sar_sent_at or "—" }}</td></tr>
+      <tr><td>Legal name</td><td>{{ legal_name or "—" }}</td></tr>
+      <tr><td>Headquarters</td><td>{{ headquarters or "—" }}</td></tr>
+      <tr>
+        <td>Privacy email</td>
+        <td>
+          {% if dpo_email %}
+            {{ dpo_email }}
+            <button class="btn btn-sm btn-link p-0 ms-1" onclick="navigator.clipboard.writeText('{{ dpo_email }}')">&#x29c9;</button>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>DSAR portal</td>
+        <td>
+          {% if portal_url %}<a href="{{ portal_url }}" target="_blank">{{ portal_url }}</a>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      <tr><td>Response time</td><td>{% if response_time_days %}{{ response_time_days }} days{% else %}—{% endif %}</td></tr>
+      <tr><td>ID verification</td><td>{{ "Required" if identity_required else "Not required" }}</td></tr>
+      {% if special_instructions %}
+      <tr><td>Special notes</td><td>{{ special_instructions }}</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ─── SERVICES ──────────────────────────────────────────────────────── -->
+<div id="services">
+  <div class="section-heading">Services</div>
+  {% if catalog and catalog.services %}
+    {% for svc in catalog.services %}
+    <div class="svc-item">
+      <span class="svc-dot">&#x25CF;</span>
+      <div>
+        <strong>{{ svc.name }}</strong>
+        {% if svc.description %}<div class="text-muted small">{{ svc.description }}</div>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="text-muted">No service information available.</p>
+  {% endif %}
+</div>
+
+<!-- ─── EXPORT INFO ───────────────────────────────────────────────────── -->
+<div id="export-info">
+  <div class="section-heading">Export Info</div>
+  {% if catalog %}
+    <div class="d-flex flex-wrap gap-3 mb-4">
+      <div class="stat-tile">
+        <div class="label">Format</div>
+        <div class="value">{{ (catalog.export_meta.get("format", "") if catalog.export_meta else "") or (catalog.path.split(".")[-1].upper() if catalog.path else "—") }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Size</div>
+        <div class="value">{{ ((catalog.size_bytes / 1024) | round(1) | string + " KB") if catalog.size_bytes else "—" }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Files</div>
+        <div class="value">{{ catalog.files | length if catalog.files else "—" }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Categories</div>
+        <div class="value">{{ catalog.categories | length if catalog.categories else "—" }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Date received</div>
+        <div class="value" style="font-size:0.85rem;">{{ catalog.received_at or received_at or "—" }}</div>
+      </div>
+    </div>
+
+    {% if catalog.export_meta %}
+    <table class="info-table" style="border-collapse:collapse; max-width:500px;">
+      <tbody>
+        {% if catalog.export_meta.get("delivery") %}
+        <tr><td>Delivery</td><td>{{ catalog.export_meta.delivery }}</td></tr>
+        {% endif %}
+        {% if catalog.export_meta.get("timeline") %}
+        <tr><td>Timeline</td><td>{{ catalog.export_meta.timeline }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if catalog.path %}
+    <div class="mt-3">
+      <a href="#" onclick="fetch('/open-folder/{{ domain }}?account={{ account }}').then(()=>{}); return false;"
+         class="btn btn-sm btn-outline-secondary">&#x1F4C2; Open folder in Finder</a>
+      <code class="ms-3 small text-muted">{{ catalog.path }}</code>
+    </div>
+    {% endif %}
+  {% else %}
+    <p class="text-muted">No export data available.</p>
+  {% endif %}
+</div>
+
+<script>
+document.getElementById('expand-all')?.addEventListener('click',
+  () => document.querySelectorAll('#data-description details').forEach(d => d.open = true));
+document.getElementById('collapse-all')?.addEventListener('click',
+  () => document.querySelectorAll('#data-description details').forEach(d => d.open = false));
+
+document.querySelectorAll('.copyable').forEach(el => {
+  el.addEventListener('click', () => {
+    if (!el.dataset.copy) return;
+    navigator.clipboard.writeText(el.dataset.copy);
+    const orig = el.textContent;
+    el.textContent = '\u2713 copied';
+    setTimeout(() => el.textContent = orig, 1500);
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}LLM Costs — GDPR SAR Monitor{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <h4 class="mb-0 me-3">LLM API Costs</h4>
+  {% if account %}
+    <span class="text-muted small">account: {{ account }}</span>
+  {% endif %}
+</div>
+
+{# Stat tiles #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small text-uppercase fw-semibold mb-1">Total spend</div>
+        <div class="fs-4 fw-bold">${{ "%.4f"|format(stats.total_cost) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small text-uppercase fw-semibold mb-1">Contact resolver</div>
+        <div class="fs-4 fw-bold">${{ "%.4f"|format(stats.resolver_cost) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small text-uppercase fw-semibold mb-1">Reply classifier</div>
+        <div class="fs-4 fw-bold">${{ "%.4f"|format(stats.classifier_cost) }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small text-uppercase fw-semibold mb-1">Total API calls</div>
+        <div class="fs-4 fw-bold">{{ stats.total_calls }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# History table #}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center py-2">
+    <span class="fw-semibold">Call history</span>
+    <span class="text-muted small">{{ stats.total_calls }} total · {{ "{:,}".format(stats.total_input_tokens) }} in + {{ "{:,}".format(stats.total_output_tokens) }} out tokens</span>
+  </div>
+  {% if calls %}
+  <div class="table-responsive">
+    <table class="table table-sm table-striped table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th class="ps-3">Timestamp</th>
+          <th>Source</th>
+          <th>Company / From</th>
+          <th>Model</th>
+          <th class="text-end">Input</th>
+          <th class="text-end">Output</th>
+          <th class="text-end pe-3">Cost</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in calls %}
+        <tr>
+          <td class="ps-3 text-nowrap text-muted small">{{ c.timestamp }}</td>
+          <td>
+            {% if c.source == "contact_resolver" %}
+              <span class="badge bg-primary bg-opacity-10 text-primary">contact</span>
+            {% elif c.source == "reply_classifier" %}
+              <span class="badge bg-success bg-opacity-10 text-success">classifier</span>
+            {% else %}
+              <span class="badge bg-secondary bg-opacity-10 text-secondary">{{ c.source or "—" }}</span>
+            {% endif %}
+          </td>
+          <td class="text-truncate" style="max-width:160px" title="{{ c.company_name }}">{{ c.company_name }}</td>
+          <td class="small text-muted">{{ c.model.replace("claude-", "").replace("-20251001", "") }}</td>
+          <td class="text-end small">{{ "{:,}".format(c.input_tokens) }}</td>
+          <td class="text-end small">{{ "{:,}".format(c.output_tokens) }}</td>
+          <td class="text-end pe-3 fw-semibold">${{ "%.4f"|format(c.cost_usd) }}</td>
+          <td>
+            {% if c.found %}
+              <span class="text-success">✓ found</span>
+            {% else %}
+              <span class="text-secondary">✗ miss</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot class="table-light fw-semibold">
+        <tr>
+          <td colspan="4" class="ps-3">Grand total</td>
+          <td class="text-end">{{ "{:,}".format(stats.total_input_tokens) }}</td>
+          <td class="text-end">{{ "{:,}".format(stats.total_output_tokens) }}</td>
+          <td class="text-end pe-3">${{ "%.4f"|format(stats.total_cost) }}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body text-muted">No LLM calls recorded yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

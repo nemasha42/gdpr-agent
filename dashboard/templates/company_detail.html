@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}{{ state.company_name }} — GDPR SAR{% endblock %}
+
+{% block nav_extra %}
+  <a href="/?account={{ account }}" class="btn btn-sm btn-outline-secondary">&larr; Dashboard</a>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <div>
+    <h4 class="mb-0 fw-bold">{{ state.company_name }}</h4>
+    <span class="text-muted small">{{ domain }}</span>
+  </div>
+  <span class="badge bg-{{ status_colour }} fs-6 status-badge">{{ status.replace('_', ' ') }}</span>
+</div>
+
+{# Summary row #}
+<div class="row g-2 mb-4">
+  <div class="col-auto">
+    <div class="card px-3 py-2 text-center">
+      <div class="small text-muted">SAR Sent</div>
+      <div class="fw-semibold">{{ state.sar_sent_at[:10] }}</div>
+    </div>
+  </div>
+  <div class="col-auto">
+    <div class="card px-3 py-2 text-center">
+      <div class="small text-muted">Deadline</div>
+      <div class="fw-semibold">{{ state.deadline }}</div>
+    </div>
+  </div>
+  <div class="col-auto">
+    <div class="card px-3 py-2 text-center">
+      <div class="small text-muted">GDPR Replies</div>
+      <div class="fw-semibold">{{ reply_rows | selectattr('non_gdpr', 'equalto', false) | list | length }}</div>
+    </div>
+  </div>
+  {% if state.to_email %}
+  <div class="col-auto">
+    <div class="card px-3 py-2 text-center">
+      <div class="small text-muted">Sent to</div>
+      <div class="fw-semibold small">{{ state.to_email }}</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# Reply thread #}
+{% if reply_rows %}
+  <h6 class="text-muted mb-3">Reply Thread (newest first)</h6>
+  {% for r in reply_rows %}
+  <div class="card mb-3 {% if r.non_gdpr %}opacity-50{% endif %}">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start mb-1">
+        <div>
+          <span class="fw-semibold small">{{ r.from_addr }}</span>
+          <span class="text-muted small ms-2">{{ r.received_at }}</span>
+        </div>
+        {% if r.llm_used %}
+          <span class="badge bg-light text-muted border">LLM classified</span>
+        {% endif %}
+      </div>
+
+      <div class="text-muted small mb-2">{{ r.subject }}</div>
+
+      {# Tags #}
+      <div class="mb-2">
+        {% for tag in r.tags %}
+          <span class="tag-chip bg-{{ tag_colour.get(tag, 'secondary') }} {% if tag == 'NON_GDPR' %}text-muted{% else %}text-white{% endif %}">
+            {{ tag.replace('_', ' ') }}
+          </span>
+        {% endfor %}
+      </div>
+
+      {# Snippet #}
+      <p class="snippet-text mb-2">{{ r.snippet }}</p>
+      <div>
+        <button class="btn btn-link btn-sm p-0 text-muted expand-btn"
+                data-domain="{{ domain }}"
+                data-msgid="{{ r.gmail_message_id }}"
+                data-account="{{ account }}">
+          &#x25BC; Expand email
+        </button>
+        <pre class="body-text d-none mt-2 p-2 bg-light rounded small"
+             style="white-space:pre-wrap; max-height:400px; overflow-y:auto;"></pre>
+      </div>
+
+      {# Extracted info (skip for non-GDPR noise) #}
+      {% if r.extracted and not r.non_gdpr %}
+        {% set ex = r.extracted %}
+        <div class="small text-muted d-flex flex-wrap gap-3">
+          {% if ex.reference_number %}
+            <span>&#x1F4CB; Ref: <strong>{{ ex.reference_number }}</strong></span>
+          {% endif %}
+          {% if ex.confirmation_url %}
+            <span>&#x1F517; <a href="{{ ex.confirmation_url }}" target="_blank">Confirm request</a></span>
+          {% endif %}
+          {% if ex.data_link %}
+            <span>&#x2B07;&#xFE0F; <a href="{{ ex.data_link }}" target="_blank">Download data</a></span>
+          {% endif %}
+          {% if ex.portal_url %}
+            <span>&#x1F4BB; <a href="{{ ex.portal_url }}" target="_blank">Privacy portal</a></span>
+          {% endif %}
+          {% if ex.deadline_extension_days %}
+            <span>&#x23F1; Extended by {{ ex.deadline_extension_days }} days</span>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if r.has_attachment and not r.non_gdpr %}
+        <div class="mt-2 text-success small">&#x1F4CE; Attachment received</div>
+      {% endif %}
+
+      {% if r.non_gdpr %}
+        <div class="small text-muted mt-1"><em>Filtered: non-GDPR email (newsletter / marketing)</em></div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="alert alert-light">No replies received yet.</div>
+{% endif %}
+
+<script>
+document.querySelectorAll('.expand-btn').forEach(btn => {
+  btn.addEventListener('click', async function() {
+    const pre = this.nextElementSibling;
+    if (!pre.classList.contains('d-none')) {
+      pre.classList.add('d-none');
+      this.textContent = '\u25BC Expand email';
+      return;
+    }
+    if (pre.textContent.trim()) {
+      pre.classList.remove('d-none');
+      this.textContent = '\u25B2 Collapse';
+      return;
+    }
+    this.textContent = '\u2026loading';
+    const { domain, msgid, account } = this.dataset;
+    const res = await fetch(`/api/body/${domain}/${msgid}?account=${account}`);
+    const { body } = await res.json();
+    pre.textContent = body;
+    pre.classList.remove('d-none');
+    this.textContent = '\u25B2 Collapse';
+  });
+});
+</script>
+{% endblock %}
