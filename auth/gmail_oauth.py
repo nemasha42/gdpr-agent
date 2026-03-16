@@ -36,6 +36,20 @@ def _get_account_email(service: Any) -> str:
     return service.users().getProfile(userId="me").execute()["emailAddress"]
 
 
+def _token_files_to_emails(paths: list[Path]) -> list[str]:
+    """Convert *_readonly.json token filenames back to email addresses."""
+    emails = []
+    for p in sorted(paths):
+        name = p.stem.replace("_readonly", "")   # trader1620_at_gmail_com
+        # reverse _safe_email: first _at_ → @, remaining _ → .
+        if "_at_" in name:
+            local, domain = name.split("_at_", 1)
+            emails.append(f"{local}@{domain.replace('_', '.')}")
+        else:
+            emails.append(name)
+    return emails
+
+
 def _load_creds(token_path: Path, scopes: list[str]) -> Credentials | None:
     if token_path.exists():
         return Credentials.from_authorized_user_file(str(token_path), scopes)
@@ -103,15 +117,26 @@ def get_gmail_service(
         if len(existing_readonly) == 1:
             token_path = existing_readonly[0]
         elif len(existing_readonly) > 1:
-            known = [p.stem.replace("_readonly", "").replace("_at_", "@").replace("_", ".", 1)
-                     for p in existing_readonly]
+            known = _token_files_to_emails(existing_readonly)
             print("Multiple Gmail accounts found:")
-            for a in known:
-                print(f"  {a}")
-            print("Re-run with --gmail EMAIL to choose one.")
-            sys.exit(1)
+            for i, a in enumerate(known, 1):
+                print(f"  [{i}] {a}")
+            choice = input("\n  Which account to scan? Enter number or full email: ").strip()
+            if choice.isdigit() and 1 <= int(choice) <= len(known):
+                email_hint = known[int(choice) - 1]
+            elif choice in known:
+                email_hint = choice
+            else:
+                print("Invalid choice. Re-run and try again.")
+                sys.exit(1)
+            token_path = tokens_dir / f"{_safe_email(email_hint)}_readonly.json"
         else:
-            token_path = tokens_dir / "_pending_readonly.json"  # temp name
+            # No tokens yet — ask which account to connect
+            email_hint = input("  Enter Gmail address to scan: ").strip() or None
+            token_path = tokens_dir / (
+                f"{_safe_email(email_hint)}_readonly.json" if email_hint
+                else "_pending_readonly.json"
+            )
 
     # ── Load / refresh / auth ────────────────────────────────────────────────
     creds = _load_creds(token_path, SCOPES)
