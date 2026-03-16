@@ -1,7 +1,7 @@
 """Full GDPR agent pipeline.
 
 Steps:
-  1. Connect to Gmail (trader1620) via OAuth
+  1. Connect to Gmail via OAuth
   2. Scan inbox for service / welcome emails
   3. For each discovered company, resolve the GDPR contact
   4. Compose a SAR letter per company
@@ -10,12 +10,16 @@ Steps:
 Usage:
     python run.py                  # full run, real sending
     python run.py --dry-run        # preview only, nothing sent
+    python run.py --gmail EMAIL    # choose which Gmail account to scan
     python run.py --max-emails 200 # limit inbox scan (default 500)
     python run.py --min-confidence MEDIUM  # skip LOW-confidence services
+
+First time? Run  python setup.py  to create your credentials.json.
 """
 
 import argparse
 import sys
+from pathlib import Path
 
 from auth.gmail_oauth import get_gmail_service
 from contact_resolver import cost_tracker
@@ -28,6 +32,12 @@ from scanner.service_extractor import extract_services
 
 def main() -> None:
     args = _parse_args()
+
+    # ── Preflight: credentials check ─────────────────────────────────────────
+    if not (Path(__file__).parent / "credentials.json").exists():
+        print("credentials.json not found.")
+        print("Run  python setup.py  to create your Google Cloud credentials.")
+        sys.exit(1)
 
     # ── Step 1: Gmail connection ─────────────────────────────────────────────
     print("Connecting to Gmail...")
