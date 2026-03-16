@@ -1,4 +1,4 @@
-"""GDPR contact lookup via Claude Haiku — structured extraction from privacy page text."""
+"""GDPR contact lookup via web_search + Haiku."""
 
 import json
 import re
@@ -6,11 +6,9 @@ from datetime import date
 from typing import Any
 
 import anthropic
-import requests as http
 
 from config.settings import settings
 from contact_resolver import cost_tracker
-from contact_resolver import privacy_page_scraper
 from contact_resolver.models import (
     CompanyRecord,
     Contact,
@@ -21,23 +19,14 @@ from contact_resolver.models import (
 
 _MODEL = "claude-haiku-4-5-20251001"
 _MAX_TOKENS = 1024
-_TEXT_LIMIT = 1500  # max chars of privacy page text passed to Claude
-_TIMEOUT = 10
 
 # Contact fields that constitute a "usable" contact method
 _CONTACT_FIELDS = ("dpo_email", "privacy_email", "gdpr_portal_url")
 
-# Fallback URLs tried directly if privacy_page_scraper finds no text
-_FALLBACK_URLS: tuple[str, ...] = (
-    "https://{domain}/privacy-policy",
-    "https://{domain}/privacy",
-    "https://{domain}/gdpr",
-)
-
-# System prompt with JSON schema — compact, under 250 tokens
+# System prompt
 _SYSTEM_PROMPT = """\
-Extract GDPR contact details from privacy policy text. \
-Reply with ONLY a valid JSON object — no prose, no markdown fences:
+You are a GDPR contact data extractor. Find the company's GDPR/privacy \
+contacts and reply with ONLY a valid JSON object — no prose, no markdown fences:
 {"company_name":"","legal_entity_name":"","source_confidence":"medium",\
 "contact":{"dpo_email":"","privacy_email":"","gdpr_portal_url":"",\
 "postal_address":{"line1":"","city":"","postcode":"","country":""},\
@@ -46,7 +35,7 @@ Reply with ONLY a valid JSON object — no prose, no markdown fences:
 "request_notes":{"special_instructions":"","identity_verification_required":false,\
 "known_response_time_days":30}}
 confidence: high=official contacts clearly stated; \
-medium=contacts mentioned indirectly; low=no usable GDPR contact found. \
+medium=contacts found indirectly; low=no usable GDPR contact found. \
 preferred_method: email, portal, or postal."""
 
 
@@ -61,98 +50,56 @@ def search_company(
     *,
     api_key: str | None = None,
 ) -> CompanyRecord | None:
-    """Search for GDPR contact details by extracting text from the company's
-    privacy page and passing it to Claude Haiku for structured extraction.
+    """Search for GDPR contact details using web_search + Haiku (~$0.025/call).
 
-    Returns ``None`` immediately (without calling Claude) if no privacy page
-    text can be fetched — saving the API cost entirely.
-
-    Args:
-        company_name: Human-readable company name (e.g. ``"Spotify"``).
-        domain: Registrable domain (e.g. ``"spotify.com"``).
-        api_key: Anthropic API key; falls back to ``settings.anthropic_api_key``.
+    Claude autonomously searches and reads pages, handling bot-blocked and
+    JS-rendered sites. Returns ``None`` if no usable contacts found.
     """
-    key = api_key or settings.anthropic_api_key
-    if not key:
+    anthropic_key = api_key or settings.anthropic_api_key
+    if not anthropic_key:
         return None
 
-    page_text = _fetch_privacy_text(domain)
-    if not page_text:
-        return None
+    return _extract_with_websearch(company_name, domain, anthropic_key)
 
-    client = anthropic.Anthropic(api_key=key)
-    user_message = _build_prompt(company_name, page_text)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_with_websearch(
+    company_name: str, domain: str, api_key: str
+) -> CompanyRecord | None:
+    """Claude autonomously searches — handles bot-blocked / JS-rendered sites."""
+    client = anthropic.Anthropic(api_key=api_key)
+    user_message = f"GDPR contacts for {company_name} ({domain})"
 
     try:
         response = client.messages.create(
             model=_MODEL,
             max_tokens=_MAX_TOKENS,
             system=_SYSTEM_PROMPT,
+            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 1}],
             messages=[{"role": "user", "content": user_message}],
         )
     except anthropic.APIError:
         return None
+
+    text = _extract_text(response)
+    data = _extract_json(text) if text else None
+    record = _validate_and_build(data, company_name) if data else None
 
     cost_tracker.record_llm_call(
         company_name=company_name,
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
         model=_MODEL,
+        found=record is not None,
     )
-
-    text = _extract_text(response)
-    if not text:
-        return None
-
-    data = _extract_json(text)
-    if not data:
-        return None
-
-    return _validate_and_build(data, company_name)
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _fetch_privacy_text(domain: str, *, http_get: Any = None) -> str:
-    """Return stripped privacy page text truncated to ``_TEXT_LIMIT`` chars.
-
-    Step 1 — use the scraper's URL templates (4 candidates, reuses _strip_html).
-    Step 2 — if still empty, try three explicit fallback URLs directly.
-    Returns empty string if all attempts fail.
-    """
-    # Step 1: scraper's URL templates
-    text = privacy_page_scraper.fetch_privacy_text(domain, http_get=http_get)
-    if text:
-        return text[:_TEXT_LIMIT]
-
-    # Step 2: explicit fallback URLs
-    get = http_get or http.get
-    for template in _FALLBACK_URLS:
-        url = template.format(domain=domain)
-        try:
-            resp = get(url, timeout=_TIMEOUT)
-        except Exception:
-            continue
-        if resp.status_code == 200 and resp.text.strip():
-            return privacy_page_scraper._strip_html(resp.text)[:_TEXT_LIMIT]
-
-    return ""
-
-
-def _build_prompt(company_name: str, privacy_text: str) -> str:
-    return (
-        f"Extract GDPR contact details from this privacy policy text "
-        f"and return JSON matching the schema.\n\n"
-        f"Company: {company_name}\n\n"
-        f"Privacy policy text:\n{privacy_text}"
-    )
+    return record
 
 
 def _extract_text(response: Any) -> str:
-    """Concatenate all text blocks from a Claude API response."""
     parts: list[str] = []
     for block in response.content:
         if hasattr(block, "text"):
@@ -161,10 +108,6 @@ def _extract_text(response: Any) -> str:
 
 
 def _extract_json(text: str) -> dict | None:
-    """Find and parse the first JSON object in *text*.
-
-    Strips markdown code fences (```json … ```) before searching.
-    """
     text = re.sub(r"```(?:json)?\s*", "", text).strip()
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
@@ -176,19 +119,12 @@ def _extract_json(text: str) -> dict | None:
 
 
 def _validate_and_build(data: dict, company_name: str) -> CompanyRecord | None:
-    """Validate parsed LLM JSON and return a :class:`CompanyRecord`, or ``None``.
-
-    Downgrades ``source_confidence`` to ``"low"`` (and returns ``None``) when
-    no usable contact method is present.
-    """
     confidence: str = data.get("source_confidence", "low")
-
     contact_data: dict = data.get("contact", {})
     has_contact = any(contact_data.get(f, "").strip() for f in _CONTACT_FIELDS)
 
     if not has_contact:
         confidence = "low"
-
     if confidence == "low":
         return None
 

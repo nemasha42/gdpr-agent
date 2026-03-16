@@ -1,35 +1,35 @@
 {
   "meta": {
     "version": "1.0",
-    "last_updated": "2026-03-14",
+    "last_updated": "2026-03-16",
     "total_companies": 6
   },
   "companies": {
     "glassdoor.com": {
       "company_name": "Glassdoor",
       "legal_entity_name": "Glassdoor LLC",
-      "source": "dataowners_override",
+      "source": "llm_search",
       "source_confidence": "high",
-      "last_verified": "2026-03-14",
+      "last_verified": "2026-03-16",
       "contact": {
-        "dpo_email": "dpo@glassdoor.com",
-        "privacy_email": "privacysupport@glassdoor.com",
-        "gdpr_portal_url": "https://help.glassdoor.com/s/privacyrequest?language=en_US",
+        "dpo_email": "DPO@glassdoor.com",
+        "privacy_email": "gdpr@glassdoor.com",
+        "gdpr_portal_url": "https://help.glassdoor.com/s/privacyrequest",
         "postal_address": {
-          "line1": "Glassdoor LLC, c/o CT Corporation, 330 North Brand Boulevard",
-          "city": "Glendale",
-          "postcode": "CA 91203-2336",
-          "country": "United States"
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
         },
-        "preferred_method": "portal"
+        "preferred_method": "email"
       },
       "flags": {
         "portal_only": false,
         "email_accepted": true,
-        "auto_send_possible": false
+        "auto_send_possible": true
       },
       "request_notes": {
-        "special_instructions": "Glassdoor's preferred channel for Subject Access Requests is their self-service Privacy Requests portal. Identity verification required via link sent to registered email. EU GDPR representative: Glassdoor Hiring Solutions Ireland Ltd, 70 Sir John Rogerson's Quay, Dublin 2, D02 R296, Ireland. UK GDPR representative: Glassdoor Global Ltd.",
+        "special_instructions": "EU representative: Glassdoor Hiring Solutions Ireland Ltd. UK representative: Glassdoor Global Ltd. Requests can be made via privacy portal or email. Identity verification required.",
         "identity_verification_required": true,
         "known_response_time_days": 30
       }
@@ -37,42 +37,42 @@
     "google.com": {
       "company_name": "Google",
       "legal_entity_name": "Google LLC",
-      "source": "dataowners_override",
-      "source_confidence": "high",
-      "last_verified": "2026-03-14",
+      "source": "llm_search",
+      "source_confidence": "medium",
+      "last_verified": "2026-03-16",
       "contact": {
-        "dpo_email": "",
+        "dpo_email": "dpo-google@google.com",
         "privacy_email": "",
-        "gdpr_portal_url": "https://support.google.com/accounts/contact/dsar_webform",
+        "gdpr_portal_url": "https://privacy.google.com/businesses",
         "postal_address": {
-          "line1": "1600 Amphitheatre Parkway",
-          "city": "Mountain View, CA 94043",
+          "line1": "",
+          "city": "",
           "postcode": "",
-          "country": "USA"
+          "country": ""
         },
-        "preferred_method": "portal"
+        "preferred_method": "email"
       },
       "flags": {
-        "portal_only": true,
-        "email_accepted": false,
-        "auto_send_possible": false
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": true
       },
       "request_notes": {
-        "special_instructions": "Use the Google DSAR webform. You must be signed in to your Google Account. UK users: Google LLC is the data controller; UK Representative is Google UK Ltd.",
-        "identity_verification_required": true,
+        "special_instructions": "DPO contact recommended for requests that receive canned responses via standard channels",
+        "identity_verification_required": false,
         "known_response_time_days": 30
       }
     },
     "paypal.com": {
       "company_name": "PayPal",
-      "legal_entity_name": "PayPal (Europe) S.à r.l. et Cie, S.C.A.",
-      "source": "dataowners_override",
+      "legal_entity_name": "PayPal (Europe) S.à.r.l. et Cie, S.C.A.",
+      "source": "llm_search",
       "source_confidence": "high",
-      "last_verified": "2026-03-14",
+      "last_verified": "2026-03-16",
       "contact": {
         "dpo_email": "dpo@paypal.com",
-        "privacy_email": "privacy@paypal.com",
-        "gdpr_portal_url": "",
+        "privacy_email": "dpo@paypal.com",
+        "gdpr_portal_url": "https://www.paypal.com/us/cshelp/article/how-can-i-submit-a-question-regarding-paypal%E2%80%99s-privacy-practices-help370",
         "postal_address": {
           "line1": "22-24 Boulevard Royal",
           "city": "Luxembourg",
@@ -84,10 +84,10 @@
       "flags": {
         "portal_only": false,
         "email_accepted": true,
-        "auto_send_possible": false
+        "auto_send_possible": true
       },
       "request_notes": {
-        "special_instructions": "Send SAR to dpo@paypal.com. Include your PayPal email address and any relevant transaction details to help locate your data.",
+        "special_instructions": "UK residents should contact Bird & Bird GDPR Representative UK, 12 New Fetter Lane, Holburn, London EC4A 1JP. Account holders can exercise rights via 'Data and Privacy' in Account Settings.",
         "identity_verification_required": true,
         "known_response_time_days": 30
       }
@@ -97,7 +97,7 @@
       "legal_entity_name": "",
       "source": "privacy_scrape",
       "source_confidence": "medium",
-      "last_verified": "2026-03-14",
+      "last_verified": "2026-03-16",
       "contact": {
         "dpo_email": "",
         "privacy_email": "privacy@substackinc.com",
@@ -126,7 +126,7 @@
       "legal_entity_name": "",
       "source": "privacy_scrape",
       "source_confidence": "medium",
-      "last_verified": "2026-03-14",
+      "last_verified": "2026-03-16",
       "contact": {
         "dpo_email": "dpo@reflexivity.com",
         "privacy_email": "privacy@reflexivity.com",
@@ -152,30 +152,30 @@
     },
     "polymarket.com": {
       "company_name": "Polymarket",
-      "legal_entity_name": "Adventure One QSS Inc. (international) / Blockratize Inc.",
-      "source": "dataowners_override",
+      "legal_entity_name": "QCX LLC (d/b/a Polymarket US)",
+      "source": "llm_search",
       "source_confidence": "medium",
-      "last_verified": "2026-03-14",
+      "last_verified": "2026-03-16",
       "contact": {
         "dpo_email": "",
-        "privacy_email": "hello@polymarket.com",
+        "privacy_email": "support@qcex.com",
         "gdpr_portal_url": "",
         "postal_address": {
-          "line1": "",
+          "line1": "7251 W. Palmetto Park Road Suite 102",
           "city": "",
           "postcode": "",
-          "country": ""
+          "country": "United States"
         },
         "preferred_method": "email"
       },
       "flags": {
         "portal_only": false,
         "email_accepted": true,
-        "auto_send_possible": true
+        "auto_send_possible": false
       },
       "request_notes": {
-        "special_instructions": "WARNING: Polymarket's international platform is operated by Adventure One QSS Inc. (Panama). No dedicated privacy/DPO contact is publicly available. Send to hello@polymarket.com referencing GDPR Article 15. Note: GDPR enforcement against this entity is uncertain given Panama jurisdiction. Consider also contacting UK ICO if no response within 30 days.",
-        "identity_verification_required": false,
+        "special_instructions": "Identity verification required for consumer requests. Submit requests to support@qcex.com",
+        "identity_verification_required": true,
         "known_response_time_days": 30
       }
     }

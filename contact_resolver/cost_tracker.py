@@ -1,6 +1,6 @@
 """Track Anthropic LLM API call costs for the current session."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 # Per-model pricing (input $/token, output $/token)
@@ -14,9 +14,16 @@ _DEFAULT_PRICING: tuple[float, float] = (3.00 / 1_000_000, 15.0 / 1_000_000)
 _W_COMPANY = 12
 _W_TOKENS = 8
 _W_COST = 14
+_W_RESULT = 8
 
-# Inner width = 14 + │ + 10 + │ + 10 + │ + 16 = 53
-_INNER = _W_COMPANY + 2 + 1 + _W_TOKENS + 2 + 1 + _W_TOKENS + 2 + 1 + _W_COST + 2
+# Inner width = (12+2)+1+(8+2)+1+(8+2)+1+(14+2)+1+(8+2) = 65
+_INNER = (
+    (_W_COMPANY + 2) + 1 +
+    (_W_TOKENS + 2) + 1 +
+    (_W_TOKENS + 2) + 1 +
+    (_W_COST + 2) + 1 +
+    (_W_RESULT + 2)
+)
 
 
 @dataclass
@@ -27,6 +34,7 @@ class _LLMCall:
     input_tokens: int
     output_tokens: int
     cost_usd: float
+    found: bool
 
 
 # Module-level session log — reset between runs via reset()
@@ -42,6 +50,8 @@ def record_llm_call(
     input_tokens: int,
     output_tokens: int,
     model: str,
+    *,
+    found: bool = False,
 ) -> None:
     """Append one LLM API call to the session log."""
     in_price, out_price = _PRICING.get(model, _DEFAULT_PRICING)
@@ -54,6 +64,7 @@ def record_llm_call(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cost_usd=cost,
+            found=found,
         )
     )
 
@@ -74,44 +85,43 @@ def print_cost_summary() -> None:
         f"├{'─' * (_W_COMPANY + 2)}"
         f"┬{'─' * (_W_TOKENS + 2)}"
         f"┬{'─' * (_W_TOKENS + 2)}"
-        f"┬{'─' * (_W_COST + 2)}┤"
+        f"┬{'─' * (_W_COST + 2)}"
+        f"┬{'─' * (_W_RESULT + 2)}┤"
     )
     sep_m = sep_h.replace("┬", "┼").replace("├", "├").replace("┤", "┤")
     bot = f"└{'─' * _INNER}┘"
 
-    def row(company: str, inp: str, out: str, cost: str) -> str:
+    def row(company: str, inp: str, out: str, cost: str, result: str) -> str:
         return (
             f"│  {company[:_W_COMPANY]:<{_W_COMPANY}}"
             f"│  {inp[:_W_TOKENS]:<{_W_TOKENS}}"
             f"│  {out[:_W_TOKENS]:<{_W_TOKENS}}"
-            f"│  {cost[:_W_COST]:<{_W_COST}}│"
+            f"│  {cost[:_W_COST]:<{_W_COST}}"
+            f"│  {result[:_W_RESULT]:<{_W_RESULT}}│"
         )
 
     lines = [
         top,
         title,
         sep_h,
-        row("Company", "Input", "Output", "Cost (USD)"),
+        row("Company", "Input", "Output", "Cost (USD)", "Result"),
         sep_m,
     ]
     for call in _session_log:
+        result_str = "✓ found" if call.found else "✗ miss"
         lines.append(
             row(
                 call.company_name,
                 f"{call.input_tokens:,}",
                 f"{call.output_tokens:,}",
                 f"${call.cost_usd:.4f}",
+                result_str,
             )
         )
         lines.append(sep_m)
 
     lines.append(
-        row(
-            "TOTAL",
-            f"{total_in:,}",
-            f"{total_out:,}",
-            f"${total_cost:.4f}",
-        )
+        row("TOTAL", f"{total_in:,}", f"{total_out:,}", f"${total_cost:.4f}", "")
     )
     lines.append(bot)
     print("\n".join(lines))

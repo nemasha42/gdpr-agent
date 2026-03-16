@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import anthropic
 import pytest
 
+from contact_resolver import cost_tracker
 from contact_resolver.llm_searcher import (
     _extract_json,
     _extract_text,
@@ -47,13 +48,15 @@ _VALID_PAYLOAD: dict = {
 }
 
 
-def _make_text_response(text: str) -> MagicMock:
+def _make_text_response(text: str, input_tokens: int = 500, output_tokens: int = 200) -> MagicMock:
     """Build a mock Anthropic API response whose content has one text block."""
     block = MagicMock()
     block.text = text
     block.spec = ["text"]  # hasattr(block, "text") → True
     response = MagicMock()
     response.content = [block]
+    response.usage.input_tokens = input_tokens
+    response.usage.output_tokens = output_tokens
     return response
 
 
@@ -181,51 +184,46 @@ def test_validate_and_build_portal_only_accepted() -> None:
 # search_company (integration of all helpers)
 # ---------------------------------------------------------------------------
 
-_PRIVACY_TEXT = "Contact our DPO at dpo@acme.com for GDPR requests."
-
-
 def test_search_company_success() -> None:
-    api_response = _make_text_response(json.dumps(_VALID_PAYLOAD))
+    api_response = _make_text_response(json.dumps(_VALID_PAYLOAD), input_tokens=643, output_tokens=250)
+    cost_tracker.reset()
 
-    with patch("contact_resolver.llm_searcher._fetch_privacy_text", return_value=_PRIVACY_TEXT), \
-         patch("contact_resolver.llm_searcher.anthropic.Anthropic") as MockClient:
+    with patch("contact_resolver.llm_searcher.anthropic.Anthropic") as MockClient:
         MockClient.return_value.messages.create.return_value = api_response
-        record = search_company("Acme Corp", "acme.com", api_key="sk-test")
+        record = search_company("Acme Corp", "acme.com", api_key="sk-ant")
 
     assert record is not None
     assert record.company_name == "Acme Corp"
     assert record.source == "llm_search"
 
-
-def test_search_company_no_privacy_text_returns_none() -> None:
-    """If no privacy page text is found, Claude must not be called."""
-    with patch("contact_resolver.llm_searcher._fetch_privacy_text", return_value=""), \
-         patch("contact_resolver.llm_searcher.anthropic.Anthropic") as MockClient:
-        result = search_company("Acme Corp", "acme.com", api_key="sk-test")
-
-    assert result is None
-    MockClient.return_value.messages.create.assert_not_called()
+    log = cost_tracker.get_log()
+    assert len(log) == 1
+    assert log[0].found is True
+    assert log[0].input_tokens == 643
+    assert log[0].output_tokens == 250
 
 
 def test_search_company_low_confidence_returns_none() -> None:
     payload = {**_VALID_PAYLOAD, "source_confidence": "low"}
     api_response = _make_text_response(json.dumps(payload))
+    cost_tracker.reset()
 
-    with patch("contact_resolver.llm_searcher._fetch_privacy_text", return_value=_PRIVACY_TEXT), \
-         patch("contact_resolver.llm_searcher.anthropic.Anthropic") as MockClient:
+    with patch("contact_resolver.llm_searcher.anthropic.Anthropic") as MockClient:
         MockClient.return_value.messages.create.return_value = api_response
-        result = search_company("Acme Corp", "acme.com", api_key="sk-test")
+        result = search_company("Acme Corp", "acme.com", api_key="sk-ant")
 
     assert result is None
+    log = cost_tracker.get_log()
+    assert len(log) == 1
+    assert log[0].found is False
 
 
 def test_search_company_api_error_returns_none() -> None:
-    with patch("contact_resolver.llm_searcher._fetch_privacy_text", return_value=_PRIVACY_TEXT), \
-         patch("contact_resolver.llm_searcher.anthropic.Anthropic") as MockClient:
+    with patch("contact_resolver.llm_searcher.anthropic.Anthropic") as MockClient:
         MockClient.return_value.messages.create.side_effect = anthropic.APIError(
             message="rate limit", request=MagicMock(), body={}
         )
-        result = search_company("Acme Corp", "acme.com", api_key="sk-test")
+        result = search_company("Acme Corp", "acme.com", api_key="sk-ant")
 
     assert result is None
 
@@ -233,10 +231,9 @@ def test_search_company_api_error_returns_none() -> None:
 def test_search_company_unparseable_response_returns_none() -> None:
     api_response = _make_text_response("Sorry, I could not find any information.")
 
-    with patch("contact_resolver.llm_searcher._fetch_privacy_text", return_value=_PRIVACY_TEXT), \
-         patch("contact_resolver.llm_searcher.anthropic.Anthropic") as MockClient:
+    with patch("contact_resolver.llm_searcher.anthropic.Anthropic") as MockClient:
         MockClient.return_value.messages.create.return_value = api_response
-        result = search_company("Acme Corp", "acme.com", api_key="sk-test")
+        result = search_company("Acme Corp", "acme.com", api_key="sk-ant")
 
     assert result is None
 
