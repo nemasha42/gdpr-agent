@@ -1,0 +1,21 @@
+Dear Data Protection Officer / Privacy Team,
+
+I am writing to exercise my right of access under Article 15 of the {gdpr_framework}.
+
+Please provide me with a complete copy of all personal data you hold about me,
+including:
+
+  - The categories of personal data being processed
+  - The purposes for which my data is processed
+  - Any third parties to whom my data has been or will be disclosed
+  - The envisaged retention period, or the criteria used to determine it
+  - The source of my data where it was not collected directly from me
+
+My details:
+  Full name:     {user_full_name}
+  Email address: {user_email}
+
+I expect a response within one calendar month as required by {gdpr_framework}.
+
+Yours faithfully,
+{user_full_name}
