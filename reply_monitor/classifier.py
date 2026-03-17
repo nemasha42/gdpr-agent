@@ -119,14 +119,26 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
             re.I)),
     ]),
     ("DATA_PROVIDED_LINK", [
-        ("subject", re.compile(r"download your.{0,30}personal data|data.{0,20}available|personal data.{0,20}complete", re.I)),
+        ("subject", re.compile(
+            r"download your.{0,30}personal data|data.{0,20}available|personal data.{0,20}complete"
+            r"|your.{0,20}(data )?export.{0,20}ready|export.{0,20}(is )?ready"
+            r"|data (request|export).{0,20}complete|your data.{0,20}ready"
+            r"|data export|personal data export",
+            re.I)),
         ("snippet", re.compile(
             r"data file is now available for download"
             r"|download your.{0,30}personal data"
             r"|download link will expire"
             r"|glassdoor\.com/dyd/download\?token="
             r"|access your.{0,20}data.{0,20}link"
-            r"|your data is ready",
+            r"|your data is ready"
+            r"|your.{0,20}export.{0,20}(is )?ready"
+            r"|export.{0,20}available.{0,20}(for )?download"
+            r"|download.{0,30}your.{0,30}export"
+            r"|data export.{0,20}(is )?ready"
+            r"|export.{0,20}complete.{0,20}download"
+            r"|i.{0,5}(ve|have) attached.{0,50}(export|data|file|information)"
+            r"|attached.{0,50}(export|personal data|information you requested)",
             re.I)),
     ]),
     ("DATA_PROVIDED_PORTAL", [
@@ -178,21 +190,72 @@ _RE_REF_GOOGLE   = re.compile(r"\[\d{1,2}-\d{10,}\]")
 _RE_REF_TICKET   = re.compile(r"TICKET-\d{6}-\d+", re.I)
 _RE_REF_GENERIC  = re.compile(r"Ref(?:erence)?[:#\s]\s*([\w-]+)", re.I)
 _RE_CONFIRM_URL  = re.compile(r"https://requests\.hrtechprivacy\.com/confirm/[\w/-]+", re.I)
-_RE_DOWNLOAD_URL = re.compile(r"https://\S+/dyd/download\?token=[^\s\"'<>]+", re.I)
+_RE_DOWNLOAD_URL = re.compile(
+    r"https://\S+/dyd/download\?token=[^\s\u201c\u201d\"'<>]+"             # Glassdoor
+    r"|https?://\S+(?:download|export)/[^\s\u201c\u201d\"'<>]{8,}"         # path-based export
+    r"|https?://\S+(?:[?&])(?:token|key|export_id|download_id)=[^\s\u201c\u201d\"'<>]+",  # token param
+    re.I,
+    # Note: /attachments/token/ URLs (Zendesk/Substack) are handled by _RE_ZENDESK_ATTACHMENT_A
+    # which is tried first to avoid concatenation of back-to-back entries.
+)
+# Context-aware extractor: any URL within 400 chars of data/export/download/attachment keywords.
+# Used as fallback when _RE_DOWNLOAD_URL finds nothing (e.g. notification shells).
+# Excludes ASCII and Unicode curly quotes from URL characters.
+_RE_EXPORT_CONTEXT_URL = re.compile(
+    r"(?:download|export|your data|data export|data file|personal data|dsar|sar|gdpr|attachment)"
+    r".{0,400}(https?://[^\s\u201c\u201d\"'<>]+)"
+    r"|"
+    r"(https?://[^\s\u201c\u201d\"'<>]+).{0,400}"
+    r"(?:download|export|your data|data export|data file|personal data|attachment)",
+    re.I | re.S,
+)
+# Zendesk/Substack attachment URLs — two formats:
+#   Format A: "filename.zip\nURL"  (expanded block — clean, no concatenation)
+#   Format B: "filename.zip - URL" (compact inline — entries may be concatenated if no whitespace)
+# Format A is tried first via finditer so clean lines are found before the concatenated compact line.
+_RE_ZENDESK_ATTACHMENT_A = re.compile(
+    r"[\w.-]{8,}\.(?:zip|json|csv|tar\.gz|gz)\r?\n(https?://[^\s\r\n\u201c\u201d\"'<>]+)",
+    re.I,
+)
+_RE_ZENDESK_ATTACHMENT_B = re.compile(
+    r"attachment[s]?\s*[:(].*?(https?://[^\s\u201c\u201d\"'<>]+\.(?:zip|json|csv|tar\.gz|gz))(?=[^a-zA-Z0-9]|$)",
+    re.I | re.S,
+)
+# Characters to strip from the right end of any extracted URL
+_URL_TRAILING_JUNK = re.compile(r'[\s.,;)\u201c\u201d\u2018\u2019"\']+$')
+
+# Body-level WRONG_CHANNEL detection: catches self-service deflection buried in the body.
+# Matches responses where the company redirects to general account/settings pages rather
+# than actually delivering data (e.g. Google "available to you through our online tools").
+_RE_BODY_WRONG_CHANNEL = re.compile(
+    r"already available.{0,80}(tools|services|account|portal)"
+    r"|available to you through.{0,80}(tools|services)"
+    r"|sign in to your.{0,40}account.{0,200}(access|manage|view).{0,50}(data|information)"
+    r"|information.{0,30}(may be|is) already available",
+    re.I | re.S,
+)
+
 _RE_PORTAL_URL   = re.compile(r"https?://\S+", re.I)  # fallback URL near portal keywords
 
 # Tags considered "informative" — having only AUTO_ACKNOWLEDGE still warrants LLM
 _LLM_TRIGGER_STATES = {frozenset(), frozenset({"AUTO_ACKNOWLEDGE"})}
+
+# Cache LLM results to avoid re-classifying identical auto-replies (domain reuse)
+# Key: (from_addr, subject) — value: LLM result dict or None
+_llm_cache: dict[tuple[str, str], dict | None] = {}
 
 # ---------------------------------------------------------------------------
 # NON_GDPR pre-pass patterns (Pass 0)
 # Score-based: requires >= 2 independent signals to avoid false positives.
 # A single noreply@ can legitimately send GDPR data downloads.
 # ---------------------------------------------------------------------------
+# Strong marketing signals (+2 each) — unambiguously non-GDPR senders
 _NON_GDPR_FROM_LOCAL = re.compile(
-    r"^(alerts|news|digest|jobs|marketing|career|noreply-jobs|community|newsletters?)$",
+    r"^(news|digest|jobs|marketing|career|noreply-jobs|community|newsletters?)$",
     re.I,
 )
+# Weaker signal (+1) — "alerts@" can legitimately send GDPR data-breach notices
+_NON_GDPR_FROM_LOCAL_WEAK = re.compile(r"^alerts$", re.I)
 _NON_GDPR_DISPLAY_NAME = re.compile(
     r"\b(jobs|alerts|digest|community|newsletter|marketing|career)\b",
     re.I,
@@ -229,6 +292,8 @@ def _is_non_gdpr(from_addr: str, subject: str, snippet: str) -> bool:
     signals = 0
     if local and _NON_GDPR_FROM_LOCAL.match(local):
         signals += 2
+    elif local and _NON_GDPR_FROM_LOCAL_WEAK.match(local):
+        signals += 1
     if _display and _NON_GDPR_DISPLAY_NAME.search(_display):
         signals += 1
     if _NON_GDPR_SUBJECT.search(subject):
@@ -243,6 +308,19 @@ def _is_non_gdpr(from_addr: str, subject: str, snippet: str) -> bool:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+_RE_DATA_URL = re.compile(
+    r"\.(zip|json|csv|tar\.gz|gz)(\?|$)"           # file extension in URL
+    r"|/(download|export|dsar|sar|data[-_]request|attachments/token)/"  # path indicators
+    r"|[?&](token|export_id|download_id|file)=",   # query param indicators
+    re.I,
+)
+
+
+def _is_data_url(url: str) -> bool:
+    """Return True if a URL plausibly points to a data file rather than a generic webpage."""
+    return bool(_RE_DATA_URL.search(url))
 
 
 def classify(
@@ -288,17 +366,46 @@ def classify(
     if "BOUNCE_TEMPORARY" in tags and "BOUNCE_PERMANENT" in tags:
         tags.remove("BOUNCE_PERMANENT")
 
-    # DATA_PROVIDED_ATTACHMENT: attachment present and no clear link tag
-    if has_attachment and "DATA_PROVIDED_LINK" not in tags:
+    # DATA_PROVIDED_ATTACHMENT: attachment present, no clear link tag, not a bounce
+    # Bounce notifications (e.g. mailer-daemon DSNs) also carry attachments (icons etc.)
+    # — never treat those as data delivery.
+    _is_bounce = "BOUNCE_PERMANENT" in tags or "BOUNCE_TEMPORARY" in tags
+    if has_attachment and "DATA_PROVIDED_LINK" not in tags and not _is_bounce:
         tags.append("DATA_PROVIDED_ATTACHMENT")
 
     # --- Extraction ---
     extracted = _extract(from_addr, subject, snippet, body)
 
+    # --- Body-level tag promotion ---
+    # Pass 1 only checks subject/snippet. Some companies bury key language in the body.
+    if body and not _is_bounce:
+        # Self-service deflection (e.g. Google "available through our online tools")
+        if "WRONG_CHANNEL" not in tags and _RE_BODY_WRONG_CHANNEL.search(body):
+            tags.append("WRONG_CHANNEL")
+
+    # --- Link-first promotion ---
+    # If URL extraction found a data link but the regex pass didn't fire DATA_PROVIDED_LINK,
+    # promote the tag here. Covers notification-shell emails (e.g. Substack, similar services)
+    # where the body contains a download URL but the subject/snippet use non-standard phrasing.
+    # Guard: only promote if the URL looks like a real data file/download, not a generic
+    # webpage (e.g. privacy policy link that was context-matched near the word "privacy").
+    if (
+        extracted.get("data_link")
+        and _is_data_url(extracted["data_link"])
+        and "DATA_PROVIDED_LINK" not in tags
+        and not _is_bounce
+    ):
+        tags.append("DATA_PROVIDED_LINK")
+
     # --- Pass 2: LLM fallback ---
     llm_used = False
     if frozenset(tags) in _LLM_TRIGGER_STATES and api_key:
-        llm_result = _llm_classify(message, api_key)
+        cache_key = (from_addr, subject)
+        if cache_key in _llm_cache:
+            llm_result = _llm_cache[cache_key]
+        else:
+            llm_result = _llm_classify(message, api_key)
+            _llm_cache[cache_key] = llm_result
         if llm_result:
             tags = llm_result.get("tags", tags)
             extracted.update({k: v for k, v in llm_result.items() if k in extracted and v})
@@ -343,10 +450,46 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
     if m:
         confirmation_url = m.group(0)
 
-    data_link = ""
-    m = _RE_DOWNLOAD_URL.search(full_text)
-    if m:
-        data_link = m.group(0)
+    def _clean_url(u: str) -> str:
+        return _URL_TRAILING_JUNK.sub("", u)
+
+    # Collect all data download URLs (some companies, e.g. Substack, send multiple zip files).
+    # Strategy: try cleanest extractors first; only fall through if nothing found.
+    data_links: list[str] = []
+
+    # Pass A: Zendesk expanded format — "filename.zip\nURL" (clean, no concatenation risk).
+    # Run this BEFORE the generic _RE_DOWNLOAD_URL which has a greedy /attachments/token/ arm
+    # that concatenates back-to-back Zendesk entries.
+    for m in _RE_ZENDESK_ATTACHMENT_A.finditer(full_text):
+        url = _clean_url(m.group(1))
+        if url and url not in data_links:
+            data_links.append(url)
+
+    if not data_links:
+        # Pass B: generic download URL patterns (Glassdoor, path-based, token params).
+        # Excludes /attachments/token/ — handled above via Pass A.
+        for m in _RE_DOWNLOAD_URL.finditer(full_text):
+            url = _clean_url(m.group(0))
+            if url and url not in data_links:
+                data_links.append(url)
+
+    if not data_links:
+        # Pass C: Zendesk compact inline — "Attachment(s): filename.zip - URL …"
+        # Used when the expanded block isn't present.
+        for m in _RE_ZENDESK_ATTACHMENT_B.finditer(full_text):
+            url = _clean_url(m.group(1))
+            if url and url not in data_links:
+                data_links.append(url)
+
+    if not data_links:
+        # Pass D: any URL near data/export/download/attachment keywords in the body.
+        m = _RE_EXPORT_CONTEXT_URL.search(full_text)
+        if m:
+            url = _clean_url(m.group(1) or m.group(2) or "")
+            if url:
+                data_links.append(url)
+
+    data_link = data_links[0] if data_links else ""
 
     # Portal URL: first URL near portal keywords
     portal_url = ""
@@ -356,14 +499,15 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
         full_text, re.I | re.S,
     )
     if portal_context:
-        url_match = re.search(r"https?://\S+", portal_context.group(0))
+        url_match = re.search(r"https?://[^\s\u201c\u201d\"'<>]+", portal_context.group(0))
         if url_match:
-            portal_url = url_match.group(0).rstrip(".,)")
+            portal_url = _clean_url(url_match.group(0))
 
     return {
         "reference_number": reference_number,
         "confirmation_url": confirmation_url,
-        "data_link": data_link,
+        "data_link": data_link,          # first URL (backward compat)
+        "data_links": data_links,        # all URLs (e.g. Substack sends 2 zips)
         "portal_url": portal_url,
         "deadline_extension_days": None,
     }
@@ -402,17 +546,26 @@ def _llm_classify(message: dict, api_key: str) -> dict | None:
         from contact_resolver import cost_tracker
 
         client = anthropic.Anthropic(api_key=api_key)
+        body_preview = (message.get("body", "") or "")[:500]
         prompt = (
             "You are a GDPR compliance assistant. Classify this email reply to a Subject Access Request.\n\n"
             f"From: {message.get('from', '')}\n"
             f"Subject: {message.get('subject', '')}\n"
-            f"Body snippet: {message.get('snippet', '')}\n\n"
+            f"Body snippet: {message.get('snippet', '')}\n"
+            f"Body (first 500 chars): {body_preview}\n\n"
             "Reply in JSON with these keys:\n"
             '  "tags": list of strings from: AUTO_ACKNOWLEDGE, OUT_OF_OFFICE, BOUNCE_PERMANENT, '
             "BOUNCE_TEMPORARY, CONFIRMATION_REQUIRED, IDENTITY_REQUIRED, MORE_INFO_REQUIRED, "
             "WRONG_CHANNEL, REQUEST_ACCEPTED, EXTENDED, IN_PROGRESS, "
             "DATA_PROVIDED_LINK, DATA_PROVIDED_ATTACHMENT, DATA_PROVIDED_PORTAL, REQUEST_DENIED, "
-            "NO_DATA_HELD, NOT_GDPR_APPLICABLE, FULFILLED_DELETION, HUMAN_REVIEW\n"
+            "NO_DATA_HELD, NOT_GDPR_APPLICABLE, FULFILLED_DELETION, HUMAN_REVIEW, NON_GDPR\n"
+            "Tag guidance:\n"
+            "- Use DATA_PROVIDED_LINK when the email contains a URL pointing to a data export or "
+            "download, even if the body is a notification shell (e.g. 'Your export is ready — click here'). "
+            "The presence of a download/export URL is sufficient.\n"
+            "- Use NON_GDPR for emails unrelated to the SAR (e.g. security alerts, "
+            "marketing, account notifications).\n"
+            "- Use NOT_GDPR_APPLICABLE only when the company explicitly states the user is not covered by GDPR.\n"
             '  "reference_number": string or null\n'
             '  "confirmation_url": string or null\n'
             '  "data_link": string or null\n'
@@ -433,6 +586,7 @@ def _llm_classify(message: dict, api_key: str) -> dict | None:
             model=model,
             found=True,
             source="reply_classifier",
+            purpose="Reply email classification",
         )
         raw = response.content[0].text.strip()
         # Strip markdown fences if present

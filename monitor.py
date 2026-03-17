@@ -130,6 +130,9 @@ def main() -> None:
                 for part in msg.get("parts", []):
                     cat = handle_attachment(service, msg["id"], part, domain)
                     if cat:
+                        if not cat.schema and api_key:
+                            from reply_monitor.link_downloader import _enrich_schema
+                            _enrich_schema(cat, api_key, domain=domain)
                         catalog_dict = cat.to_dict()
                         break
 
@@ -174,12 +177,19 @@ def _auto_download_data_links(
     needs_save = False
     for domain, state in states.items():
         for reply in state.replies:
-            if (
-                "DATA_PROVIDED_LINK" in reply.tags
-                and reply.extracted.get("data_link")
-                and not reply.attachment_catalog
-            ):
-                url = reply.extracted["data_link"]
+            if "DATA_PROVIDED_LINK" not in reply.tags:
+                continue
+            if reply.attachment_catalog:
+                continue  # already downloaded
+
+            # Support single data_link (legacy) and data_links list (multi-file, e.g. Substack)
+            urls: list[str] = reply.extracted.get("data_links") or []
+            if not urls and reply.extracted.get("data_link"):
+                urls = [reply.extracted["data_link"]]
+            if not urls:
+                continue
+
+            for url in urls:
                 if verbose:
                     print(f"  [auto-download] {domain}: fetching {url[:70]}…")
                 try:
