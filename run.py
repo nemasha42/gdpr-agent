@@ -39,6 +39,11 @@ def main() -> None:
         print("Run  python setup.py  to create your Google Cloud credentials.")
         sys.exit(1)
 
+    # Apply LLM call cap early so it's active even if the run exits early
+    if args.max_llm_calls is not None:
+        cost_tracker.set_llm_limit(args.max_llm_calls)
+        print(f"LLM call cap: {args.max_llm_calls}\n")
+
     # ── Step 1: Gmail connection ─────────────────────────────────────────────
     print("Connecting to Gmail...")
     service, email = get_gmail_service(email_hint=args.gmail)
@@ -118,6 +123,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--gmail", metavar="EMAIL", default=None,
         help="Gmail account to scan (e.g. user@gmail.com)",
+    )
+    parser.add_argument(
+        "--max-llm-calls", type=int, default=None, metavar="N",
+        help="Cap LLM API calls this run (0 = block all LLM, omit for unlimited)",
     )
     return parser.parse_args()
 

@@ -1,347 +1,589 @@
-{% extends "base.html" %}
-{% block title %}{{ company_name }} — Data Card{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ company_name }} — Data Card</title>
 
-{% block content %}
-<style>
-/* Sticky section nav */
-.section-nav {
-  position: sticky;
-  top: 0;
-  background: #fff;
-  z-index: 100;
-  border-bottom: 1px solid #e5e7eb;
-  margin-bottom: 2rem;
-  padding: 0.5rem 0;
-}
-.section-nav a {
-  color: #6b7280;
-  text-decoration: none;
-  font-size: 0.85rem;
-  padding: 4px 12px;
-  border-radius: 4px;
-}
-.section-nav a:hover { color: #111827; background: #f3f4f6; }
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
 
-/* Section headings */
-.section-heading {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #9ca3af;
-  padding: 0.5rem 0 0.75rem;
-  margin-top: 2.5rem;
-  border-top: 1px solid #e5e7eb;
-}
-.section-heading:first-of-type { margin-top: 0; border-top: none; }
+  <!-- Inter font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
 
-/* Field table */
-.field-row {
-  display: grid;
-  grid-template-columns: 180px 80px minmax(120px, 1fr) 2fr;
-  gap: 12px;
-  padding: 6px 2px;
-  border-bottom: 1px solid #f3f4f6;
-  font-size: 0.82rem;
-  align-items: start;
-}
-.field-name { font-family: monospace; font-weight: 600; color: #111827; }
+  <style>
+    /* Hide default details/summary marker */
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::marker { content: ""; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-white to-neutral-50 text-neutral-900 antialiased font-sans">
 
-/* Type badges */
-.tb { border-radius: 4px; padding: 1px 7px; font-size: 0.72rem; font-weight: 500; white-space: nowrap; }
-.tb-string  { background: #dbeafe; color: #1d4ed8; }
-.tb-number  { background: #fef3c7; color: #92400e; }
-.tb-boolean { background: #d1fae5; color: #065f46; }
-.tb-date    { background: #ede9fe; color: #6d28d9; }
-.tb-array   { background: #fee2e2; color: #991b1b; }
-.tb-object  { background: #f3f4f6; color: #374151; }
-.tb-email   { background: #e0f2fe; color: #075985; }
-
-/* Copyable values */
-.copyable { cursor: pointer; color: #374151; }
-.copyable:hover { color: #2563eb; text-decoration: underline; }
-
-/* Details/summary */
-details > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 0;
-  cursor: pointer;
-  list-style: none;
-  border-bottom: 1px solid #f3f4f6;
-}
-details > summary::-webkit-details-marker { display: none; }
-.tri { display: inline-block; font-size: 0.55rem; color: #9ca3af; transition: transform 0.15s; }
-details[open] > summary .tri { transform: rotate(90deg); }
-.cat-count { background: #f3f4f6; border-radius: 10px; padding: 1px 8px; font-size: 0.72rem; color: #6b7280; margin-left: auto; }
-.nested { border-left: 2px solid #e5e5e5; margin-left: 1rem; padding-left: 1rem; }
-.tree-node { margin: 3px 0; }
-
-/* Stat tiles */
-.stat-tile { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 16px; min-width: 90px; text-align: center; }
-.stat-tile .label { font-size: 0.72rem; color: #64748b; }
-.stat-tile .value { font-size: 1rem; font-weight: 700; color: #1e293b; }
-
-/* Company info table */
-.info-table td:first-child { width: 160px; color: #6b7280; font-size: 0.85rem; vertical-align: top; padding: 6px 12px 6px 0; }
-.info-table td:last-child { font-size: 0.85rem; padding: 6px 0; }
-
-/* Services list */
-.svc-item { display: flex; gap: 10px; margin-bottom: 1rem; }
-.svc-dot { color: #6366f1; font-size: 0.6rem; margin-top: 5px; flex-shrink: 0; }
-</style>
-
-<!-- Header -->
-<div class="mb-4">
-  <div class="d-flex align-items-start justify-content-between">
-    <div>
-      <h3 class="mb-0">{{ company_name }}</h3>
-      {% if legal_name %}<div class="text-muted small">{{ legal_name }}</div>{% endif %}
-      <div class="text-muted small">{{ domain }}</div>
+  <!-- ── Navbar (preserved from base.html, Tailwind-restyled) ── -->
+  <nav class="border-b border-neutral-200 bg-white">
+    <div class="mx-auto max-w-5xl px-6 flex items-center justify-between py-3">
+      <a class="font-semibold tracking-tight text-neutral-900 no-underline" href="/">&#x1F512; GDPR SAR Monitor</a>
+      <a class="text-sm text-neutral-500 hover:text-neutral-900 no-underline transition-colors" href="/">Dashboard</a>
     </div>
-    <div class="d-flex flex-column align-items-end gap-1">
-      {% if catalog %}
-        <span class="badge bg-success">Data Received</span>
-        {% if catalog.received_at %}<span class="text-muted small">{{ catalog.received_at }}</span>{% endif %}
-      {% elif data_link %}
-        <span class="badge bg-warning text-dark">Awaiting Download</span>
+  </nav>
+
+  <main class="mx-auto min-h-screen max-w-5xl px-6 py-10">
+
+    <!-- ── Action buttons ─────────────────────────────────── -->
+    <div class="mb-6 flex flex-wrap gap-2">
+      <a href="/refresh?account={{ account }}"
+         class="px-3 py-1.5 text-sm rounded-md border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-700 transition-colors no-underline">
+        ↺ Refresh
+      </a>
+      <a href="/scan/{{ domain }}?account={{ account }}"
+         class="px-3 py-1.5 text-sm rounded-md border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-700 transition-colors no-underline">
+        🔍 Scan folder
+      </a>
+      {% if data_link %}
+      <a href="{{ data_link }}" target="_blank"
+         class="px-3 py-1.5 text-sm rounded-md border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-700 transition-colors no-underline">
+        ↗ Open data link
+      </a>
+      {% endif %}
+    </div>
+
+    <!-- ── Alerts ──────────────────────────────────────────── -->
+    {% if download_error %}
+    <div class="mb-4 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+      {% if download_error == "too_large" %}
+        File is too large (&gt;100 MB) for auto-download. Download manually and place in
+        <code class="font-mono bg-amber-100 px-1 rounded text-xs">user_data/received/{{ domain }}/</code>.
+        {% if data_link %}
+          <a href="{{ data_link }}" target="_blank" class="ml-2 underline">Open link ↗</a>
+        {% endif %}
+      {% elif download_error == "expired" %}
+        Download link has expired.
+        {% if data_link %}
+          <button onclick="navigator.clipboard.writeText('{{ data_link }}')"
+                  class="ml-2 underline cursor-pointer bg-transparent border-0 text-amber-800 text-sm p-0">
+            Copy URL ⊙
+          </button>
+        {% endif %}
       {% else %}
-        <span class="badge bg-secondary">No Data Yet</span>
+        Download failed: {{ download_error }}
       {% endif %}
     </div>
-  </div>
-</div>
-
-{% if download_error %}
-<div class="alert alert-warning mb-3">
-  {% if download_error == "too_large" %}
-    File is too large (&gt;100 MB) for auto-download. Download manually and place in
-    <code>user_data/received/{{ domain }}/</code>.
-    {% if data_link %}<a href="{{ data_link }}" target="_blank" class="btn btn-sm btn-outline-secondary ms-2">Open link &#x2197;</a>{% endif %}
-  {% elif download_error == "expired" %}
-    Download link has expired.
-    {% if data_link %}<button class="btn btn-sm btn-outline-secondary ms-2" onclick="navigator.clipboard.writeText('{{ data_link }}')">Copy URL &#x29c9;</button>{% endif %}
-  {% else %}
-    Download failed: {{ download_error }}
-  {% endif %}
-</div>
-{% endif %}
-
-{% if scan_error == "no_files" %}
-<div class="alert alert-warning py-2 small mb-3">
-  No ZIP / JSON / CSV found in <code>user_data/received/{{ domain }}/</code> yet.
-</div>
-{% endif %}
-
-{% if data_link and not catalog %}
-<div class="p-3 mb-4 border rounded bg-light">
-  <strong>Data link available</strong>
-  <div class="mt-2 d-flex gap-2">
-    <a href="{{ data_link }}" target="_blank" class="btn btn-sm btn-outline-primary">Open link &#x2197;</a>
-    <a href="/download/{{ domain }}?account={{ account }}" class="btn btn-sm btn-primary">Download &amp; Analyze</a>
-  </div>
-</div>
-{% endif %}
-
-<!-- Action buttons -->
-<div class="mb-3 d-flex gap-2 flex-wrap">
-  <a href="/refresh?account={{ account }}" class="btn btn-sm btn-outline-secondary">&#x21BA; Refresh</a>
-  <a href="/scan/{{ domain }}?account={{ account }}" class="btn btn-sm btn-outline-secondary">&#x1F50D; Scan folder</a>
-  {% if data_link %}
-  <a href="{{ data_link }}" target="_blank" class="btn btn-sm btn-outline-primary">&#x2197; Open link</a>
-  {% endif %}
-  <a href="/?account={{ account }}" class="btn btn-sm btn-outline-secondary">&#x2190; Dashboard</a>
-</div>
-
-<!-- Sticky section nav -->
-<div class="section-nav">
-  <div class="d-flex gap-1 flex-wrap">
-    <a href="#data-description">Data Description</a>
-    <a href="#company-info">Company Info</a>
-    <a href="#services">Services</a>
-    <a href="#export-info">Export Info</a>
-  </div>
-</div>
-
-<!-- ─── DATA DESCRIPTION ─────────────────────────────────────────────── -->
-<div id="data-description">
-  <div class="section-heading">Data Description</div>
-
-  {% if catalog and catalog.schema %}
-    <div class="mb-3 d-flex gap-2">
-      <button id="expand-all" class="btn btn-sm btn-outline-secondary">Expand All</button>
-      <button id="collapse-all" class="btn btn-sm btn-outline-secondary">Collapse All</button>
-    </div>
-
-    {% for cat in catalog.schema %}
-    <details {% if loop.first %}open{% endif %}>
-      <summary>
-        <span class="tri">&#x25B6;</span>
-        <strong>{{ cat.name }}</strong>
-        {% if cat.description %}<span class="text-muted small ms-2">{{ cat.description }}</span>{% endif %}
-        <span class="cat-count">{{ cat.fields | length }} fields</span>
-      </summary>
-      <div class="nested">
-        {% if cat.fields %}
-        <div class="field-row" style="font-weight:600; font-size:0.75rem; color:#6b7280; border-bottom:2px solid #e5e7eb;">
-          <div>Field</div><div>Type</div><div>Example</div><div>Description</div>
-        </div>
-        {% for f in cat.fields %}
-        <div class="field-row">
-          <div class="field-name">{{ f.name }}</div>
-          <div><span class="tb tb-{{ f.type | lower | replace(' ', '-') }}">{{ f.type }}</span></div>
-          <div class="copyable" data-copy="{{ f.example }}">{{ f.example }}{% if f.example %} &#x29c9;{% endif %}</div>
-          <div class="text-muted">{{ f.description }}</div>
-        </div>
-        {% endfor %}
-        {% endif %}
-      </div>
-    </details>
-    {% endfor %}
-
-    {% if catalog.files %}
-    <details class="mt-2">
-      <summary>
-        <span class="tri">&#x25B6;</span>
-        <span class="text-muted">All files ({{ catalog.files | length }})</span>
-      </summary>
-      <div class="nested mt-2">
-        {% for f in catalog.files %}
-        <div class="tree-node small text-muted">
-          &#x1F4C4; {{ f.filename or f.path }}
-          {% if f.size_bytes %}<span class="ms-2">{{ (f.size_bytes / 1024) | round(1) }} KB</span>{% endif %}
-        </div>
-        {% endfor %}
-      </div>
-    </details>
     {% endif %}
 
-  {% elif catalog %}
-    <p class="text-muted">Schema not yet analyzed. Use <strong>Scan folder</strong> below.</p>
-  {% else %}
-    <p class="text-muted">No data received yet.</p>
-  {% endif %}
-</div>
+    {% if scan_error == "no_files" %}
+    <div class="mb-4 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+      No ZIP / JSON / CSV found in
+      <code class="font-mono bg-amber-100 px-1 rounded text-xs">user_data/received/{{ domain }}/</code> yet.
+    </div>
+    {% endif %}
 
-<!-- ─── COMPANY INFO ──────────────────────────────────────────────────── -->
-<div id="company-info">
-  <div class="section-heading">Company Info</div>
-  <table class="info-table" style="border-collapse:collapse; max-width:600px;">
-    <tbody>
-      <tr><td>SAR sent to</td><td>{{ to_email or "—" }}</td></tr>
-      <tr><td>SAR sent at</td><td>{{ sar_sent_at or "—" }}</td></tr>
-      <tr><td>Legal name</td><td>{{ legal_name or "—" }}</td></tr>
-      <tr><td>Headquarters</td><td>{{ headquarters or "—" }}</td></tr>
-      <tr>
-        <td>Privacy email</td>
-        <td>
-          {% if dpo_email %}
-            {{ dpo_email }}
-            <button class="btn btn-sm btn-link p-0 ms-1" onclick="navigator.clipboard.writeText('{{ dpo_email }}')">&#x29c9;</button>
-          {% else %}—{% endif %}
-        </td>
-      </tr>
-      <tr>
-        <td>DSAR portal</td>
-        <td>
-          {% if portal_url %}<a href="{{ portal_url }}" target="_blank">{{ portal_url }}</a>
-          {% else %}—{% endif %}
-        </td>
-      </tr>
-      <tr><td>Response time</td><td>{% if response_time_days %}{{ response_time_days }} days{% else %}—{% endif %}</td></tr>
-      <tr><td>ID verification</td><td>{{ "Required" if identity_required else "Not required" }}</td></tr>
-      {% if special_instructions %}
-      <tr><td>Special notes</td><td>{{ special_instructions }}</td></tr>
+    {% if data_link and not catalog %}
+    <div class="mb-6 px-4 py-4 rounded-lg border border-neutral-200 bg-neutral-50">
+      <p class="font-semibold text-neutral-900 text-sm mb-3">Data link available</p>
+      <div class="flex gap-2">
+        <a href="{{ data_link }}" target="_blank"
+           class="px-3 py-1.5 text-sm rounded-md border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-700 transition-colors no-underline">
+          Open link ↗
+        </a>
+        <a href="/download/{{ domain }}?account={{ account }}"
+           class="px-3 py-1.5 text-sm rounded-md bg-neutral-900 hover:bg-neutral-700 text-white transition-colors no-underline">
+          Download &amp; Analyze
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══════════════════════════════════════════════════════
+         HEADER
+         ═══════════════════════════════════════════════════════ -->
+    <div class="mb-8">
+
+      <!-- Back link -->
+      <a href="/?account={{ account }}"
+         class="inline-flex items-center gap-2 text-neutral-500 hover:text-neutral-900 mb-6 transition-colors text-sm no-underline">
+        <span>←</span>
+        <span>Back to Dashboard</span>
+      </a>
+
+      <!-- Company name + favicon -->
+      <div class="flex items-center gap-3 mb-3">
+        <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight leading-tight text-neutral-900">
+          {{ company_name }}
+        </h1>
+        <img src="https://www.google.com/s2/favicons?domain={{ domain }}&sz=64"
+             alt="{{ company_name }} logo"
+             class="w-8 h-8 rounded-full flex-shrink-0"
+             onerror="this.style.display='none'">
+      </div>
+
+      <!-- Legal name + domain -->
+      {% if legal_name and legal_name != company_name %}
+      <p class="text-lg text-neutral-500 mb-1">{{ legal_name }}</p>
       {% endif %}
-    </tbody>
-  </table>
-</div>
+      <p class="text-sm font-mono text-neutral-400 mb-5">{{ domain }}</p>
 
-<!-- ─── SERVICES ──────────────────────────────────────────────────────── -->
-<div id="services">
-  <div class="section-heading">Services</div>
-  {% if catalog and catalog.services %}
-    {% for svc in catalog.services %}
-    <div class="svc-item">
-      <span class="svc-dot">&#x25CF;</span>
-      <div>
-        <strong>{{ svc.name }}</strong>
-        {% if svc.description %}<div class="text-muted small">{{ svc.description }}</div>{% endif %}
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <p class="text-muted">No service information available.</p>
-  {% endif %}
-</div>
-
-<!-- ─── EXPORT INFO ───────────────────────────────────────────────────── -->
-<div id="export-info">
-  <div class="section-heading">Export Info</div>
-  {% if catalog %}
-    <div class="d-flex flex-wrap gap-3 mb-4">
-      <div class="stat-tile">
-        <div class="label">Format</div>
-        <div class="value">{{ (catalog.export_meta.get("format", "") if catalog.export_meta else "") or (catalog.path.split(".")[-1].upper() if catalog.path else "—") }}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="label">Size</div>
-        <div class="value">{{ ((catalog.size_bytes / 1024) | round(1) | string + " KB") if catalog.size_bytes else "—" }}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="label">Files</div>
-        <div class="value">{{ catalog.files | length if catalog.files else "—" }}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="label">Categories</div>
-        <div class="value">{{ catalog.categories | length if catalog.categories else "—" }}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="label">Date received</div>
-        <div class="value" style="font-size:0.85rem;">{{ catalog.received_at or received_at or "—" }}</div>
-      </div>
-    </div>
-
-    {% if catalog.export_meta %}
-    <table class="info-table" style="border-collapse:collapse; max-width:500px;">
-      <tbody>
-        {% if catalog.export_meta.get("delivery") %}
-        <tr><td>Delivery</td><td>{{ catalog.export_meta.delivery }}</td></tr>
+      <!-- Status + metadata badges -->
+      <div class="flex flex-wrap items-center gap-2">
+        {% if catalog %}
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            Data Received{% if catalog.received_at %} · {{ catalog.received_at }}{% endif %}
+          </span>
+        {% elif data_link %}
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+            Awaiting Download
+          </span>
+        {% else %}
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-neutral-100 text-neutral-600">
+            No Data Yet
+          </span>
         {% endif %}
-        {% if catalog.export_meta.get("timeline") %}
-        <tr><td>Timeline</td><td>{{ catalog.export_meta.timeline }}</td></tr>
+
+        {% if headquarters %}
+          {% set country = headquarters.split(",")[-1].strip() %}
+          {% if "UK" in country or "United Kingdom" in country %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">🇬🇧 UK</span>
+          {% elif "Germany" in country or "Deutschland" in country %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">🇩🇪 EU · DE</span>
+          {% elif "France" in country %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">🇫🇷 EU · FR</span>
+          {% elif "Ireland" in country %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">🇮🇪 EU · IE</span>
+          {% elif "Netherlands" in country %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">🇳🇱 EU · NL</span>
+          {% elif "United States" in country or "USA" in country %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">🇺🇸 US</span>
+          {% else %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">🌍 {{ country }}</span>
+          {% endif %}
         {% endif %}
-      </tbody>
-    </table>
+
+        {% if dpo_email or portal_url %}
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">✓ SAR Supported</span>
+        {% endif %}
+
+        {% if response_time_days %}
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200">⏱ {{ response_time_days }} days</span>
+        {% endif %}
+
+        {% if identity_required %}
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">📋 ID Required</span>
+        {% endif %}
+      </div>
+
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         STICKY NAV
+         ═══════════════════════════════════════════════════════ -->
+    <nav class="sticky top-0 z-10 bg-white/80 backdrop-blur-sm border-b border-neutral-200 -mx-6 px-6 py-3 mb-8">
+      <div class="flex gap-1 overflow-x-auto">
+        <a href="#data-description"
+           class="px-3 py-1.5 text-sm rounded-md text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors whitespace-nowrap no-underline">
+          Data Description
+        </a>
+        <a href="#company-info"
+           class="px-3 py-1.5 text-sm rounded-md text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors whitespace-nowrap no-underline">
+          Company Info
+        </a>
+        {% if catalog and catalog.services %}
+        <a href="#services"
+           class="px-3 py-1.5 text-sm rounded-md text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors whitespace-nowrap no-underline">
+          Services
+        </a>
+        {% endif %}
+        {% if catalog %}
+        <a href="#export"
+           class="px-3 py-1.5 text-sm rounded-md text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors whitespace-nowrap no-underline">
+          Export Info
+        </a>
+        {% endif %}
+      </div>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════════════════
+         DATA DESCRIPTION
+         ═══════════════════════════════════════════════════════ -->
+    <section id="data-description" class="mb-12">
+      <h2 class="text-2xl sm:text-3xl font-semibold mb-4 text-neutral-900 border-b border-neutral-200 pb-2">
+        Data Description
+      </h2>
+
+      {% if catalog and catalog.schema %}
+
+        <!-- Expand / Collapse controls -->
+        <div class="mb-4 flex gap-3">
+          <button onclick="expandAllDataDescription()"
+                  class="px-4 py-2 text-sm rounded-lg border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-900 transition-colors cursor-pointer">
+            Expand All
+          </button>
+          <button onclick="collapseAllDataDescription()"
+                  class="px-4 py-2 text-sm rounded-lg border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-900 transition-colors cursor-pointer">
+            Collapse All
+          </button>
+        </div>
+
+        <!-- Category tree — iterates catalog.schema directly (already grouped) -->
+        <div class="space-y-1 data-description-tree">
+          {% for cat in catalog.schema %}
+          <details class="group" open>
+            <summary class="flex items-center gap-2 py-1 px-1 hover:bg-neutral-50 cursor-pointer rounded text-sm">
+              <!-- Rotating chevron -->
+              <svg class="w-3 h-3 text-neutral-400 transition-transform group-open:rotate-90 flex-shrink-0"
+                   fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+              </svg>
+              <!-- Category name -->
+              <code class="font-mono font-semibold text-neutral-900">{{ cat.name }}</code>
+              <!-- Field count -->
+              <span class="text-xs text-neutral-400 font-mono">
+                {{ cat.fields | length }} field{{ 's' if cat.fields | length != 1 else '' }}
+              </span>
+              <!-- Category description, visible only on very wide screens -->
+              {% if cat.description %}
+              <span class="text-xs text-neutral-500 ml-2 hidden xl:inline flex-1 truncate">{{ cat.description }}</span>
+              {% endif %}
+            </summary>
+
+            <!-- Fields -->
+            <div class="ml-4 mt-1 space-y-0.5">
+              {% for f in cat.fields %}
+
+              {# Compute anchor id #}
+              {%- set field_id = (cat.name + '.' + f.name) | lower | replace(' ', '-') -%}
+
+              <!-- Field row — single line, not collapsible -->
+              <div class="flex items-center gap-2 py-0.5 px-1 text-sm hover:bg-neutral-50 rounded group/field"
+                   id="{{ field_id }}">
+                <!-- Indent spacer -->
+                <div class="w-3 flex-shrink-0"></div>
+                <!-- Field name -->
+                <code class="font-mono text-neutral-900 shrink-0">{{ f.name }}</code>
+
+                <!-- Type — colour-coded, with secondary badge for semantic sub-types -->
+                {% set t = (f.type or '') | lower %}
+                {% if t in ('string', 'text', 'str') %}
+                  <span class="text-xs font-mono text-blue-600">string</span>
+                {% elif t in ('integer', 'int', 'number', 'float', 'decimal', 'numeric') %}
+                  <span class="text-xs font-mono text-green-600">{{ f.type }}</span>
+                {% elif t in ('boolean', 'bool') %}
+                  <span class="text-xs font-mono text-purple-600">boolean</span>
+                {% elif t == 'array' or t == 'list' %}
+                  <span class="text-xs font-mono text-orange-600">array</span>
+                {% elif t == 'object' or t == 'dict' %}
+                  <span class="text-xs font-mono text-gray-600">object</span>
+                {% elif t in ('timestamp', 'datetime') %}
+                  <span class="text-xs font-mono text-blue-600">string</span>
+                  <span class="text-xs px-1 py-0.5 bg-indigo-100 text-indigo-700 rounded font-mono">datetime</span>
+                {% elif t == 'date' %}
+                  <span class="text-xs font-mono text-blue-600">string</span>
+                  <span class="text-xs px-1 py-0.5 bg-indigo-100 text-indigo-700 rounded font-mono">date</span>
+                {% elif t == 'email' %}
+                  <span class="text-xs font-mono text-blue-600">string</span>
+                  <span class="text-xs px-1 py-0.5 bg-indigo-100 text-indigo-700 rounded font-mono">email</span>
+                {% elif t == 'enum' %}
+                  <span class="text-xs font-mono text-yellow-700">enum</span>
+                {% elif 'url' in t or 'uri' in t %}
+                  <span class="text-xs font-mono text-blue-600">string</span>
+                  <span class="text-xs px-1 py-0.5 bg-indigo-100 text-indigo-700 rounded font-mono">url</span>
+                {% else %}
+                  <span class="text-xs font-mono text-gray-600">{{ f.type or '?' }}</span>
+                {% endif %}
+
+                <!-- Example value pill -->
+                {% if f.example %}
+                <code class="text-xs px-1 py-0.5 bg-neutral-100 text-neutral-600 rounded font-mono ml-1 shrink-0"
+                      title="Illustrative sample value from SAR export data">
+                  "{{ f.example }}"
+                </code>
+                {% endif %}
+
+                <!-- Description — truncated, shown only on large screens -->
+                <span class="text-xs text-neutral-500 ml-2 hidden lg:inline flex-1 truncate">
+                  {{ f.description or '' }}
+                </span>
+
+                <!-- Anchor link (appears on hover) -->
+                <a href="#{{ field_id }}"
+                   class="text-xs text-neutral-400 hover:text-neutral-600 ml-2 opacity-0 group-hover/field:opacity-100 transition-opacity shrink-0 no-underline"
+                   title="Link to this field">#</a>
+              </div>
+
+              <!-- Description shown below on small/medium screens -->
+              <div class="text-xs text-neutral-500 ml-5 px-1 pb-0.5 lg:hidden">{{ f.description or '' }}</div>
+
+              {% endfor %}
+            </div>
+          </details>
+          {% endfor %}
+        </div>
+
+        <p class="text-xs text-neutral-400 mt-4">
+          ℹ️ Examples are anonymised sample values from SAR exports — for illustration only.
+        </p>
+
+        <!-- File tree -->
+        {% if catalog.files %}
+        <details class="mt-4 group">
+          <summary class="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-700 cursor-pointer py-1">
+            <svg class="w-3 h-3 transition-transform group-open:rotate-90 flex-shrink-0 text-neutral-400"
+                 fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+            </svg>
+            📂 All files ({{ catalog.files | length }})
+          </summary>
+          <div class="ml-4 mt-2 border-l-2 border-neutral-200 pl-3 space-y-0.5">
+            {% for f in catalog.files %}
+            <div class="text-xs font-mono text-neutral-500">
+              📄 {{ f.filename or f.path }}
+              {% if f.size_bytes %}<span class="ml-2 text-neutral-400">{{ (f.size_bytes / 1024) | round(1) }} KB</span>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+
+      {% elif catalog %}
+        <p class="text-neutral-500 text-sm">
+          Schema not yet analyzed.
+          <a href="/scan/{{ domain }}?account={{ account }}"
+             class="ml-2 underline text-neutral-700 hover:text-neutral-900">🔍 Scan folder</a>
+        </p>
+      {% else %}
+        <p class="text-neutral-500 text-sm">
+          No data received yet. Once the company sends your SAR export, scan the folder to analyze the schema.
+        </p>
+      {% endif %}
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         COMPANY INFO
+         ═══════════════════════════════════════════════════════ -->
+    <section id="company-info" class="mb-12">
+      <h2 class="text-2xl sm:text-3xl font-semibold mb-4 text-neutral-900 border-b border-neutral-200 pb-2">
+        Company Information
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
+
+        <!-- Left column: contact details -->
+        <div>
+          <h3 class="text-xs font-semibold text-neutral-500 mb-3 uppercase tracking-wide">Contact Details</h3>
+          <div class="space-y-4">
+
+            <div class="text-sm">
+              <div class="text-xs font-medium text-neutral-400 mb-0.5">SAR Sent To</div>
+              <span class="text-neutral-900">{{ to_email or "—" }}</span>
+            </div>
+
+            <div class="text-sm">
+              <div class="text-xs font-medium text-neutral-400 mb-0.5">SAR Sent At</div>
+              <span class="text-neutral-900">{{ sar_sent_at or "—" }}</span>
+            </div>
+
+            {% if legal_name %}
+            <div class="text-sm">
+              <div class="text-xs font-medium text-neutral-400 mb-0.5">Legal Name</div>
+              <span class="text-neutral-900">{{ legal_name }}</span>
+            </div>
+            {% endif %}
+
+            {% if headquarters %}
+            <div class="text-sm">
+              <div class="text-xs font-medium text-neutral-400 mb-0.5">Headquarters</div>
+              <span class="text-neutral-900">{{ headquarters }}</span>
+            </div>
+            {% endif %}
+
+            {% if dpo_email %}
+            <div class="text-sm">
+              <div class="text-xs font-medium text-neutral-400 mb-0.5">Privacy / DPO Email</div>
+              <a href="mailto:{{ dpo_email }}" class="text-neutral-900 hover:underline">{{ dpo_email }}</a>
+              <button onclick="navigator.clipboard.writeText('{{ dpo_email }}')"
+                      class="ml-1 text-neutral-400 hover:text-neutral-600 text-xs cursor-pointer bg-transparent border-0 p-0"
+                      title="Copy email">⊙</button>
+            </div>
+            {% endif %}
+
+            {% if response_time_days %}
+            <div class="text-sm">
+              <div class="text-xs font-medium text-neutral-400 mb-0.5">Typical Response Time</div>
+              <span class="text-neutral-900">{{ response_time_days }} days</span>
+            </div>
+            {% endif %}
+
+            <div class="text-sm">
+              <div class="text-xs font-medium text-neutral-400 mb-0.5">ID Verification</div>
+              <span class="text-neutral-900">{{ "Required" if identity_required else "Not required" }}</span>
+            </div>
+
+            {% if special_instructions %}
+            <div class="text-sm">
+              <div class="text-xs font-medium text-neutral-400 mb-0.5">Special Notes</div>
+              <span class="text-neutral-700">{{ special_instructions }}</span>
+            </div>
+            {% endif %}
+
+          </div>
+        </div>
+
+        <!-- Right column: links -->
+        <div>
+          <h3 class="text-xs font-semibold text-neutral-500 mb-3 uppercase tracking-wide">Links &amp; Contact</h3>
+          <div class="space-y-3">
+
+            {% if portal_url %}
+            <div class="text-sm">
+              <a href="{{ portal_url }}" target="_blank" rel="noopener noreferrer"
+                 class="inline-flex items-center gap-1.5 group text-neutral-900 hover:text-neutral-600 transition-colors no-underline">
+                <span>DSAR Portal</span>
+                <svg class="w-3 h-3 opacity-60 group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                </svg>
+              </a>
+              <div class="text-xs font-mono text-neutral-400 mt-0.5 break-all">{{ portal_url }}</div>
+            </div>
+            {% endif %}
+
+            {% if dpo_email %}
+            <div class="text-sm">
+              <a href="mailto:{{ dpo_email }}"
+                 class="inline-flex items-center gap-1.5 group text-neutral-900 hover:text-neutral-600 transition-colors no-underline">
+                <span>Privacy Email</span>
+                <svg class="w-3 h-3 opacity-60 group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                </svg>
+              </a>
+            </div>
+            {% endif %}
+
+            {% if not portal_url and not dpo_email %}
+            <p class="text-sm text-neutral-400">No contact links available.</p>
+            {% endif %}
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         SERVICES
+         ═══════════════════════════════════════════════════════ -->
+    {% if catalog and catalog.services %}
+    <section id="services" class="mb-12">
+      <h2 class="text-2xl sm:text-3xl font-semibold mb-4 text-neutral-900 border-b border-neutral-200 pb-2">
+        Services Provided
+      </h2>
+      <ul class="space-y-3">
+        {% for svc in catalog.services %}
+        <li class="pl-4 border-l-2 border-neutral-200">
+          <div class="font-semibold text-neutral-900 text-sm">{{ svc.name }}</div>
+          {% if svc.description %}
+          <div class="text-sm text-neutral-600 mt-1">{{ svc.description }}</div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
     {% endif %}
 
-    {% if catalog.path %}
-    <div class="mt-3">
-      <a href="#" onclick="fetch('/open-folder/{{ domain }}?account={{ account }}').then(()=>{}); return false;"
-         class="btn btn-sm btn-outline-secondary">&#x1F4C2; Open folder in Finder</a>
-      <code class="ms-3 small text-muted">{{ catalog.path }}</code>
-    </div>
+    <!-- ═══════════════════════════════════════════════════════
+         EXPORT INFO
+         ═══════════════════════════════════════════════════════ -->
+    {% if catalog %}
+    <section id="export" class="mb-12">
+      <h2 class="text-2xl sm:text-3xl font-semibold mb-4 text-neutral-900 border-b border-neutral-200 pb-2">
+        Data Export Information
+      </h2>
+      <div class="space-y-4 text-sm">
+
+        {% set export_format = (catalog.export_meta.get("format", "") if catalog.export_meta else "") or (catalog.path.split(".")[-1].upper() if catalog.path else "") %}
+        {% if export_format %}
+        <div>
+          <span class="font-semibold text-neutral-900">Format:</span>
+          <span class="text-neutral-700 ml-2">{{ export_format }}</span>
+        </div>
+        {% endif %}
+
+        {% if catalog.export_meta and catalog.export_meta.get("delivery") %}
+        <div>
+          <span class="font-semibold text-neutral-900">Delivery Method:</span>
+          <span class="text-neutral-700 ml-2">{{ catalog.export_meta.delivery }}</span>
+        </div>
+        {% endif %}
+
+        {% if catalog.export_meta and catalog.export_meta.get("timeline") %}
+        <div>
+          <span class="font-semibold text-neutral-900">Typical Delivery Time:</span>
+          <span class="text-neutral-700 ml-2">{{ catalog.export_meta.timeline }}</span>
+        </div>
+        {% endif %}
+
+        {% if catalog.size_bytes %}
+        <div>
+          <span class="font-semibold text-neutral-900">Export Size:</span>
+          <span class="text-neutral-700 ml-2">{{ (catalog.size_bytes / 1024) | round(1) }} KB</span>
+        </div>
+        {% endif %}
+
+        {% if catalog.files %}
+        <div>
+          <span class="font-semibold text-neutral-900">Files:</span>
+          <span class="text-neutral-700 ml-2">{{ catalog.files | length }}</span>
+        </div>
+        {% endif %}
+
+        {% if catalog.schema %}
+        <div>
+          <span class="font-semibold text-neutral-900">Categories:</span>
+          <span class="text-neutral-700 ml-2">{{ catalog.schema | length }}</span>
+        </div>
+        {% endif %}
+
+        <div>
+          <span class="font-semibold text-neutral-900">Date Received:</span>
+          <span class="text-neutral-700 ml-2">{{ catalog.received_at or received_at or "—" }}</span>
+        </div>
+
+        {% if catalog.path %}
+        <div class="pt-2">
+          <a href="#"
+             onclick="fetch('/open-folder/{{ domain }}?account={{ account }}').then(()=>{}); return false;"
+             class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-700 transition-colors no-underline">
+            📂 Open folder in Finder
+          </a>
+          <code class="ml-3 text-xs font-mono text-neutral-400">{{ catalog.path }}</code>
+        </div>
+        {% endif %}
+
+      </div>
+    </section>
     {% endif %}
-  {% else %}
-    <p class="text-muted">No export data available.</p>
-  {% endif %}
-</div>
 
-<script>
-document.getElementById('expand-all')?.addEventListener('click',
-  () => document.querySelectorAll('#data-description details').forEach(d => d.open = true));
-document.getElementById('collapse-all')?.addEventListener('click',
-  () => document.querySelectorAll('#data-description details').forEach(d => d.open = false));
+  </main>
 
-document.querySelectorAll('.copyable').forEach(el => {
-  el.addEventListener('click', () => {
-    if (!el.dataset.copy) return;
-    navigator.clipboard.writeText(el.dataset.copy);
-    const orig = el.textContent;
-    el.textContent = '\u2713 copied';
-    setTimeout(() => el.textContent = orig, 1500);
-  });
-});
-</script>
-{% endblock %}
+  <script>
+    window.expandAllDataDescription = () => {
+      document.querySelectorAll('.data-description-tree details')
+        .forEach(el => el.setAttribute('open', ''));
+    };
+    window.collapseAllDataDescription = () => {
+      document.querySelectorAll('.data-description-tree details')
+        .forEach(el => el.removeAttribute('open'));
+    };
+  </script>
+</body>
+</html>

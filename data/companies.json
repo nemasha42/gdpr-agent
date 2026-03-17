@@ -1,93 +1,35 @@
 {
   "meta": {
     "version": "1.0",
-    "last_updated": "2026-03-16",
-    "total_companies": 18
+    "last_updated": "2026-03-17",
+    "total_companies": 11
   },
   "companies": {
-    "glassdoor.com": {
-      "company_name": "Glassdoor",
-      "legal_entity_name": "Glassdoor LLC",
-      "source": "llm_search",
-      "source_confidence": "high",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "DPO@glassdoor.com",
-        "privacy_email": "gdpr@glassdoor.com",
-        "gdpr_portal_url": "https://help.glassdoor.com/s/privacyrequest",
-        "postal_address": {
-          "line1": "",
-          "city": "",
-          "postcode": "",
-          "country": ""
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
-      },
-      "request_notes": {
-        "special_instructions": "EU representative: Glassdoor Hiring Solutions Ireland Ltd. UK representative: Glassdoor Global Ltd. Requests can be made via privacy portal or email. Identity verification required.",
-        "identity_verification_required": true,
-        "known_response_time_days": 30
-      }
-    },
     "google.com": {
       "company_name": "Google",
       "legal_entity_name": "Google LLC",
-      "source": "llm_search",
-      "source_confidence": "medium",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "dpo-google@google.com",
-        "privacy_email": "",
-        "gdpr_portal_url": "https://privacy.google.com/businesses",
-        "postal_address": {
-          "line1": "",
-          "city": "",
-          "postcode": "",
-          "country": ""
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
-      },
-      "request_notes": {
-        "special_instructions": "DPO contact recommended for requests that receive canned responses via standard channels",
-        "identity_verification_required": false,
-        "known_response_time_days": 30
-      }
-    },
-    "paypal.com": {
-      "company_name": "PayPal",
-      "legal_entity_name": "PayPal (Europe) S.à.r.l. et Cie, S.C.A.",
-      "source": "llm_search",
+      "source": "dataowners_override",
       "source_confidence": "high",
-      "last_verified": "2026-03-16",
+      "last_verified": "2026-03-17",
       "contact": {
-        "dpo_email": "dpo@paypal.com",
-        "privacy_email": "dpo@paypal.com",
-        "gdpr_portal_url": "https://www.paypal.com/us/cshelp/article/how-can-i-submit-a-question-regarding-paypal%E2%80%99s-privacy-practices-help370",
+        "dpo_email": "",
+        "privacy_email": "",
+        "gdpr_portal_url": "https://myaccount.google.com/data-and-privacy",
         "postal_address": {
-          "line1": "22-24 Boulevard Royal",
-          "city": "Luxembourg",
-          "postcode": "L-2449",
-          "country": "Luxembourg"
+          "line1": "1600 Amphitheatre Parkway",
+          "city": "Mountain View",
+          "postcode": "CA 94043",
+          "country": "United States"
         },
-        "preferred_method": "email"
+        "preferred_method": "portal"
       },
       "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
+        "portal_only": true,
+        "email_accepted": false,
+        "auto_send_possible": false
       },
       "request_notes": {
-        "special_instructions": "UK residents should contact Bird & Bird GDPR Representative UK, 12 New Fetter Lane, Holburn, London EC4A 1JP. Account holders can exercise rights via 'Data and Privacy' in Account Settings.",
+        "special_instructions": "Use the Google Account Data & Privacy portal to submit your SAR.",
         "identity_verification_required": true,
         "known_response_time_days": 30
       }
@@ -97,7 +39,7 @@
       "legal_entity_name": "",
       "source": "privacy_scrape",
       "source_confidence": "medium",
-      "last_verified": "2026-03-16",
+      "last_verified": "2026-03-17",
       "contact": {
         "dpo_email": "",
         "privacy_email": "privacy@substackinc.com",
@@ -121,12 +63,157 @@
         "known_response_time_days": 30
       }
     },
+    "hrtechprivacy.com": {
+      "company_name": "HR Tech Privacy / Indeed, Inc",
+      "legal_entity_name": "Glassdoor LLC",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-17",
+      "contact": {
+        "dpo_email": "DPO@glassdoor.com",
+        "privacy_email": "",
+        "gdpr_portal_url": "https://hrtechprivacy.com/brands/glassdoor",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "Data subject requests should be submitted through automated self-service system. DPO email is for policy-related inquiries only. For Glassdoor services, submit requests via privacy portal. EU GDPR representative: Glassdoor Hiring Solutions Ireland Ltd; UK GDPR representative: Glassdoor Global Ltd",
+        "identity_verification_required": true,
+        "known_response_time_days": 30
+      }
+    },
+    "indeed.zendesk.com": {
+      "company_name": "Zendesk",
+      "legal_entity_name": "Zendesk, Inc.",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-17",
+      "contact": {
+        "dpo_email": "euprivacy@zendesk.com",
+        "privacy_email": "privacy@zendesk.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "181 Fremont Street",
+          "city": "San Francisco",
+          "postcode": "CA 94105",
+          "country": "United States"
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": true
+      },
+      "request_notes": {
+        "special_instructions": "Contact Privacy Team and DPO at listed address. Zendesk is a data processor under GDPR; customer data controllers bear primary responsibility for GDPR compliance.",
+        "identity_verification_required": true,
+        "known_response_time_days": 30
+      }
+    },
+    "interactivebrokers.com": {
+      "company_name": "Interactive Brokers",
+      "legal_entity_name": "Interactive Brokers Group",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-17",
+      "contact": {
+        "dpo_email": "dpo@ibkr.com",
+        "privacy_email": "dpo@interactivebrokers.lu",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "One Pickwick Plaza",
+          "city": "Greenwich",
+          "postcode": "06830",
+          "country": "United States"
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "Contact Data Protection Officer via email for GDPR inquiries. Alternative Luxembourg office contact: dpo@interactivebrokers.lu. For general client inquiries contact IBKR Client Service through IBKR website at ibkr.com/help",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      }
+    },
+    "paypal.com": {
+      "company_name": "PayPal",
+      "legal_entity_name": "PayPal (Europe) S.à r.l. et Cie, S.C.A.",
+      "source": "dataowners_override",
+      "source_confidence": "high",
+      "last_verified": "2026-03-17",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "DPO@paypal.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "22-24 Boulevard Royal",
+          "city": "Luxembourg",
+          "postcode": "L-2449",
+          "country": "Luxembourg"
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      }
+    },
+    "polymarket.intercom-mail.com": {
+      "company_name": "Intercom",
+      "legal_entity_name": "Intercom R&D Unlimited Company",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-17",
+      "contact": {
+        "dpo_email": "dataprotection@intercom.io",
+        "privacy_email": "dataprotection@intercom.io",
+        "gdpr_portal_url": "https://www.intercom.com/legal/privacy",
+        "postal_address": {
+          "line1": "55 2nd Street, 4th Fl.",
+          "city": "San Francisco",
+          "postcode": "94105",
+          "country": "USA"
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": true
+      },
+      "request_notes": {
+        "special_instructions": "Requests can be submitted through Privacy Request Form or via email to DPO. Messenger contact also available through Intercom platform.",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      }
+    },
     "reflexivity.com": {
       "company_name": "Reflexivity",
       "legal_entity_name": "",
       "source": "privacy_scrape",
       "source_confidence": "medium",
-      "last_verified": "2026-03-16",
+      "last_verified": "2026-03-17",
       "contact": {
         "dpo_email": "dpo@reflexivity.com",
         "privacy_email": "privacy@reflexivity.com",
@@ -150,331 +237,12 @@
         "known_response_time_days": 30
       }
     },
-    "polymarket.com": {
-      "company_name": "Polymarket",
-      "legal_entity_name": "QCX LLC (d/b/a Polymarket US)",
-      "source": "llm_search",
-      "source_confidence": "medium",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "",
-        "privacy_email": "support@qcex.com",
-        "gdpr_portal_url": "",
-        "postal_address": {
-          "line1": "7251 W. Palmetto Park Road Suite 102",
-          "city": "",
-          "postcode": "",
-          "country": "United States"
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": false
-      },
-      "request_notes": {
-        "special_instructions": "Identity verification required for consumer requests. Submit requests to support@qcex.com",
-        "identity_verification_required": true,
-        "known_response_time_days": 30
-      }
-    },
-    "youtube.com": {
-      "company_name": "YouTube",
-      "legal_entity_name": "Google Ireland Ltd",
-      "source": "llm_search",
-      "source_confidence": "medium",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "support-at@google.com",
-        "privacy_email": "support-at@google.com",
-        "gdpr_portal_url": "https://policies.google.com/privacy",
-        "postal_address": {
-          "line1": "Gordon House, Barrow Street",
-          "city": "Dublin",
-          "postcode": "4",
-          "country": "Ireland"
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": false
-      },
-      "request_notes": {
-        "special_instructions": "YouTube is owned by Google. For GDPR requests, contact Google Ireland Ltd. Portal access available at https://policies.google.com/privacy with European requirements section.",
-        "identity_verification_required": true,
-        "known_response_time_days": 30
-      }
-    },
-    "accounts.google.com": {
-      "company_name": "Google LLC",
-      "legal_entity_name": "Google LLC",
-      "source": "llm_search",
-      "source_confidence": "high",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "dpo-google@google.com",
-        "privacy_email": "",
-        "gdpr_portal_url": "https://myaccount.google.com/privacy",
-        "postal_address": {
-          "line1": "1600 Amphitheatre Pkwy, Attn: Data Protection",
-          "city": "Mountain View",
-          "postcode": "94043",
-          "country": "United States"
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
-      },
-      "request_notes": {
-        "special_instructions": "For consumer accounts (accounts.google.com), submit requests via myaccount.google.com. For persistent denials, escalate to dpo-google@google.com",
-        "identity_verification_required": true,
-        "known_response_time_days": 30
-      }
-    },
-    "communications.paypal.com": {
-      "company_name": "PayPal",
-      "legal_entity_name": "PayPal (Europe) S.à.r.l. et Cie, S.C.A.",
-      "source": "llm_search",
-      "source_confidence": "high",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "dpo@paypal.com",
-        "privacy_email": "",
-        "gdpr_portal_url": "https://www.paypal.com/myaccount/privacy",
-        "postal_address": {
-          "line1": "22-24 Boulevard Royal",
-          "city": "Luxembourg",
-          "postcode": "L-2449",
-          "country": "Luxembourg"
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
-      },
-      "request_notes": {
-        "special_instructions": "Account holders can exercise data subject rights via account portal. Non-account holders can submit requests by email or through PayPal's Privacy Hub. For UK residents, representative contact: Bird & Bird GDPR Representative UK, 12 New Fetter Lane, Holburn, London EC4A 1JP.",
-        "identity_verification_required": true,
-        "known_response_time_days": 30
-      }
-    },
-    "finalroundai.com": {
-      "company_name": "Final Round AI",
-      "legal_entity_name": "Pump Labs Inc.",
-      "source": "llm_search",
-      "source_confidence": "medium",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "",
-        "privacy_email": "hi@finalroundai.com",
-        "gdpr_portal_url": "",
-        "postal_address": {
-          "line1": "",
-          "city": "",
-          "postcode": "",
-          "country": ""
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
-      },
-      "request_notes": {
-        "special_instructions": "No DPO explicitly listed. Contact privacy email for GDPR requests.",
-        "identity_verification_required": false,
-        "known_response_time_days": 30
-      }
-    },
-    "gmail.com": {
-      "company_name": "Gmail / Google",
-      "legal_entity_name": "Google LLC",
-      "source": "llm_search",
-      "source_confidence": "medium",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "dpo-google@google.com",
-        "privacy_email": "privacy-inquiries@google.com",
-        "gdpr_portal_url": "https://myaccount.google.com/data-and-privacy",
-        "postal_address": {
-          "line1": "Google LLC, Attn: Data Protection, 1600 Amphitheatre Parkway",
-          "city": "Mountain View",
-          "postcode": "94043",
-          "country": "United States"
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
-      },
-      "request_notes": {
-        "special_instructions": "Consumer Gmail accounts are governed by Google's general privacy policy. For business use, Gmail within Google Workspace includes Data Processing Agreement (DPA) with GDPR compliance terms. Submit requests via Google's privacy portal or email DPO address.",
-        "identity_verification_required": true,
-        "known_response_time_days": 30
-      }
-    },
-    "googlemail.com": {
-      "company_name": "Google",
-      "legal_entity_name": "Google LLC",
-      "source": "llm_search",
-      "source_confidence": "medium",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "dpo-google@google.com",
-        "privacy_email": "privacy-contact@google.com",
-        "gdpr_portal_url": "https://privacy.google.com/businesses",
-        "postal_address": {
-          "line1": "Attn: Data Protection, 1600 Amphitheatre Pkwy",
-          "city": "Mountain View",
-          "postcode": "94043",
-          "country": "United States"
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
-      },
-      "request_notes": {
-        "special_instructions": "If standard privacy requests are denied with canned responses, escalate to dpo-google@google.com. Google provides privacy portal and supports multiple contact methods.",
-        "identity_verification_required": false,
-        "known_response_time_days": 30
-      }
-    },
-    "polymarket.intercom-mail.com": {
-      "company_name": "Intercom",
-      "legal_entity_name": "Intercom R&D Unlimited Company",
-      "source": "llm_search",
-      "source_confidence": "high",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "dataprotection@intercom.io",
-        "privacy_email": "dataprotection@intercom.io",
-        "gdpr_portal_url": "",
-        "postal_address": {
-          "line1": "55 2nd Street, 4th Fl.",
-          "city": "San Francisco",
-          "postcode": "94105",
-          "country": "USA"
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
-      },
-      "request_notes": {
-        "special_instructions": "Submit privacy requests through Privacy Request Form at https://www.intercom.com/legal/privacy or via postal mail. Identity verification required.",
-        "identity_verification_required": true,
-        "known_response_time_days": 30
-      }
-    },
-    "hrtechprivacy.com": {
-      "company_name": "Glassdoor (via HR Tech Privacy portal)",
-      "legal_entity_name": "Glassdoor LLC / Glassdoor Hiring Solutions Ireland Ltd (EU)",
-      "source": "llm_search",
-      "source_confidence": "medium",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "DPO@glassdoor.com",
-        "privacy_email": "",
-        "gdpr_portal_url": "https://hrtechprivacy.com/brands/glassdoor",
-        "postal_address": {
-          "line1": "",
-          "city": "Glendale",
-          "postcode": "91203-2336",
-          "country": "United States"
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
-      },
-      "request_notes": {
-        "special_instructions": "Privacy requests can be submitted via automated self-service system on Glassdoor platform. EU GDPR representative: Glassdoor Hiring Solutions Ireland Ltd. UK GDPR representative: Glassdoor Global Ltd.",
-        "identity_verification_required": false,
-        "known_response_time_days": 30
-      }
-    },
-    "indeed.zendesk.com": {
-      "company_name": "Zendesk",
-      "legal_entity_name": "Zendesk, Inc.",
-      "source": "llm_search",
-      "source_confidence": "medium",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "dpo@zendesk.com",
-        "privacy_email": "privacy@zendesk.com",
-        "gdpr_portal_url": "https://zendesk.onblog.com/privacy-portal",
-        "postal_address": {
-          "line1": "989 Market Street",
-          "city": "San Francisco",
-          "postcode": "94103",
-          "country": "USA"
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": true
-      },
-      "request_notes": {
-        "special_instructions": "Zendesk recommends using their privacy portal for data subject requests. Requests can also be submitted via email to privacy@zendesk.com",
-        "identity_verification_required": true,
-        "known_response_time_days": 30
-      }
-    },
-    "interactivebrokers.com": {
-      "company_name": "Interactive Brokers",
-      "legal_entity_name": "Interactive Brokers Group",
-      "source": "llm_search",
-      "source_confidence": "high",
-      "last_verified": "2026-03-16",
-      "contact": {
-        "dpo_email": "dpo@ibkr.com",
-        "privacy_email": "",
-        "gdpr_portal_url": "",
-        "postal_address": {
-          "line1": "",
-          "city": "",
-          "postcode": "",
-          "country": ""
-        },
-        "preferred_method": "email"
-      },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": false
-      },
-      "request_notes": {
-        "special_instructions": "",
-        "identity_verification_required": false,
-        "known_response_time_days": 30
-      }
-    },
     "substackinc.com": {
-      "company_name": "Substack Inc",
+      "company_name": "Substack",
       "legal_entity_name": "Substack Inc.",
       "source": "llm_search",
       "source_confidence": "high",
-      "last_verified": "2026-03-16",
+      "last_verified": "2026-03-17",
       "contact": {
         "dpo_email": "",
         "privacy_email": "privacy@substackinc.com",
@@ -490,29 +258,29 @@
       "flags": {
         "portal_only": false,
         "email_accepted": true,
-        "auto_send_possible": false
+        "auto_send_possible": true
       },
       "request_notes": {
-        "special_instructions": "Contact privacy@substackinc.com for GDPR data subject access requests (DSAR) and privacy rights inquiries",
-        "identity_verification_required": true,
+        "special_instructions": "For GDPR data subject access requests (DSAR), contact privacy@substackinc.com. EEA and UK users should contact Substack local representatives (contact details in privacy policy).",
+        "identity_verification_required": false,
         "known_response_time_days": 30
       }
     },
     "whop.com": {
       "company_name": "Whop",
-      "legal_entity_name": "Whop, Inc.",
+      "legal_entity_name": "Whop Inc.",
       "source": "llm_search",
       "source_confidence": "medium",
-      "last_verified": "2026-03-16",
+      "last_verified": "2026-03-17",
       "contact": {
         "dpo_email": "",
         "privacy_email": "support@whop.com",
         "gdpr_portal_url": "",
         "postal_address": {
-          "line1": "",
-          "city": "",
-          "postcode": "",
-          "country": ""
+          "line1": "300 Kent Ave #401",
+          "city": "Brooklyn",
+          "postcode": "NY 11249",
+          "country": "United States"
         },
         "preferred_method": "email"
       },
@@ -522,7 +290,36 @@
         "auto_send_possible": false
       },
       "request_notes": {
-        "special_instructions": "Identity verification required - company will match provided information with records",
+        "special_instructions": "Contact support@whop.com for privacy inquiries. Whop's privacy policy references GDPR compliance but does not list a dedicated DPO email or GDPR-specific contact portal on the main whop.com site.",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      }
+    },
+    "glassdoor.com": {
+      "company_name": "Glassdoor",
+      "legal_entity_name": "Glassdoor LLC",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-17",
+      "contact": {
+        "dpo_email": "DPO@glassdoor.com",
+        "privacy_email": "gdpr@glassdoor.com",
+        "gdpr_portal_url": "https://help.glassdoor.com/s/privacyrequest",
+        "postal_address": {
+          "line1": "c/o CT Corporation, 330 North Brand Boulevard",
+          "city": "Glendale",
+          "postcode": "CA 91203-2336",
+          "country": "United States"
+        },
+        "preferred_method": "portal"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": true
+      },
+      "request_notes": {
+        "special_instructions": "EU representative: Glassdoor Hiring Solutions Ireland Ltd. UK representative: Glassdoor Global Ltd. Identity verification required for all requests.",
         "identity_verification_required": true,
         "known_response_time_days": 30
       }

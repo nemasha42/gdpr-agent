@@ -1,1 +1,322 @@
-{}
+{
+  "google.com": {
+    "company_name": "Google",
+    "legal_entity_name": "Google LLC",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://myaccount.google.com/data-and-privacy",
+      "postal_address": {"line1": "1600 Amphitheatre Parkway", "city": "Mountain View", "postcode": "CA 94043", "country": "United States"},
+      "preferred_method": "portal"
+    },
+    "flags": {"portal_only": true, "email_accepted": false, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "Use the Google Account Data & Privacy portal to submit your SAR.", "identity_verification_required": true, "known_response_time_days": 30}
+  },
+  "facebook.com": {
+    "company_name": "Facebook (Meta)",
+    "legal_entity_name": "Meta Platforms Ireland Limited",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://www.facebook.com/help/contact/180237885820953",
+      "postal_address": {"line1": "4 Grand Canal Square", "city": "Dublin", "postcode": "D02 X525", "country": "Ireland"},
+      "preferred_method": "portal"
+    },
+    "flags": {"portal_only": true, "email_accepted": false, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "Use the Facebook Data Access portal. EU/UK residents contact Meta Platforms Ireland Limited.", "identity_verification_required": true, "known_response_time_days": 30}
+  },
+  "instagram.com": {
+    "company_name": "Instagram (Meta)",
+    "legal_entity_name": "Meta Platforms Ireland Limited",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://www.instagram.com/accounts/privacy_and_security/",
+      "postal_address": {"line1": "4 Grand Canal Square", "city": "Dublin", "postcode": "D02 X525", "country": "Ireland"},
+      "preferred_method": "portal"
+    },
+    "flags": {"portal_only": true, "email_accepted": false, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "Download your data via Instagram Settings > Your activity > Download your information.", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "amazon.com": {
+    "company_name": "Amazon",
+    "legal_entity_name": "Amazon Europe Core S.à r.l.",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://www.amazon.co.uk/gp/help/customer/display.html?nodeId=GC5HB08X8QPNMJMN",
+      "postal_address": {"line1": "38 avenue John F. Kennedy", "city": "Luxembourg", "postcode": "L-1855", "country": "Luxembourg"},
+      "preferred_method": "portal"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "Request via Amazon Customer Service or the privacy portal. EU/UK controller is Amazon Europe Core S.à r.l.", "identity_verification_required": true, "known_response_time_days": 30}
+  },
+  "microsoft.com": {
+    "company_name": "Microsoft",
+    "legal_entity_name": "Microsoft Ireland Operations Limited",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "msoprivacy@microsoft.com",
+      "gdpr_portal_url": "https://account.microsoft.com/privacy",
+      "postal_address": {"line1": "One Microsoft Place, South County Business Park", "city": "Dublin", "postcode": "D18 P521", "country": "Ireland"},
+      "preferred_method": "portal"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "Use the Microsoft privacy dashboard or email msoprivacy@microsoft.com.", "identity_verification_required": true, "known_response_time_days": 30}
+  },
+  "apple.com": {
+    "company_name": "Apple",
+    "legal_entity_name": "Apple Distribution International Ltd",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@apple.com",
+      "gdpr_portal_url": "https://privacy.apple.com",
+      "postal_address": {"line1": "Hollyhill Industrial Estate", "city": "Cork", "postcode": "", "country": "Ireland"},
+      "preferred_method": "portal"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "Use privacy.apple.com to request a copy of your data. Alternatively email privacy@apple.com.", "identity_verification_required": true, "known_response_time_days": 30}
+  },
+  "spotify.com": {
+    "company_name": "Spotify",
+    "legal_entity_name": "Spotify AB",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@spotify.com",
+      "gdpr_portal_url": "https://www.spotify.com/account/privacy/",
+      "postal_address": {"line1": "Regeringsgatan 19", "city": "Stockholm", "postcode": "SE-111 53", "country": "Sweden"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "netflix.com": {
+    "company_name": "Netflix",
+    "legal_entity_name": "Netflix International B.V.",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@netflix.com",
+      "gdpr_portal_url": "",
+      "postal_address": {"line1": "Amstelplein 1", "city": "Amsterdam", "postcode": "1096 HA", "country": "Netherlands"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "linkedin.com": {
+    "company_name": "LinkedIn",
+    "legal_entity_name": "LinkedIn Ireland Unlimited Company",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://www.linkedin.com/psettings/member-data",
+      "postal_address": {"line1": "Wilton Plaza, Wilton Place", "city": "Dublin", "postcode": "D02 X525", "country": "Ireland"},
+      "preferred_method": "portal"
+    },
+    "flags": {"portal_only": false, "email_accepted": false, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "Use Settings & Privacy > Data Privacy > Get a copy of your data.", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "twitter.com": {
+    "company_name": "X (Twitter)",
+    "legal_entity_name": "Twitter International Unlimited Company",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@twitter.com",
+      "gdpr_portal_url": "https://help.twitter.com/forms/privacy",
+      "postal_address": {"line1": "One Cumberland Place, Fenian Street", "city": "Dublin", "postcode": "D02 AX07", "country": "Ireland"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "x.com": {
+    "company_name": "X (Twitter)",
+    "legal_entity_name": "Twitter International Unlimited Company",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@twitter.com",
+      "gdpr_portal_url": "https://help.twitter.com/forms/privacy",
+      "postal_address": {"line1": "One Cumberland Place, Fenian Street", "city": "Dublin", "postcode": "D02 AX07", "country": "Ireland"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "uber.com": {
+    "company_name": "Uber",
+    "legal_entity_name": "Uber B.V.",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://privacy.uber.com/privacy/explore",
+      "postal_address": {"line1": "Keizersgracht 177", "city": "Amsterdam", "postcode": "1016 DR", "country": "Netherlands"},
+      "preferred_method": "portal"
+    },
+    "flags": {"portal_only": true, "email_accepted": false, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "Submit SAR via Uber's Privacy Explore portal.", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "airbnb.com": {
+    "company_name": "Airbnb",
+    "legal_entity_name": "Airbnb Ireland UC",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@airbnb.com",
+      "gdpr_portal_url": "",
+      "postal_address": {"line1": "8 Hanover Quay", "city": "Dublin", "postcode": "D02 DP23", "country": "Ireland"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "paypal.com": {
+    "company_name": "PayPal",
+    "legal_entity_name": "PayPal (Europe) S.à r.l. et Cie, S.C.A.",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "DPO@paypal.com",
+      "gdpr_portal_url": "",
+      "postal_address": {"line1": "22-24 Boulevard Royal", "city": "Luxembourg", "postcode": "L-2449", "country": "Luxembourg"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "stripe.com": {
+    "company_name": "Stripe",
+    "legal_entity_name": "Stripe Payments Europe, Limited",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@stripe.com",
+      "gdpr_portal_url": "",
+      "postal_address": {"line1": "1 Grand Canal Street Lower", "city": "Dublin", "postcode": "D02 H210", "country": "Ireland"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "github.com": {
+    "company_name": "GitHub",
+    "legal_entity_name": "GitHub B.V.",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@github.com",
+      "gdpr_portal_url": "",
+      "postal_address": {"line1": "Vijzelstraat 68-78", "city": "Amsterdam", "postcode": "1017 HL", "country": "Netherlands"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "dropbox.com": {
+    "company_name": "Dropbox",
+    "legal_entity_name": "Dropbox International Unlimited Company",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@dropbox.com",
+      "gdpr_portal_url": "",
+      "postal_address": {"line1": "One Park Place, Upper Hatch Street", "city": "Dublin", "postcode": "D02 FX65", "country": "Ireland"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "slack.com": {
+    "company_name": "Slack",
+    "legal_entity_name": "Slack Technologies Limited",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "feedback@slack.com",
+      "gdpr_portal_url": "https://slack.com/intl/en-gb/gdpr",
+      "postal_address": {"line1": "One Park Place, Upper Hatch Street", "city": "Dublin", "postcode": "D02 FX65", "country": "Ireland"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "zoom.us": {
+    "company_name": "Zoom",
+    "legal_entity_name": "Zoom Video Communications, Inc.",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "privacy@zoom.us",
+      "gdpr_portal_url": "",
+      "postal_address": {"line1": "55 Almaden Boulevard, 6th Floor", "city": "San Jose", "postcode": "CA 95113", "country": "United States"},
+      "preferred_method": "email"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "", "identity_verification_required": false, "known_response_time_days": 30}
+  },
+  "adobe.com": {
+    "company_name": "Adobe",
+    "legal_entity_name": "Adobe Systems Software Ireland Limited",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-01-01",
+    "contact": {
+      "dpo_email": "",
+      "privacy_email": "",
+      "gdpr_portal_url": "https://www.adobe.com/privacy/rights.html",
+      "postal_address": {"line1": "4-6 Riverwalk, Citywest Business Campus", "city": "Dublin", "postcode": "D24 FK65", "country": "Ireland"},
+      "preferred_method": "portal"
+    },
+    "flags": {"portal_only": true, "email_accepted": false, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "Use the Adobe Privacy Rights portal to submit your SAR.", "identity_verification_required": true, "known_response_time_days": 30}
+  }
+}

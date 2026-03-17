@@ -19,7 +19,7 @@ _PRIVACY_URL_TEMPLATES: tuple[str, ...] = (
 # Email addresses whose local part indicates a GDPR/privacy contact
 _PRIVACY_EMAIL_RE = re.compile(
     r"\b(?:privacy|dpo|gdpr|legal|dataprotection|data-protection|dataprivacy)"
-    r"@[\w.-]+\.\w+",
+    r"@(?!localhost\b|internal\b|staging\b)[\w.-]+\.\w{2,}",
     re.IGNORECASE,
 )
 

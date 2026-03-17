@@ -80,7 +80,7 @@ def download_data_link(url: str, domain: str, api_key: str = "") -> DownloadResu
 
     # Run LLM schema analysis on the downloaded file
     if api_key and result.catalog:
-        _enrich_schema(result.catalog, api_key)
+        _enrich_schema(result.catalog, api_key, domain=domain)
 
     return result
 
@@ -169,6 +169,14 @@ def _download_playwright(url: str, save_dir: Path) -> DownloadResult | None:
         return _catalog_file(dest)
 
     except Exception as exc:
+        msg = str(exc)
+        if "Executable doesn't exist" in msg or "playwright install" in msg.lower():
+            hint = (
+                "Playwright browser binaries not found. "
+                "Run: python -m playwright install chromium"
+            )
+            print(f"[link_downloader] {hint}", flush=True)
+            return DownloadResult(error=hint)
         return DownloadResult(error=f"playwright: {exc}")
 
 
@@ -256,11 +264,11 @@ def _catalog_file(file_path: Path) -> DownloadResult:
     return DownloadResult(catalog=catalog)
 
 
-def _enrich_schema(catalog: AttachmentCatalog, api_key: str) -> None:
+def _enrich_schema(catalog: AttachmentCatalog, api_key: str, domain: str = "") -> None:
     """Run LLM schema analysis on catalog.path and store result in catalog.schema."""
     from reply_monitor.schema_builder import build_schema
     try:
-        result = build_schema(Path(catalog.path), api_key)
+        result = build_schema(Path(catalog.path), api_key, company_name=domain)
         if result:
             catalog.schema = result.get("categories", [])
             catalog.categories = [c["name"] for c in catalog.schema]

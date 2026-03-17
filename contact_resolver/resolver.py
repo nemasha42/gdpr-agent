@@ -10,7 +10,7 @@ from typing import Callable
 
 import requests as http
 
-from contact_resolver import llm_searcher, privacy_page_scraper
+from contact_resolver import cost_tracker, llm_searcher, privacy_page_scraper
 from contact_resolver.models import (
     CompaniesDB,
     CompanyRecord,
@@ -115,6 +115,7 @@ class ContactResolver:
                     f"[CACHE HIT] {domain} — found, fresh"
                     f" (source: {existing.source})"
                 )
+            cost_tracker.record_resolver_result("cache")
             return existing
         if verbose:
             if existing:
@@ -127,6 +128,7 @@ class ContactResolver:
         if record:
             if verbose:
                 print(f"[DATAOWNERS] {domain} — found")
+            cost_tracker.record_resolver_result("dataowners_override")
             self._upsert(db, domain, record)
             return record
         if verbose:
@@ -137,6 +139,7 @@ class ContactResolver:
         if record:
             if verbose:
                 print(f"[DATAREQUESTS] {domain} — found as {record.company_name}")
+            cost_tracker.record_resolver_result("datarequests")
             self._upsert(db, domain, record)
             return record
         if verbose:
@@ -145,10 +148,16 @@ class ContactResolver:
         # ── Step 4: Privacy page scraper ──────────────────────────────
         record = self._privacy_scrape(domain, company_name, verbose=verbose)
         if record:
+            cost_tracker.record_resolver_result("privacy_scrape")
             self._upsert(db, domain, record)
             return record
 
         # ── Step 5: LLM web search ────────────────────────────────────
+        if cost_tracker.is_llm_limit_reached():
+            if verbose:
+                print(f"[LLM] skipping {company_name} — LLM call limit reached")
+            cost_tracker.record_resolver_result(None)
+            return None
         if verbose:
             print(f"[LLM] searching for {company_name}...", end=" ", flush=True)
         record = self._llm_search(company_name, domain)
@@ -156,9 +165,11 @@ class ContactResolver:
             if record.source_confidence == "low":
                 if verbose:
                     print("confidence: low — skipping")
+                cost_tracker.record_resolver_result(None)
                 return None
             if verbose:
                 print(f"confidence: {record.source_confidence}")
+            cost_tracker.record_resolver_result("llm_search")
             self._upsert(db, domain, record)
             return record
         if verbose:
@@ -167,6 +178,7 @@ class ContactResolver:
         # ── Step 6: Give up ───────────────────────────────────────────
         if verbose:
             print(f"[NOT FOUND] {domain} — flagged for manual entry")
+        cost_tracker.record_resolver_result(None)
         return None
 
     # ------------------------------------------------------------------
@@ -226,7 +238,10 @@ class ContactResolver:
             entry = data.get(domain)
             if not entry:
                 return None
-            return CompanyRecord.model_validate(entry)
+            record = CompanyRecord.model_validate(entry)
+            # Always refresh last_verified so the cached copy stays within its TTL
+            record.last_verified = date.today().isoformat()
+            return record
         except Exception:
             return None
 
@@ -240,6 +255,15 @@ class ContactResolver:
             return self._dir_listing
         resp = self._http_get(_GITHUB_API_DIR_URL, timeout=15)
         resp.raise_for_status()
+        # Warn if approaching GitHub's unauthenticated rate limit (60 req/hour)
+        remaining = resp.headers.get("X-RateLimit-Remaining")
+        if remaining is not None and int(remaining) < 10:
+            print(
+                f"[resolver] Warning: GitHub API rate limit nearly exhausted "
+                f"({remaining} requests remaining). Add GITHUB_TOKEN to settings "
+                f"or wait before the next run.",
+                flush=True,
+            )
         self._dir_listing = resp.json()
         return self._dir_listing
 

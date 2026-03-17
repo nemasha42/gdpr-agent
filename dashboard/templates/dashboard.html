@@ -55,7 +55,7 @@
 
       {# Progress bar #}
       <div class="d-flex align-items-center gap-2 mb-2">
-        <div class="progress flex-grow-1">
+        <div class="progress flex-grow-1" {% if card.remaining is none %}style="opacity:0.35"{% endif %}>
           <div class="progress-bar bg-{{ card.progress_colour }}"
                role="progressbar"
                style="width: {{ card.pct }}%"
@@ -63,7 +63,7 @@
           </div>
         </div>
         <span class="small text-muted text-nowrap">
-          {% if card.remaining > 0 %}{{ card.remaining }}d left{% else %}Overdue{% endif %}
+          {% if card.remaining is none %}—{% elif card.remaining > 0 %}{{ card.remaining }}d left{% else %}Overdue{% endif %}
         </span>
       </div>
 

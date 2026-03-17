@@ -58,6 +58,8 @@ def search_company(
     anthropic_key = api_key or settings.anthropic_api_key
     if not anthropic_key:
         return None
+    if cost_tracker.is_llm_limit_reached():
+        return None
 
     return _extract_with_websearch(company_name, domain, anthropic_key)
 
@@ -79,7 +81,7 @@ def _extract_with_websearch(
             model=_MODEL,
             max_tokens=_MAX_TOKENS,
             system=_SYSTEM_PROMPT,
-            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 1}],
+            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 2}],
             messages=[{"role": "user", "content": user_message}],
         )
     except anthropic.APIError:
@@ -96,6 +98,7 @@ def _extract_with_websearch(
         model=_MODEL,
         found=record is not None,
         source="contact_resolver",
+        purpose="GDPR contact address lookup",
     )
     return record
 
@@ -110,13 +113,16 @@ def _extract_text(response: Any) -> str:
 
 def _extract_json(text: str) -> dict | None:
     text = re.sub(r"```(?:json)?\s*", "", text).strip()
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
+    idx = text.find("{")
+    if idx == -1:
         return None
     try:
-        return json.loads(match.group())
+        obj, _ = json.JSONDecoder().raw_decode(text, idx)
+        if isinstance(obj, dict):
+            return obj
     except json.JSONDecodeError:
-        return None
+        pass
+    return None
 
 
 def _validate_and_build(data: dict, company_name: str) -> CompanyRecord | None:

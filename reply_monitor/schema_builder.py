@@ -36,12 +36,13 @@ _MAX_SAMPLE_BYTES = 3000   # per file, sent to LLM
 _MAX_FILES = 25            # cap number of files sampled
 
 
-def build_schema(file_path: Path, api_key: str) -> dict:
+def build_schema(file_path: Path, api_key: str, company_name: str = "") -> dict:
     """Analyze a data export file and return an LLM-inferred schema.
 
     Args:
-        file_path: Path to the downloaded file (ZIP, JSON, CSV)
-        api_key:   Anthropic API key
+        file_path:    Path to the downloaded file (ZIP, JSON, CSV)
+        api_key:      Anthropic API key
+        company_name: Company name for cost tracking (falls back to file stem)
 
     Returns:
         Dict with keys: categories (list), services (list), export_meta (dict).
@@ -63,7 +64,7 @@ def build_schema(file_path: Path, api_key: str) -> dict:
     if not samples:
         return {}
 
-    return _call_llm(samples, api_key)
+    return _call_llm(samples, api_key, company_name=company_name or file_path.stem)
 
 
 # ---------------------------------------------------------------------------
@@ -106,15 +107,17 @@ def _read_sample(file_path: Path, max_bytes: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _call_llm(samples: list[dict], api_key: str) -> dict:
+def _call_llm(samples: list[dict], api_key: str, *, company_name: str = "") -> dict:
     """Send file samples to Claude and parse the returned schema JSON."""
     try:
         import anthropic
     except ImportError:
         return {}
 
+    # Cap per-file excerpt so total context stays under 60 KB
+    max_per_file = min(2000, 60_000 // max(len(samples), 1))
     file_blocks = "\n".join(
-        f"=== {s['filename']} ===\n{s['content'][:2000]}"
+        f"=== {s['filename']} ===\n{s['content'][:max_per_file]}"
         for s in samples
     )
 
@@ -168,7 +171,7 @@ Rules:
         client = anthropic.Anthropic(api_key=api_key)
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=2048,
+            max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = msg.content[0].text.strip()
@@ -179,11 +182,20 @@ Rules:
             if raw.startswith("json"):
                 raw = raw[4:]
         result = json.loads(raw.strip())
-        if isinstance(result, dict):
-            return result
-        # Legacy: if model returns a list (old prompt format), wrap it
         if isinstance(result, list):
-            return {"categories": result, "services": [], "export_meta": {}}
+            result = {"categories": result, "services": [], "export_meta": {}}
+        if isinstance(result, dict):
+            from contact_resolver import cost_tracker
+            cost_tracker.record_llm_call(
+                company_name=company_name,
+                input_tokens=msg.usage.input_tokens,
+                output_tokens=msg.usage.output_tokens,
+                model="claude-haiku-4-5-20251001",
+                found=bool(result),
+                source="schema_builder",
+                purpose="Received data schema analysis",
+            )
+            return result
     except Exception as exc:
         print(f"[schema_builder] LLM call failed: {exc}")
     return {}

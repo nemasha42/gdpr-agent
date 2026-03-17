@@ -83,7 +83,7 @@ def _dispatch_email(letter: SARLetter, scan_email: str) -> tuple[str, str]:
     try:
         from auth.gmail_oauth import get_gmail_send_service
         service = get_gmail_send_service(scan_email)
-        msg = MIMEText(letter.body)
+        msg = MIMEText(letter.body, 'plain', 'utf-8')
         msg["to"] = letter.to_email
         msg["subject"] = letter.subject
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()

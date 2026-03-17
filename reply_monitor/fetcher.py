@@ -48,12 +48,19 @@ def fetch_replies_for_sar(
     thread_id = sent_record.get("gmail_thread_id", "")
     messages: list[dict] = []
 
-    if thread_id:
-        messages = _fetch_by_thread(service, thread_id, user_email, existing_reply_ids, verbose)
+    seen_ids: set[str] = set(existing_reply_ids)
+    messages: list[dict] = []
 
-    if not messages:
-        # Thread lookup failed or no thread_id — fall back to search
-        messages = _fetch_by_search(service, sent_record, user_email, existing_reply_ids, verbose)
+    if thread_id:
+        thread_msgs = _fetch_by_thread(service, thread_id, user_email, seen_ids, verbose)
+        messages.extend(thread_msgs)
+        for m in thread_msgs:
+            seen_ids.add(m["id"])
+
+    # Always also run the search — catches replies that arrive in a separate thread
+    # (e.g. Zendesk/Freshdesk tickets opened by the company after receiving the SAR)
+    search_msgs = _fetch_by_search(service, sent_record, user_email, seen_ids, verbose)
+    messages.extend(search_msgs)
 
     return messages
 
@@ -123,8 +130,6 @@ def _fetch_by_search(
         except ValueError:
             pass
 
-    # Two queries — no subject filter: auto-acks, OOO, bounces, and data-download
-    # emails all have different subject lines that would be dropped by a subject filter.
     # Query (a): exact address we sent to (most targeted)
     # Query (b): whole domain (catches replies from privacy@ even when we sent to dpo@)
     queries = []

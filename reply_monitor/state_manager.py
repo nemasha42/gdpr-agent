@@ -116,10 +116,12 @@ def compute_status(state: CompanyState) -> str:
 
     # OVERDUE: past deadline with no terminal status
     try:
-        deadline = date.fromisoformat(state.deadline)
-        if date.today() > deadline and not (tags_seen & _TERMINAL_TAGS):
-            return "OVERDUE"
-    except ValueError:
+        deadline_str = state.deadline or ""
+        if deadline_str:
+            deadline = date.fromisoformat(deadline_str)
+            if date.today() > deadline and not (tags_seen & _TERMINAL_TAGS):
+                return "OVERDUE"
+    except (ValueError, AttributeError):
         pass
 
     if tags_seen & _ACTION_TAGS:
@@ -141,17 +143,34 @@ def compute_status(state: CompanyState) -> str:
     return "PENDING"
 
 
-def days_remaining(sar_sent_at: str) -> int:
-    """Return days left until the 30-day GDPR deadline from sent date."""
-    sent = _parse_iso_date(sar_sent_at)
-    deadline = sent + timedelta(days=_SAR_DEADLINE_DAYS)
-    return (deadline - date.today()).days
+def days_remaining(sar_sent_at: str | None) -> int:
+    """Return days left until the 30-day GDPR deadline from sent date.
+
+    Returns _SAR_DEADLINE_DAYS (30) if sar_sent_at is None or empty,
+    so portal/postal records without a thread ID don't crash the dashboard.
+    """
+    if not sar_sent_at:
+        return _SAR_DEADLINE_DAYS
+    try:
+        sent = _parse_iso_date(sar_sent_at)
+        deadline = sent + timedelta(days=_SAR_DEADLINE_DAYS)
+        return (deadline - date.today()).days
+    except Exception:
+        return _SAR_DEADLINE_DAYS
 
 
-def deadline_from_sent(sar_sent_at: str) -> str:
-    """Return ISO deadline date (YYYY-MM-DD) 30 days from sar_sent_at."""
-    sent = _parse_iso_date(sar_sent_at)
-    return (sent + timedelta(days=_SAR_DEADLINE_DAYS)).isoformat()
+def deadline_from_sent(sar_sent_at: str | None) -> str:
+    """Return ISO deadline date (YYYY-MM-DD) 30 days from sar_sent_at.
+
+    Returns today + 30 days if sar_sent_at is None or empty.
+    """
+    if not sar_sent_at:
+        return (date.today() + timedelta(days=_SAR_DEADLINE_DAYS)).isoformat()
+    try:
+        sent = _parse_iso_date(sar_sent_at)
+        return (sent + timedelta(days=_SAR_DEADLINE_DAYS)).isoformat()
+    except Exception:
+        return (date.today() + timedelta(days=_SAR_DEADLINE_DAYS)).isoformat()
 
 
 def status_sort_key(status: str) -> int:

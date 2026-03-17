@@ -45,6 +45,9 @@ _COMPANIES_PATH = _PROJECT_ROOT / "data" / "companies.json"
 # ---------------------------------------------------------------------------
 # Status → CSS colour class mapping
 # ---------------------------------------------------------------------------
+# Statuses where the GDPR deadline no longer applies — hide countdown
+_TERMINAL_STATUSES = {"COMPLETED", "BOUNCED", "DENIED"}
+
 _STATUS_COLOUR = {
     "OVERDUE":         "danger",
     "ACTION_REQUIRED": "warning",
@@ -127,10 +130,17 @@ def _get_accounts() -> list[str]:
 
 def _build_card(domain: str, state, status: str) -> dict:
     """Build a flat dict for the dashboard card template."""
-    remaining = days_remaining(state.sar_sent_at)
-    elapsed = 30 - remaining
-    pct = max(0, min(100, int(elapsed / 30 * 100)))
-    progress_colour = "danger" if remaining < 7 else "warning" if remaining < 14 else "success"
+    if status in _TERMINAL_STATUSES:
+        remaining = None
+        actual_remaining = days_remaining(state.sar_sent_at)
+        elapsed = 30 - actual_remaining
+        pct = max(0, min(100, int(elapsed / 30 * 100)))
+        progress_colour = "secondary"
+    else:
+        remaining = days_remaining(state.sar_sent_at)
+        elapsed = 30 - remaining
+        pct = max(0, min(100, int(elapsed / 30 * 100)))
+        progress_colour = "danger" if remaining < 7 else "warning" if remaining < 14 else "success"
 
     # Filter out non-GDPR noise (newsletters, marketing) from display metrics
     gdpr_replies = [r for r in state.replies if "NON_GDPR" not in r.tags]
@@ -439,7 +449,7 @@ def cards_listing():
                     "company_name": state.company_name,
                     "status": status,
                     "status_color": _STATUS_COLOUR.get(status, "secondary"),
-                    "days_remaining": days_remaining(state.sar_sent_at),
+                    "days_remaining": None if status in _TERMINAL_STATUSES else days_remaining(state.sar_sent_at),
                     "latest_tag": card["tags"][0] if card["tags"] else "",
                 })
 
@@ -503,7 +513,7 @@ def scan_folder(domain: str):
     if api_key:
         from reply_monitor.schema_builder import build_schema
         try:
-            result = build_schema(file_path, api_key)
+            result = build_schema(file_path, api_key, company_name=domain)
             if result:
                 schema = result.get("categories", [])
                 services = result.get("services", [])
@@ -565,7 +575,7 @@ def download_data(domain: str):
     if not target_reply:
         return redirect(url_for("data_card", domain=domain, account=account))
 
-    result = download_data_link(target_reply.extracted["data_link"], domain)
+    result = download_data_link(target_reply.extracted["data_link"], domain, api_key=os.environ.get("ANTHROPIC_API_KEY") or "")
 
     if result.ok:
         target_reply.attachment_catalog = result.catalog.to_dict()
@@ -760,37 +770,6 @@ def _auto_download_data_links(account: str, states: dict, api_key: str | None) -
     if needs_save:
         save_state(account, states, path=_STATE_PATH)
 
-
-@app.route("/costs")
-def costs():
-    """Show cumulative LLM API cost history."""
-    from contact_resolver.cost_tracker import load_persistent_log
-
-    account = request.args.get("account", "")
-    if not account:
-        accounts = _get_accounts()
-        account = accounts[0] if accounts else ""
-
-    calls = load_persistent_log()  # list of dicts, oldest first
-    calls_desc = list(reversed(calls))
-
-    total_cost = sum(r.get("cost_usd", 0.0) for r in calls)
-    resolver_cost = sum(r.get("cost_usd", 0.0) for r in calls if r.get("source") == "contact_resolver")
-    classifier_cost = sum(r.get("cost_usd", 0.0) for r in calls if r.get("source") == "reply_classifier")
-    total_calls = len(calls)
-    total_input_tokens = sum(r.get("input_tokens", 0) for r in calls)
-    total_output_tokens = sum(r.get("output_tokens", 0) for r in calls)
-
-    stats = {
-        "total_cost": total_cost,
-        "resolver_cost": resolver_cost,
-        "classifier_cost": classifier_cost,
-        "total_calls": total_calls,
-        "total_input_tokens": total_input_tokens,
-        "total_output_tokens": total_output_tokens,
-    }
-
-    return render_template("costs.html", calls=calls_desc, stats=stats, account=account)
 
 
 @app.route("/api/body/<domain>/<message_id>")
