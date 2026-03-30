@@ -23,6 +23,15 @@ _MAX_TOKENS = 1024
 # Contact fields that constitute a "usable" contact method
 _CONTACT_FIELDS = ("dpo_email", "privacy_email", "gdpr_portal_url")
 
+# Email local parts that are generic helpdesk addresses — NOT acceptable as a
+# GDPR/privacy contact unless the company explicitly directs GDPR requests there.
+_GENERIC_LOCAL_PARTS: frozenset[str] = frozenset({
+    "support", "info", "hello", "contact", "sales", "admin",
+    "help", "team", "noreply", "noreply", "service", "services",
+    "enquiries", "enquiry", "queries", "query", "customerservice",
+    "customersupport", "helpdesk", "billing", "feedback",
+})
+
 # System prompt
 _SYSTEM_PROMPT = """\
 You are a GDPR contact data extractor. Find the company's GDPR/privacy \
@@ -34,9 +43,17 @@ contacts and reply with ONLY a valid JSON object — no prose, no markdown fence
 "flags":{"portal_only":false,"email_accepted":true,"auto_send_possible":false},\
 "request_notes":{"special_instructions":"","identity_verification_required":false,\
 "known_response_time_days":30}}
-confidence: high=official contacts clearly stated; \
-medium=contacts found indirectly; low=no usable GDPR contact found. \
-preferred_method: email, portal, or postal."""
+Rules:
+- privacy_email must be a DEDICATED privacy/GDPR address (privacy@, dpo@, legal@, gdpr@, \
+dataprotection@, data-protection@). Do NOT use generic helpdesk addresses \
+(support@, info@, hello@, contact@, help@, admin@) unless the company's privacy policy \
+explicitly states that GDPR/data subject requests must be sent there.
+- If only a generic support address exists with no dedicated GDPR contact, \
+set confidence to "low" and leave privacy_email empty.
+- confidence: high=official GDPR contacts clearly stated on privacy page or policy; \
+medium=dedicated privacy contact found indirectly or privacy policy mentions specific address; \
+low=no dedicated GDPR contact found (generic helpdesk only, or no contact at all).
+- preferred_method: email, portal, or postal."""
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +142,14 @@ def _extract_json(text: str) -> dict | None:
     return None
 
 
+def _is_generic_email(email: str) -> bool:
+    """Return True if *email* is a generic helpdesk address, not a privacy contact."""
+    if not email or "@" not in email:
+        return False
+    local = email.split("@")[0].lower().replace("-", "").replace("_", "")
+    return local in _GENERIC_LOCAL_PARTS
+
+
 def _validate_and_build(data: dict, company_name: str) -> CompanyRecord | None:
     confidence: str = data.get("source_confidence", "low")
     contact_data: dict = data.get("contact", {})
@@ -133,6 +158,18 @@ def _validate_and_build(data: dict, company_name: str) -> CompanyRecord | None:
     if not has_contact:
         confidence = "low"
     if confidence == "low":
+        return None
+
+    # Reject results where the only "contact" is a generic helpdesk email — but
+    # only when confidence is "medium" (address found indirectly/guessed).
+    # If confidence is "high", the LLM explicitly found it stated in the privacy
+    # policy (e.g. "contact support@company.com for data requests"), so trust it.
+    dpo_email = contact_data.get("dpo_email", "").strip()
+    privacy_email = contact_data.get("privacy_email", "").strip()
+    portal_url = contact_data.get("gdpr_portal_url", "").strip()
+    if (confidence == "medium"
+            and not dpo_email and not portal_url
+            and privacy_email and _is_generic_email(privacy_email)):
         return None
 
     preferred: str = contact_data.get("preferred_method", "email")

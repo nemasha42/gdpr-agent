@@ -9,6 +9,7 @@ from pathlib import Path
 from reply_monitor.models import CompanyState, ReplyRecord
 
 _STATE_PATH = Path(__file__).parent.parent / "user_data" / "reply_state.json"
+_SUBPROCESSOR_STATE_PATH = Path(__file__).parent.parent / "user_data" / "subprocessor_reply_state.json"
 _SAR_DEADLINE_DAYS = 30
 
 # ---------------------------------------------------------------------------
@@ -16,14 +17,16 @@ _SAR_DEADLINE_DAYS = 30
 # Higher = more urgent
 # ---------------------------------------------------------------------------
 _STATUS_PRIORITY: dict[str, int] = {
-    "OVERDUE":          8,
-    "ACTION_REQUIRED":  7,
-    "BOUNCED":          6,
-    "DENIED":           5,
-    "COMPLETED":        4,
-    "EXTENDED":         3,
-    "ACKNOWLEDGED":     2,
-    "PENDING":          1,
+    "OVERDUE":            9,
+    "ACTION_REQUIRED":    8,
+    "ADDRESS_NOT_FOUND":  7,
+    "BOUNCED":            6,
+    "DENIED":             5,
+    "COMPLETED":          4,
+    "EXTENDED":           4,
+    "USER_REPLIED":       3,
+    "ACKNOWLEDGED":       2,
+    "PENDING":            1,
 }
 
 # Tags that indicate a terminal / resolved state
@@ -35,7 +38,7 @@ _TERMINAL_TAGS = frozenset({
 # Tags that require user action
 _ACTION_TAGS = frozenset({
     "CONFIRMATION_REQUIRED", "IDENTITY_REQUIRED", "MORE_INFO_REQUIRED",
-    "WRONG_CHANNEL",
+    "WRONG_CHANNEL", "HUMAN_REVIEW",
 })
 
 # Tags that count as acknowledged (but not action required)
@@ -105,14 +108,47 @@ def compute_status(state: CompanyState) -> str:
         BOUNCED > OVERDUE > ACTION_REQUIRED > DENIED > COMPLETED >
         EXTENDED > ACKNOWLEDGED > PENDING
     """
+    # Address exhausted: all retry attempts failed — terminal state
+    if state.address_exhausted:
+        return "ADDRESS_NOT_FOUND"
+
     tags_seen: set[str] = set()
     for reply in state.replies:
-        if "NON_GDPR" in reply.tags:
-            continue  # newsletters/marketing — invisible to status computation
+        if "NON_GDPR" in reply.tags or "YOUR_REPLY" in reply.tags:
+            continue  # newsletters/marketing and own outgoing replies — invisible to status computation
         tags_seen.update(reply.tags)
 
+    # Also include DATA_PROVIDED/FULFILLED_DELETION tags from past attempts.
+    # This preserves COMPLETED status when a new SAR was sent to a company after
+    # data was already received (promote_latest_attempt would archive the old replies).
+    _DATA_TERMINAL = frozenset({
+        "DATA_PROVIDED_LINK", "DATA_PROVIDED_ATTACHMENT",
+        "DATA_PROVIDED_PORTAL", "FULFILLED_DELETION",
+    })
+    for pa in state.past_attempts:
+        for r in pa.get("replies", []):
+            if "NON_GDPR" not in r.get("tags", []):
+                for tag in r.get("tags", []):
+                    if tag in _DATA_TERMINAL:
+                        tags_seen.add(tag)
+
     if "BOUNCE_PERMANENT" in tags_seen:
-        return "BOUNCED"
+        # Only treat as BOUNCED if the bounce is the most recent event.
+        # If a non-bounce reply arrived after the bounce, the bounce is superseded.
+        last_bounce = max(
+            (r.received_at for r in state.replies
+             if "NON_GDPR" not in r.tags and "BOUNCE_PERMANENT" in r.tags),
+            default="",
+        )
+        last_non_bounce = max(
+            (r.received_at for r in state.replies
+             if "NON_GDPR" not in r.tags and "BOUNCE_PERMANENT" not in r.tags),
+            default="",
+        )
+        if last_bounce >= last_non_bounce:
+            return "BOUNCED"
+        # else: bounce superseded by later reply — drop BOUNCE_PERMANENT and fall through
+        tags_seen.discard("BOUNCE_PERMANENT")
 
     # OVERDUE: past deadline with no terminal status
     try:
@@ -124,7 +160,14 @@ def compute_status(state: CompanyState) -> str:
     except (ValueError, AttributeError):
         pass
 
-    if tags_seen & _ACTION_TAGS:
+    action_replies = [
+        r for r in state.replies
+        if "NON_GDPR" not in r.tags and "YOUR_REPLY" not in r.tags
+        and bool(set(r.tags) & _ACTION_TAGS)
+    ]
+    if action_replies:
+        if all(r.reply_review_status == "sent" for r in action_replies):
+            return "USER_REPLIED"
         return "ACTION_REQUIRED"
 
     if {"REQUEST_DENIED", "NO_DATA_HELD", "NOT_GDPR_APPLICABLE"} & tags_seen:
@@ -176,6 +219,135 @@ def deadline_from_sent(sar_sent_at: str | None) -> str:
 def status_sort_key(status: str) -> int:
     """Return numeric priority for sorting — higher means more urgent."""
     return _STATUS_PRIORITY.get(status, 0)
+
+
+# ---------------------------------------------------------------------------
+# Company-level (two-stream) status derivation
+# ---------------------------------------------------------------------------
+
+_SAR_TERMINAL = frozenset({"COMPLETED", "DENIED"})
+_STALLED      = frozenset({"BOUNCED", "ADDRESS_NOT_FOUND"})
+_PROGRESS     = frozenset({"ACKNOWLEDGED", "EXTENDED"})
+
+_COMPANY_STATUS_PRIORITY: dict[str, int] = {
+    "OVERDUE":          8,
+    "ACTION_REQUIRED":  7,
+    "STALLED":          6,
+    "USER_REPLIED":     5,
+    "DATA_RECEIVED":    4,
+    "FULLY_RESOLVED":   3,
+    "IN_PROGRESS":      2,
+    "SP_PENDING":       1,
+    "PENDING":          0,
+}
+
+
+def compute_company_status(
+    sar_status: str,
+    sp_status: str,
+    sp_sent: bool,
+) -> str:
+    """Derive company-level status aggregating SAR + SP streams.
+
+    SP is supplementary — sp_sent=False never downgrades company status.
+    SP can only escalate (e.g. SP=OVERDUE surfaces even if SAR=COMPLETED).
+    """
+    if sar_status == "OVERDUE" or (sp_sent and sp_status == "OVERDUE"):
+        return "OVERDUE"
+    if sar_status == "ACTION_REQUIRED" or (sp_sent and sp_status == "ACTION_REQUIRED"):
+        return "ACTION_REQUIRED"
+    if sar_status in _STALLED or (sp_sent and sp_status in _STALLED):
+        return "STALLED"
+    if sar_status in _SAR_TERMINAL:
+        if not sp_sent or sp_status in _SAR_TERMINAL:
+            return "FULLY_RESOLVED"
+        return "DATA_RECEIVED"   # SP sent but still open
+    if sar_status in _PROGRESS:
+        return "IN_PROGRESS"
+    if sar_status == "USER_REPLIED":
+        return "USER_REPLIED"
+    if sar_status == "PENDING" and sp_sent:
+        return "SP_PENDING"
+    return "PENDING"
+
+
+def promote_latest_attempt(
+    domain: str,
+    sent_records: list[dict],
+    existing_state: "CompanyState | None",
+    deadline_fn,
+) -> "CompanyState":
+    """Ensure CompanyState reflects the most recent sent letter for this domain.
+
+    When multiple letters were sent to the same domain (e.g. first address bounced,
+    user retried with a new address), the most recent letter becomes the "active"
+    attempt. Any older attempts — along with their existing replies — are archived
+    into ``past_attempts`` so the history is preserved.
+
+    Args:
+        domain: The domain key (e.g. "reflexivity.com").
+        sent_records: All sent-letter records for this domain, in any order.
+        existing_state: The current CompanyState from reply_state.json, or None.
+        deadline_fn: Callable that converts an ISO sent_at string to a deadline string.
+
+    Returns:
+        An updated CompanyState whose top-level fields reflect the newest attempt.
+    """
+    from reply_monitor.models import CompanyState  # avoid circular at module level
+
+    if not sent_records:
+        raise ValueError(f"No sent records for domain {domain}")
+
+    # Sort oldest-first so we can iterate in chronological order
+    sorted_records = sorted(sent_records, key=lambda r: r.get("sent_at", ""))
+    latest = sorted_records[-1]
+    older = sorted_records[:-1]
+
+    latest_thread = latest.get("gmail_thread_id", "")
+
+    # Build a lookup of replies by thread_id from the existing state
+    # (both active replies and any previously archived past_attempts).
+    thread_replies: dict[str, list[dict]] = {}
+    if existing_state:
+        active_thread = existing_state.gmail_thread_id
+        if active_thread:
+            thread_replies[active_thread] = [r.to_dict() for r in existing_state.replies]
+        for pa in existing_state.past_attempts:
+            t = pa.get("gmail_thread_id", "")
+            if t:
+                thread_replies[t] = pa.get("replies", [])
+
+    # Build past_attempts list (one entry per older sent record)
+    past_attempts = []
+    for rec in older:
+        t = rec.get("gmail_thread_id", "")
+        past_attempts.append({
+            "to_email": rec.get("to_email", ""),
+            "gmail_thread_id": t,
+            "sar_sent_at": rec.get("sent_at", ""),
+            "deadline": deadline_fn(rec.get("sent_at", "")),
+            "replies": thread_replies.get(t, []),
+        })
+
+    # Active replies are those belonging to the latest thread
+    from reply_monitor.models import ReplyRecord
+    active_reply_dicts = thread_replies.get(latest_thread, [])
+    active_replies = [ReplyRecord.from_dict(r) for r in active_reply_dicts]
+
+    company_name = latest.get("company_name", domain)
+
+    return CompanyState(
+        domain=domain,
+        company_name=company_name,
+        sar_sent_at=latest.get("sent_at", ""),
+        to_email=latest.get("to_email", ""),
+        subject=latest.get("subject", ""),
+        gmail_thread_id=latest_thread,
+        deadline=deadline_fn(latest.get("sent_at", "")),
+        replies=active_replies,
+        last_checked=existing_state.last_checked if existing_state else "",
+        past_attempts=past_attempts,
+    )
 
 
 def domain_from_sent_record(record: dict) -> str:

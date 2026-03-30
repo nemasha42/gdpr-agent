@@ -84,6 +84,8 @@ class TestFetchByThread:
         service.users().threads().get().execute.return_value = {
             "messages": [outgoing, reply_msg]
         }
+        # _fetch_by_search always runs; mock search to return empty so it terminates
+        service.users().messages().list().execute.return_value = {"messages": []}
 
         results = fetch_replies_for_sar(service, sent_record, user_email="me@gmail.com")
         # Outgoing message filtered out; only the reply

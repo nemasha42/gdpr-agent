@@ -1,0 +1,55 @@
+Dear Data Protection Officer / Privacy Team,
+
+I am writing to exercise my right under Article 15(1)(c) of the {gdpr_framework}
+regarding the specific identities of all recipients and processors of my personal data
+held by {company_name}.
+
+Under CJEU Case C-154/21 (Österreichische Post, January 2023), the choice of whether
+to receive specific recipient identities or only categories of recipients belongs to
+the data subject. I hereby elect to receive specific identities.
+
+Please provide a complete structured list of:
+
+1. DATA PROCESSORS AND SUB-PROCESSORS
+   For each: full legal name, country of incorporation, processing activities performed,
+   categories of my personal data processed, and the transfer safeguard for any data
+   sent outside the EEA/UK (adequacy decision, Standard Contractual Clauses module,
+   BCRs, or other — please specify).
+
+2. ARTIFICIAL INTELLIGENCE AND MACHINE LEARNING PROVIDERS
+   Please name any AI systems, large language model (LLM) providers, or ML platforms
+   that process my personal data. For each, state whether my data is or could be used
+   for model training, fine-tuning, or model improvement.
+
+3. DATA BROKERS, ENRICHMENT, AND PROFILING SERVICES
+   Please name any organisations that receive my personal data for enrichment, scoring,
+   profiling, or resale.
+
+4. ADVERTISING, ANALYTICS, AND TRACKING PLATFORMS
+   Please name any organisations that receive my personal data for targeted advertising,
+   behavioural analytics, or cross-site tracking.
+
+For each entity please include:
+  - Full legal name and country
+  - Purpose(s) for which my data is shared
+  - Categories of my personal data involved
+  - Legal transfer basis (for transfers outside the EEA/UK)
+
+EDPB Opinion 22/2024 (October 2024) confirms that controllers must maintain and be able
+to provide the identity of all processors and sub-processors. Providing only generic
+categories of recipients is insufficient given my explicit election of specific
+identities above.
+
+If specific identities cannot be provided for any processor, please state which
+exception under Article 12(5) or Article 15(4) {gdpr_framework} you are relying on.
+
+My details:
+  Full name:     {user_full_name}
+  Email address: {user_email}
+
+I expect a full response by {deadline} (one calendar month from the date of this
+request) as required by Article 12(3) {gdpr_framework}.
+
+Yours faithfully,
+{user_full_name}
+Date: {date}

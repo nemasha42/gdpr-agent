@@ -13,6 +13,18 @@
     </select>
     <a href="/refresh?account={{ selected_account }}" class="btn btn-sm btn-outline-secondary">&#x21bb; Refresh</a>
     <a href="/cards?account={{ selected_account }}" class="btn btn-sm btn-outline-secondary ms-2">Data Cards</a>
+    {% if last_scan_at %}
+      <a href="/pipeline?account={{ selected_account }}"
+         class="badge bg-success text-decoration-none ms-1"
+         title="Last scanned: {{ last_scan_at[:16].replace('T',' ') }} UTC">
+        &#x2713; Scanned
+      </a>
+    {% else %}
+      <a href="/pipeline?account={{ selected_account }}"
+         class="badge bg-secondary text-decoration-none ms-1">
+        Not scanned
+      </a>
+    {% endif %}
   </form>
   {% endif %}
 {% endblock %}
@@ -39,11 +51,24 @@
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-start mb-2">
         <h6 class="card-title mb-0 fw-bold">{{ card.company_name }}</h6>
-        <span class="badge bg-{{ status_colour.get(card.status, 'secondary') }} status-badge">
-          {{ card.status.replace('_', ' ') }}
-        </span>
+        <div class="d-flex flex-column align-items-end gap-1">
+          <span class="badge bg-{{ status_colour.get(card.company_status, 'secondary') }} status-badge">
+            {{ card.company_status.replace('_', ' ') }}
+          </span>
+          {# Only show SAR sub-status when it adds info beyond company_status #}
+          {% if card.company_status == 'FULLY_RESOLVED' and card.status != 'COMPLETED' %}
+          <span class="badge bg-{{ status_colour.get(card.status, 'secondary') }} opacity-75" style="font-size:0.65rem">
+            SAR: {{ card.status.replace('_', ' ') }}
+          </span>
+          {% endif %}
+        </div>
       </div>
 
+      {% if card.tried_emails %}
+        {% for addr in card.tried_emails %}
+          <div class="text-muted small"><s>&#x2709; {{ addr }}</s></div>
+        {% endfor %}
+      {% endif %}
       {% if card.to_email %}
         <div class="text-muted small mb-2">&#x2709; {{ card.to_email }}</div>
       {% endif %}
@@ -67,20 +92,18 @@
         </span>
       </div>
 
-      {# Tags #}
+      {# Tags — only show action-required tags; progress/delivery tags are captured by company_status #}
+      {% set _suppress_tags = ['REQUEST_ACCEPTED', 'AUTO_ACKNOWLEDGE', 'DATA_PROVIDED_LINK', 'DATA_PROVIDED_ATTACHMENT', 'DATA_PROVIDED_PORTAL'] %}
       {% if card.tags %}
       <div class="mb-2">
         {% for tag in card.tags %}
+          {% if tag not in _suppress_tags %}
           <span class="tag-chip bg-{{ tag_colour.get(tag, 'secondary') }} text-white">
-            {{ tag.replace('_', ' ') }}
+            {{ tag_names.get(tag, tag.replace('_', ' ')) }}
           </span>
+          {% endif %}
         {% endfor %}
       </div>
-      {% endif %}
-
-      {# Latest reply snippet #}
-      {% if card.latest_snippet %}
-        <p class="snippet-text mb-2">&ldquo;{{ card.latest_snippet }}&hellip;&rdquo;</p>
       {% endif %}
 
       {# Action hint #}
@@ -101,12 +124,35 @@
       {% endif %}
     </div>
 
-    <div class="card-footer bg-transparent border-top-0 d-flex gap-2">
-      <a href="/company/{{ card.domain }}?account={{ selected_account }}"
-         class="btn btn-sm btn-outline-primary">View replies ({{ card.reply_count }})</a>
-      {% if card.has_data %}
-        <a href="/data/{{ card.domain }}?account={{ selected_account }}"
-           class="btn btn-sm btn-success">&#x1F4E6; View data</a>
+    <div class="card-footer bg-transparent border-top-0">
+      <div class="d-flex gap-2">
+        <a href="/company/{{ card.domain }}?account={{ selected_account }}"
+           class="btn btn-sm {% if card.has_company_replies %}btn-outline-primary{% else %}btn-outline-secondary text-muted{% endif %}">View correspondence</a>
+        {% if card.has_data %}
+          <a href="/data/{{ card.domain }}?account={{ selected_account }}"
+             class="btn btn-sm btn-success">&#x1F4E6; View data</a>
+        {% endif %}
+      </div>
+      {# SP badge — suppress when company_status=SP_PENDING (top badge already says it) #}
+      {% if card.sp_sent and card.company_status != 'SP_PENDING' %}
+        <div class="mt-1">
+          <a href="/transfers#{{ card.domain }}" class="text-decoration-none">
+            <span class="badge
+              {% if card.sp_status == 'COMPLETED' %}bg-success
+              {% elif card.sp_status == 'ACKNOWLEDGED' %}bg-info text-dark
+              {% elif card.sp_status == 'OVERDUE' %}bg-danger
+              {% elif card.sp_status == 'ACTION_REQUIRED' %}bg-warning text-dark
+              {% else %}bg-light text-muted border{% endif %}"
+              style="font-size:0.68rem">
+              SP: {{ card.sp_status | replace('_', ' ') | title }}
+            </span>
+          </a>
+        </div>
+      {% endif %}
+      {% if card.has_pending_draft %}
+        <div class="mt-1">
+          <span class="badge bg-warning text-dark" style="font-size:0.68rem">&#x270F; Draft reply ready</span>
+        </div>
       {% endif %}
     </div>
   </div>

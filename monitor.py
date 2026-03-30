@@ -12,24 +12,36 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Load .env so ANTHROPIC_API_KEY is available for LLM classification fallback
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
 from auth.gmail_oauth import get_gmail_service
 from contact_resolver import cost_tracker
-from letter_engine.tracker import get_log
+from letter_engine.tracker import get_log, _SUBPROCESSOR_REQUESTS_PATH
 from reply_monitor.attachment_handler import handle_attachment
-from reply_monitor.classifier import classify
+from reply_monitor.classifier import classify, generate_reply_draft, _ACTION_DRAFT_TAGS
 from reply_monitor.fetcher import fetch_replies_for_sar
 from reply_monitor.models import CompanyState, ReplyRecord
 from reply_monitor.state_manager import (
+    _SUBPROCESSOR_STATE_PATH,
     compute_status,
     days_remaining,
     deadline_from_sent,
     domain_from_sent_record,
     load_state,
+    promote_latest_attempt,
     save_state,
     update_state,
 )
 
 _STATE_PATH = Path(__file__).parent / "user_data" / "reply_state.json"
+
+# Maximum total address attempts before marking ADDRESS_NOT_FOUND
+MAX_ADDRESS_ATTEMPTS = 3
 
 _W_COMPANY = 18
 _W_STATUS  = 16
@@ -58,6 +70,7 @@ _TAG_ABBR: dict[str, str] = {
     "NOT_GDPR_APPLICABLE":   "NOT_GDPR",
     "FULFILLED_DELETION":    "DELETED",
     "HUMAN_REVIEW":          "REVIEW",
+    "YOUR_REPLY":            "YOU",
 }
 
 
@@ -87,43 +100,65 @@ def main() -> None:
     # Load existing state
     states = load_state(email, path=_STATE_PATH)
 
-    # Ensure every sent record has a CompanyState entry
+    # Group all sent records by domain (multiple attempts possible per domain)
+    records_by_domain: dict[str, list[dict]] = {}
     for record in sent_log:
         domain = domain_from_sent_record(record)
-        if domain not in states:
-            states[domain] = CompanyState(
-                domain=domain,
-                company_name=record.get("company_name", domain),
-                sar_sent_at=record.get("sent_at", ""),
-                to_email=record.get("to_email", ""),
-                subject=record.get("subject", ""),
-                gmail_thread_id=record.get("gmail_thread_id", ""),
-                deadline=deadline_from_sent(record.get("sent_at", "")),
-            )
+        records_by_domain.setdefault(domain, []).append(record)
 
-    # Deduplicate sent records by domain (process each domain once)
-    seen_domains: set[str] = set()
+    # Ensure every domain has a CompanyState that reflects the most recent attempt.
+    # promote_latest_attempt handles multi-attempt domains by archiving older attempts
+    # into past_attempts and making the newest letter the active state.
+    for domain, records in records_by_domain.items():
+        states[domain] = promote_latest_attempt(
+            domain=domain,
+            sent_records=records,
+            existing_state=states.get(domain),
+            deadline_fn=deadline_from_sent,
+        )
+
     new_counts: dict[str, int] = {}
 
-    for record in sent_log:
-        domain = domain_from_sent_record(record)
-        if domain in seen_domains:
-            continue
-        seen_domains.add(domain)
+    for domain, records in records_by_domain.items():
+        # Use the most recent sent record for fetching (active attempt)
+        latest_record = max(records, key=lambda r: r.get("sent_at", ""))
 
         state = states[domain]
+        # Exclude message IDs already seen in the current attempt AND all past attempts
+        # to prevent re-classifying messages that moved between attempts (e.g. newsletters
+        # that were NON_GDPR in attempt 1 must not be re-fetched in attempt 2).
         existing_ids = {r.gmail_message_id for r in state.replies}
+        for pa in state.past_attempts:
+            for r in pa.get("replies", []):
+                existing_ids.add(r["gmail_message_id"])
 
         if args.verbose:
             print(f"Fetching replies for {state.company_name} ({domain})...", end=" ", flush=True)
 
-        new_messages = fetch_replies_for_sar(service, record, existing_ids, user_email=email, verbose=args.verbose)
+        new_messages = fetch_replies_for_sar(service, latest_record, existing_ids, user_email=email, verbose=args.verbose)
 
         if args.verbose:
             print(f"{len(new_messages)} new message(s)")
 
         new_replies: list[ReplyRecord] = []
         for msg in new_messages:
+            if msg.get("from_self"):
+                # Manual reply sent by the user directly in Gmail — record without classifying
+                reply = ReplyRecord(
+                    gmail_message_id=msg["id"],
+                    received_at=msg["received_at"],
+                    from_addr=msg["from"],
+                    subject=msg["subject"],
+                    snippet=msg.get("body", msg["snippet"]) or msg["snippet"],
+                    tags=["YOUR_REPLY"],
+                    extracted={},
+                    llm_used=False,
+                    has_attachment=False,
+                    attachment_catalog=None,
+                )
+                new_replies.append(reply)
+                continue
+
             result = classify(msg, api_key=api_key)
             catalog_dict = None
             if msg.get("has_attachment"):
@@ -136,6 +171,17 @@ def main() -> None:
                         catalog_dict = cat.to_dict()
                         break
 
+            draft = ""
+            review_status = ""
+            if any(t in _ACTION_DRAFT_TAGS for t in result.tags):
+                draft = generate_reply_draft(
+                    msg.get("body", msg["snippet"]),
+                    result.tags,
+                    state.company_name,
+                    api_key=api_key,
+                )
+                review_status = "pending" if draft else ""
+
             reply = ReplyRecord(
                 gmail_message_id=msg["id"],
                 received_at=msg["received_at"],
@@ -147,6 +193,8 @@ def main() -> None:
                 llm_used=result.llm_used,
                 has_attachment=msg["has_attachment"],
                 attachment_catalog=catalog_dict,
+                suggested_reply=draft,
+                reply_review_status=review_status,
             )
             new_replies.append(reply)
 
@@ -159,12 +207,209 @@ def main() -> None:
 
     save_state(email, states, path=_STATE_PATH)
 
+    # --reprocess: re-classify existing HUMAN_REVIEW / AUTO_ACKNOWLEDGE replies
+    if args.reprocess:
+        sp_states = load_state(email, path=_SUBPROCESSOR_STATE_PATH)
+        all_states = {**states, **{f"sp:{k}": v for k, v in sp_states.items()}}
+        n_changed = _reprocess_existing(all_states, api_key, verbose=args.verbose, dry_run=args.dry_run)
+        print(f"[reprocess] {n_changed} reply(ies) reclassified")
+        if n_changed and not args.dry_run:
+            # Split back and save both
+            sar_states = {k: v for k, v in all_states.items() if not k.startswith("sp:")}
+            sp_states2 = {k[3:]: v for k, v in all_states.items() if k.startswith("sp:")}
+            save_state(email, sar_states, path=_STATE_PATH)
+            save_state(email, sp_states2, path=_SUBPROCESSOR_STATE_PATH)
+        if args.dry_run:
+            print("[reprocess] dry-run: no changes saved")
+        return
+
+    # --draft-backfill: generate suggested_reply for existing action-tagged replies
+    if args.draft_backfill:
+        sp_states = load_state(email, path=_SUBPROCESSOR_STATE_PATH)
+        n_sar = _backfill_reply_drafts(states, api_key, service, verbose=args.verbose)
+        n_sp = _backfill_reply_drafts(sp_states, api_key, service, verbose=args.verbose)
+        print(f"[draft-backfill] {n_sar} SAR + {n_sp} SP reply draft(s) generated")
+        if n_sar:
+            save_state(email, states, path=_STATE_PATH)
+        if n_sp:
+            save_state(email, sp_states, path=_SUBPROCESSOR_STATE_PATH)
+        cost_tracker.print_cost_summary()
+        return
+
+    # Poll Gmail for subprocessor disclosure request replies
+    sp_count = _monitor_subprocessor_requests(service, email, email)
+    if sp_count and args.verbose:
+        print(f"[subprocessor] {sp_count} new reply(ies) for subprocessor disclosure requests\n")
+
+    # Re-resolve and auto-send for bounced companies
+    if _handle_bounce_retries(email, states, verbose=args.verbose):
+        save_state(email, states, path=_STATE_PATH)
+
     # Auto-download data links (Playwright handles Cloudflare-protected sites)
     _auto_download_data_links(email, states, api_key, verbose=args.verbose)
 
     # Print summary table
     _print_summary(email, states, new_counts)
     cost_tracker.print_cost_summary()
+
+
+def _monitor_subprocessor_requests(service, email: str, account: str) -> int:
+    """Poll Gmail for replies to subprocessor disclosure requests. Returns new reply count."""
+    log = get_log(path=_SUBPROCESSOR_REQUESTS_PATH)
+    if not log:
+        return 0
+
+    sp_states = load_state(account, path=_SUBPROCESSOR_STATE_PATH)
+
+    # Group by domain (most recent sent wins)
+    by_domain: dict[str, list[dict]] = {}
+    for rec in log:
+        domain = rec.get("domain", "")
+        if domain:
+            by_domain.setdefault(domain, []).append(rec)
+
+    total_new = 0
+    api_key = __import__("os").environ.get("ANTHROPIC_API_KEY")
+
+    for domain, records in by_domain.items():
+        sp_states[domain] = promote_latest_attempt(
+            domain=domain,
+            sent_records=records,
+            existing_state=sp_states.get(domain),
+            deadline_fn=deadline_from_sent,
+        )
+        state = sp_states[domain]
+        existing_ids = {r.gmail_message_id for r in state.replies}
+        for pa in state.past_attempts:
+            for r in pa.get("replies", []):
+                existing_ids.add(r["gmail_message_id"])
+
+        latest_record = max(records, key=lambda r: r.get("sent_at", ""))
+        new_messages = fetch_replies_for_sar(service, latest_record, existing_ids, user_email=email)
+
+        new_replies: list[ReplyRecord] = []
+        for msg in new_messages:
+            if msg.get("from_self"):
+                new_replies.append(ReplyRecord(
+                    gmail_message_id=msg["id"],
+                    received_at=msg["received_at"],
+                    from_addr=msg["from"],
+                    subject=msg["subject"],
+                    snippet=msg.get("body", msg["snippet"]) or msg["snippet"],
+                    tags=["YOUR_REPLY"],
+                    extracted={},
+                    llm_used=False,
+                    has_attachment=False,
+                    attachment_catalog=None,
+                ))
+                continue
+            result = classify(msg, api_key=api_key)
+            new_replies.append(ReplyRecord(
+                gmail_message_id=msg["id"],
+                received_at=msg["received_at"],
+                from_addr=msg["from"],
+                subject=msg["subject"],
+                snippet=msg["snippet"],
+                tags=result.tags,
+                extracted=result.extracted,
+                llm_used=result.llm_used,
+                has_attachment=msg["has_attachment"],
+                attachment_catalog=None,
+            ))
+
+        total_new += len(new_replies)
+        if new_replies:
+            sp_states[domain] = update_state(state, new_replies)
+
+    save_state(account, sp_states, path=_SUBPROCESSOR_STATE_PATH)
+    return total_new
+
+
+def _handle_bounce_retries(
+    account_email: str,
+    states: dict[str, CompanyState],
+    verbose: bool = False,
+) -> bool:
+    """For each BOUNCED company, re-resolve and auto-send to a new address.
+
+    Archives the failed attempt into past_attempts, resets active state to the
+    new address, and updates sent_letters.json via tracker.record_sent().
+
+    Returns True if any state was changed.
+    """
+    from contact_resolver.resolver import ContactResolver
+    from letter_engine.composer import compose
+    from letter_engine.sender import send_letter
+
+    resolver = ContactResolver()
+    changed = False
+
+    for domain, state in states.items():
+        if state.address_exhausted:
+            continue
+        if compute_status(state) != "BOUNCED":
+            continue
+
+        total_attempts = 1 + len(state.past_attempts)
+        # Collect every email address tried so far (current + all past)
+        tried_emails: set[str] = {state.to_email.lower()} if state.to_email else set()
+        for pa in state.past_attempts:
+            if pa.get("to_email"):
+                tried_emails.add(pa["to_email"].lower())
+
+        if total_attempts >= MAX_ADDRESS_ATTEMPTS:
+            print(f"  [bounce-retry] {state.company_name}: max attempts ({MAX_ADDRESS_ATTEMPTS}) reached — marking ADDRESS_NOT_FOUND")
+            state.address_exhausted = True
+            changed = True
+            continue
+
+        print(f"  [bounce-retry] {state.company_name}: attempt {total_attempts}/{MAX_ADDRESS_ATTEMPTS} failed, re-resolving...")
+        new_record = resolver.resolve(domain, state.company_name, exclude_emails=tried_emails)
+
+        if not new_record:
+            print(f"  [bounce-retry] {state.company_name}: no alternative address found — ADDRESS_NOT_FOUND")
+            state.address_exhausted = True
+            changed = True
+            continue
+
+        new_email = (new_record.contact.privacy_email or new_record.contact.dpo_email or "").lower()
+        if not new_email or new_email in tried_emails:
+            print(f"  [bounce-retry] {state.company_name}: resolver returned same/no address — ADDRESS_NOT_FOUND")
+            state.address_exhausted = True
+            changed = True
+            continue
+
+        # Compose and send to new address
+        letter = compose(new_record)
+        success, msg_id, thread_id = send_letter(letter, scan_email=account_email)
+
+        if not success:
+            print(f"  [bounce-retry] {state.company_name}: send to {new_email} failed — will retry next run")
+            continue
+
+        print(f"  [bounce-retry] {state.company_name}: sent to {new_email} (attempt {total_attempts + 1})")
+
+        # Archive current attempt into past_attempts
+        state.past_attempts.append({
+            "to_email": state.to_email,
+            "gmail_thread_id": state.gmail_thread_id,
+            "sar_sent_at": state.sar_sent_at,
+            "deadline": state.deadline,
+            "replies": [r.to_dict() for r in state.replies],
+        })
+
+        # Reset active attempt to the new address
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        state.replies = []
+        state.to_email = letter.to_email
+        state.subject = letter.subject
+        state.gmail_thread_id = thread_id
+        state.sar_sent_at = now
+        state.deadline = deadline_from_sent(now)
+        state.last_checked = ""
+        changed = True
+
+    return changed
 
 
 def _auto_download_data_links(
@@ -274,10 +519,100 @@ def _print_summary(account: str, states: dict[str, CompanyState], new_counts: di
     print("\n" + "\n".join(lines) + "\n")
 
 
+def _reprocess_existing(
+    states: dict[str, CompanyState],
+    api_key: str | None,
+    *,
+    verbose: bool = False,
+    dry_run: bool = False,
+) -> int:
+    """Re-classify replies whose tags are a subset of {HUMAN_REVIEW, AUTO_ACKNOWLEDGE}.
+
+    These are the two tags that improved regex patterns are most likely to supersede.
+    Returns the number of replies whose tags changed.
+    """
+    _REPROCESS_TAGS = {"HUMAN_REVIEW", "AUTO_ACKNOWLEDGE"}
+    changed = 0
+
+    for domain, state in states.items():
+        for reply in state.replies:
+            if not set(reply.tags) <= _REPROCESS_TAGS:
+                continue
+            old_tags = list(reply.tags)
+            msg = {
+                "from": reply.from_addr,
+                "subject": reply.subject,
+                "snippet": reply.snippet,
+                "body": "",
+                "has_attachment": reply.has_attachment,
+            }
+            new_result = classify(msg, api_key=api_key)
+            if new_result.tags != old_tags:
+                if verbose or dry_run:
+                    print(
+                        f"  [reprocess] {state.company_name} ({domain}): "
+                        f"{old_tags} → {new_result.tags}"
+                        f"{'  [dry-run]' if dry_run else ''}"
+                    )
+                if not dry_run:
+                    reply.tags = new_result.tags
+                changed += 1
+
+    return changed
+
+
+def _backfill_reply_drafts(
+    states: dict[str, CompanyState],
+    api_key: str | None,
+    service,
+    *,
+    verbose: bool = False,
+) -> int:
+    """Generate suggested_reply for existing action-tagged replies that have none.
+
+    Fetches the full email body from Gmail for each reply so the LLM has complete
+    context (snippets are truncated and cause confused drafts).
+
+    Returns the number of replies updated.
+    """
+    from reply_monitor.fetcher import _extract_body
+
+    updated = 0
+    for domain, state in states.items():
+        for reply in state.replies:
+            if reply.suggested_reply:
+                continue  # already has a draft
+            if not any(t in _ACTION_DRAFT_TAGS for t in reply.tags):
+                continue
+            # Fetch full body from Gmail — fall back to snippet if fetch fails
+            body = reply.snippet
+            if service and reply.gmail_message_id:
+                try:
+                    msg = service.users().messages().get(
+                        userId="me", id=reply.gmail_message_id, format="full"
+                    ).execute()
+                    full_body = _extract_body(msg.get("payload", {}))
+                    if full_body:
+                        body = full_body
+                except Exception as exc:
+                    if verbose:
+                        print(f"  [backfill] warning: could not fetch body for {reply.gmail_message_id}: {exc}")
+
+            draft = generate_reply_draft(body, reply.tags, state.company_name, api_key=api_key)
+            if draft:
+                reply.suggested_reply = draft
+                reply.reply_review_status = "pending"
+                updated += 1
+                if verbose:
+                    print(f"  [backfill] {state.company_name} ({domain}): draft generated for {reply.tags}")
+    return updated
+
+
 def _status_priority(status: str) -> int:
     return {
-        "OVERDUE": 8, "ACTION_REQUIRED": 7, "BOUNCED": 6, "DENIED": 5,
-        "COMPLETED": 4, "EXTENDED": 3, "ACKNOWLEDGED": 2, "PENDING": 1,
+        "OVERDUE": 8, "ACTION_REQUIRED": 7, "ADDRESS_NOT_FOUND": 6,
+        "BOUNCED": 5, "DENIED": 4, "COMPLETED": 3,
+        "EXTENDED": 3, "ACKNOWLEDGED": 2, "PENDING": 1,
     }.get(status, 0)
 
 
@@ -292,6 +627,12 @@ def _parse_args() -> argparse.Namespace:
                         help="Gmail account to monitor (e.g. user@gmail.com)")
     parser.add_argument("--verbose", action="store_true",
                         help="Print per-message classification details")
+    parser.add_argument("--reprocess", action="store_true",
+                        help="Re-classify existing HUMAN_REVIEW/AUTO_ACKNOWLEDGE replies with improved patterns")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="With --reprocess: show changes without saving")
+    parser.add_argument("--draft-backfill", action="store_true",
+                        help="Generate suggested_reply drafts for existing action-tagged replies that have none")
     return parser.parse_args()
 
 

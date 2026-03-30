@@ -43,17 +43,29 @@
       margin-top: 6px;
     }
     .navbar-brand { font-weight: 700; letter-spacing: -0.02em; }
+    .subprocessor-indent { padding-left: 2rem; }
   </style>
 </head>
 <body>
   <nav class="navbar navbar-light bg-white border-bottom mb-4 px-4">
     <a class="navbar-brand" href="/">&#x1F512; GDPR SAR Monitor</a>
     <div class="d-flex gap-3 align-items-center">
-      <a class="text-muted small text-decoration-none" href="/">Dashboard</a>
+      <a class="text-muted small text-decoration-none {% if active_tab == 'dashboard' %}fw-bold text-dark{% endif %}" href="/">Dashboard</a>
+      <a class="text-muted small text-decoration-none {% if active_tab == 'pipeline' %}fw-bold text-dark{% endif %}" href="/pipeline">Pipeline</a>
+      <a class="text-muted small text-decoration-none {% if active_tab == 'costs' %}fw-bold text-dark{% endif %}" href="/costs">Costs</a>
+      <a class="text-muted small text-decoration-none {% if active_tab == 'transfers' %}fw-bold text-dark{% endif %}" href="/transfers">Transfers</a>
     </div>
     {% block nav_extra %}{% endblock %}
   </nav>
   <div class="container-xl">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, msg in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible py-2 mb-3" role="alert">
+          {{ msg }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    {% endwith %}
     {% block content %}{% endblock %}
   </div>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

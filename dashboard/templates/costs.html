@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}Costs — GDPR SAR{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <h4 class="mb-0">LLM Cost Tracker</h4>
+    <p class="text-muted small mb-0">{{ total_calls }} API calls recorded &middot; total spend ${{ "%.4f"|format(grand_total) }}</p>
+  </div>
+</div>
+
+{# ── Summary cards ──────────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="text-muted small mb-3">By Model</h6>
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Model</th><th class="text-end">Calls</th><th class="text-end">Cost</th></tr></thead>
+          <tbody>
+            {% for model, t in model_totals.items() %}
+            <tr>
+              <td class="small text-truncate" style="max-width:160px" title="{{ model }}">
+                {{ model.replace("claude-","").replace("-20251001","") }}
+              </td>
+              <td class="text-end small">{{ t.calls }}</td>
+              <td class="text-end small">${{ "%.4f"|format(t.cost_usd) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="text-muted small">No data yet</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="text-muted small mb-3">By Purpose</h6>
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Purpose</th><th class="text-end">Calls</th><th class="text-end">Cost</th></tr></thead>
+          <tbody>
+            {% for src, t in source_totals.items() %}
+            <tr>
+              <td class="small text-truncate" style="max-width:160px" title="{{ src }}">{{ src }}</td>
+              <td class="text-end small">{{ t.calls }}</td>
+              <td class="text-end small">${{ "%.4f"|format(t.cost_usd) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="text-muted small">No data yet</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="text-muted small mb-3">Averages (actual)</h6>
+        <dl class="row mb-0 small">
+          <dt class="col-8 text-muted">Resolver (LLM step)</dt>
+          <dd class="col-4 text-end">${{ "%.4f"|format(avg_resolver) }}</dd>
+          <dt class="col-8 text-muted">Subprocessor discovery</dt>
+          <dd class="col-4 text-end">${{ "%.4f"|format(avg_subprocessor) }}</dd>
+          <dt class="col-8 text-muted">Classifier (fallback)</dt>
+          <dd class="col-4 text-end">${{ "%.4f"|format(avg_classifier) }}</dd>
+          <dt class="col-8 text-muted">Schema builder</dt>
+          <dd class="col-4 text-end">${{ "%.4f"|format(avg_schema) }}</dd>
+        </dl>
+        <hr class="my-2">
+        <div class="d-flex justify-content-between small fw-bold">
+          <span>Total spend</span>
+          <span>${{ "%.4f"|format(grand_total) }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Cost Calculator ────────────────────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-body">
+    <h6 class="fw-bold mb-3">Cost Calculator</h6>
+    <p class="text-muted small mb-3">Estimate the cost of a pipeline run. Actuals from your log are pre-filled.</p>
+
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label small">Companies</label>
+        <input type="number" id="calc-companies" class="form-control form-control-sm" value="100" min="1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">Cache hit rate %</label>
+        <input type="number" id="calc-cache" class="form-control form-control-sm" value="70" min="0" max="100">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">Cost/resolver call $</label>
+        <input type="number" id="calc-resolver-cost" class="form-control form-control-sm"
+               value="{{ "%.5f"|format(avg_resolver) }}" step="0.001" min="0">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">Replies expected</label>
+        <input type="number" id="calc-replies" class="form-control form-control-sm" value="30" min="0">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">LLM classifier rate %</label>
+        <input type="number" id="calc-classifier-rate" class="form-control form-control-sm" value="20" min="0" max="100">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">Cost/classifier call $</label>
+        <input type="number" id="calc-classifier-cost" class="form-control form-control-sm"
+               value="{{ "%.5f"|format(avg_classifier) }}" step="0.001" min="0">
+      </div>
+    </div>
+
+    <div class="row g-3 align-items-end mt-1">
+      <div class="col-md-2">
+        <label class="form-label small">Subprocessor cache hit %</label>
+        <input type="number" id="calc-subprocessor-cache" class="form-control form-control-sm" value="0" min="0" max="100">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">Cost/subprocessor call $</label>
+        <input type="number" id="calc-subprocessor-cost" class="form-control form-control-sm"
+               value="{{ "%.5f"|format(avg_subprocessor) }}" step="0.001" min="0">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">Data exports expected</label>
+        <input type="number" id="calc-exports" class="form-control form-control-sm" value="5" min="0">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">Cost/schema call $</label>
+        <input type="number" id="calc-schema-cost" class="form-control form-control-sm"
+               value="{{ "%.5f"|format(avg_schema) }}" step="0.001" min="0">
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button class="btn btn-primary btn-sm w-100" onclick="calcCosts()">Calculate</button>
+      </div>
+    </div>
+
+    <div id="calc-result" class="mt-3" style="display:none">
+      <hr>
+      <div class="row g-2 text-center">
+        <div class="col">
+          <div class="text-muted small">Resolver LLM calls</div>
+          <div class="fs-5 fw-bold" id="cr-resolver-calls">—</div>
+          <div class="text-muted small" id="cr-resolver-cost">$—</div>
+        </div>
+        <div class="col">
+          <div class="text-muted small">Subprocessor calls</div>
+          <div class="fs-5 fw-bold" id="cr-subprocessor-calls">—</div>
+          <div class="text-muted small" id="cr-subprocessor-cost">$—</div>
+        </div>
+        <div class="col">
+          <div class="text-muted small">Classifier LLM calls</div>
+          <div class="fs-5 fw-bold" id="cr-classifier-calls">—</div>
+          <div class="text-muted small" id="cr-classifier-cost">$—</div>
+        </div>
+        <div class="col">
+          <div class="text-muted small">Schema builder calls</div>
+          <div class="fs-5 fw-bold" id="cr-schema-calls">—</div>
+          <div class="text-muted small" id="cr-schema-cost">$—</div>
+        </div>
+        <div class="col border-start">
+          <div class="text-muted small">Estimated total</div>
+          <div class="fs-4 fw-bold text-primary" id="cr-total">$—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Call history ───────────────────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-body">
+    <h6 class="fw-bold mb-3">Call History <span class="text-muted fw-normal small">(most recent first, last 200 shown)</span></h6>
+    <div style="overflow-x:auto">
+      <table class="table table-sm table-hover small mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Time</th>
+            <th>Company</th>
+            <th>Model</th>
+            <th>Purpose</th>
+            <th class="text-end">In tok</th>
+            <th class="text-end">Out tok</th>
+            <th class="text-end">Cost</th>
+            <th>Found</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in records %}
+          <tr>
+            <td class="text-nowrap text-muted">{{ r.timestamp[:16].replace('T',' ') }}</td>
+            <td>{{ r.company_name }}</td>
+            <td class="text-nowrap">{{ r.model.replace("claude-","").replace("-20251001","") }}</td>
+            <td class="text-muted">{{ r.purpose or r.source or "—" }}</td>
+            <td class="text-end">{{ "{:,}".format(r.input_tokens) }}</td>
+            <td class="text-end">{{ "{:,}".format(r.output_tokens) }}</td>
+            <td class="text-end">${{ "%.4f"|format(r.cost_usd) }}</td>
+            <td>
+              {% if r.found %}
+                <span class="badge bg-success">yes</span>
+              {% else %}
+                <span class="badge bg-secondary">no</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="text-muted text-center py-4">No LLM calls recorded yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function calcCosts() {
+  const companies          = parseFloat(document.getElementById('calc-companies').value) || 0;
+  const cacheRate          = parseFloat(document.getElementById('calc-cache').value) / 100 || 0;
+  const resolverCost       = parseFloat(document.getElementById('calc-resolver-cost').value) || 0;
+  const replies            = parseFloat(document.getElementById('calc-replies').value) || 0;
+  const classRate          = parseFloat(document.getElementById('calc-classifier-rate').value) / 100 || 0;
+  const classifierCost     = parseFloat(document.getElementById('calc-classifier-cost').value) || 0;
+  const exports            = parseFloat(document.getElementById('calc-exports').value) || 0;
+  const schemaCost         = parseFloat(document.getElementById('calc-schema-cost').value) || 0;
+  const subprocCacheRate   = parseFloat(document.getElementById('calc-subprocessor-cache').value) / 100 || 0;
+  const subprocCost        = parseFloat(document.getElementById('calc-subprocessor-cost').value) || 0;
+
+  const resolverCalls = Math.ceil(companies * (1 - cacheRate));
+  const resolverTotal = resolverCalls * resolverCost;
+
+  const subprocCalls  = Math.ceil(companies * (1 - subprocCacheRate));
+  const subprocTotal  = subprocCalls * subprocCost;
+
+  const classifierCalls = Math.ceil(replies * classRate);
+  const classifierTotal  = classifierCalls * classifierCost;
+
+  const schemaCalls = exports;
+  const schemaTotal = schemaCalls * schemaCost;
+
+  const total = resolverTotal + subprocTotal + classifierTotal + schemaTotal;
+
+  document.getElementById('cr-resolver-calls').textContent      = resolverCalls;
+  document.getElementById('cr-resolver-cost').textContent       = '$' + resolverTotal.toFixed(4);
+  document.getElementById('cr-subprocessor-calls').textContent  = subprocCalls;
+  document.getElementById('cr-subprocessor-cost').textContent   = '$' + subprocTotal.toFixed(4);
+  document.getElementById('cr-classifier-calls').textContent    = classifierCalls;
+  document.getElementById('cr-classifier-cost').textContent     = '$' + classifierTotal.toFixed(4);
+  document.getElementById('cr-schema-calls').textContent        = schemaCalls;
+  document.getElementById('cr-schema-cost').textContent         = '$' + schemaTotal.toFixed(4);
+  document.getElementById('cr-total').textContent               = '$' + total.toFixed(4);
+
+  document.getElementById('calc-result').style.display = 'block';
+}
+</script>
+{% endblock %}

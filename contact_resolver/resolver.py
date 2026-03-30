@@ -18,6 +18,7 @@ from contact_resolver.models import (
     Flags,
     PostalAddress,
     RequestNotes,
+    SubprocessorRecord,
 )
 
 _PROJECT_ROOT = Path(__file__).parent.parent
@@ -95,6 +96,7 @@ class ContactResolver:
         company_name: str,
         *,
         verbose: bool = False,
+        exclude_emails: set[str] | None = None,
     ) -> CompanyRecord | None:
         """Return GDPR contact details for *domain*, or ``None`` if unresolvable.
 
@@ -104,20 +106,36 @@ class ContactResolver:
             domain: Registrable domain, e.g. ``"spotify.com"``.
             company_name: Human-readable name, e.g. ``"Spotify"``.
             verbose: Print step-by-step progress to stdout.
+            exclude_emails: Set of email addresses to skip (e.g. previously bounced).
+                If a resolution step returns an email in this set, it is treated as
+                not found and the next step is tried.
         """
+        _excl = {e.lower() for e in (exclude_emails or [])}
+
+        def _excluded(rec: CompanyRecord | None) -> bool:
+            if not rec or not _excl:
+                return False
+            email = rec.contact.privacy_email or rec.contact.dpo_email
+            return bool(email) and email.lower() in _excl
+
         db = self._load_db()
 
         # ── Step 1: Local cache ────────────────────────────────────────
         existing = db.companies.get(domain)
         if existing and not self._is_stale(existing):
-            if verbose:
-                print(
-                    f"[CACHE HIT] {domain} — found, fresh"
-                    f" (source: {existing.source})"
-                )
-            cost_tracker.record_resolver_result("cache")
-            return existing
-        if verbose:
+            if _excluded(existing):
+                if verbose:
+                    print(f"[CACHE HIT] {domain} — cached email excluded (bounced), re-resolving")
+                # Fall through to re-search all sources
+            else:
+                if verbose:
+                    print(
+                        f"[CACHE HIT] {domain} — found, fresh"
+                        f" (source: {existing.source})"
+                    )
+                cost_tracker.record_resolver_result("cache")
+                return existing
+        elif verbose:
             if existing:
                 print(f"[CACHE MISS] {domain} — stale, re-fetching")
             else:
@@ -125,32 +143,40 @@ class ContactResolver:
 
         # ── Step 2: dataowners overrides ──────────────────────────────
         record = self._search_dataowners(domain)
-        if record:
+        if record and not _excluded(record):
             if verbose:
                 print(f"[DATAOWNERS] {domain} — found")
             cost_tracker.record_resolver_result("dataowners_override")
             self._upsert(db, domain, record)
             return record
         if verbose:
-            print(f"[DATAOWNERS] {domain} — not found")
+            if record:
+                print(f"[DATAOWNERS] {domain} — found but email excluded")
+            else:
+                print(f"[DATAOWNERS] {domain} — not found")
 
         # ── Step 3: datarequests.org via GitHub ───────────────────────
         record = self._search_datarequests(domain, company_name)
-        if record:
+        if record and not _excluded(record):
             if verbose:
                 print(f"[DATAREQUESTS] {domain} — found as {record.company_name}")
             cost_tracker.record_resolver_result("datarequests")
             self._upsert(db, domain, record)
             return record
         if verbose:
-            print(f"[DATAREQUESTS] {domain} — not found")
+            if record:
+                print(f"[DATAREQUESTS] {domain} — found but email excluded")
+            else:
+                print(f"[DATAREQUESTS] {domain} — not found")
 
         # ── Step 4: Privacy page scraper ──────────────────────────────
         record = self._privacy_scrape(domain, company_name, verbose=verbose)
-        if record:
+        if record and not _excluded(record):
             cost_tracker.record_resolver_result("privacy_scrape")
             self._upsert(db, domain, record)
             return record
+        if record and verbose:
+            print(f"[SCRAPE] {domain} — found but email excluded")
 
         # ── Step 5: LLM web search ────────────────────────────────────
         if cost_tracker.is_llm_limit_reached():
@@ -165,6 +191,11 @@ class ContactResolver:
             if record.source_confidence == "low":
                 if verbose:
                     print("confidence: low — skipping")
+                cost_tracker.record_resolver_result(None)
+                return None
+            if _excluded(record):
+                if verbose:
+                    print("found but email excluded")
                 cost_tracker.record_resolver_result(None)
                 return None
             if verbose:
@@ -379,3 +410,33 @@ def _parse_postal_address(address_str: str) -> PostalAddress:
         city=lines[-2],
         country=lines[-1],
     )
+
+
+def write_subprocessors(domain: str, record: SubprocessorRecord, db_path: Path = _DEFAULT_DB_PATH) -> None:
+    """Persist a SubprocessorRecord for *domain* into companies.json."""
+    try:
+        text = db_path.read_text().strip() if db_path.exists() else ""
+        if not text or text in ("{}", ""):
+            db = CompaniesDB()
+        else:
+            db = CompaniesDB.model_validate_json(text)
+    except Exception:
+        db = CompaniesDB()
+
+    existing = db.companies.get(domain)
+    if existing:
+        existing.subprocessors = record
+        db.companies[domain] = existing
+    else:
+        # Company not in DB yet — create a minimal stub so subprocessors can be stored
+        db.companies[domain] = CompanyRecord(
+            company_name=domain,
+            source="llm_search",
+            source_confidence="low",
+            last_verified=date.today().isoformat(),
+            subprocessors=record,
+        )
+
+    db.meta.last_updated = date.today().isoformat()
+    db.meta.total_companies = len(db.companies)
+    db_path.write_text(db.model_dump_json(indent=2))

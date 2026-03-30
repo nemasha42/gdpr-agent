@@ -36,8 +36,10 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
         ("snippet", re.compile(r"\b4\d\d\b|try again later|temporarily unavailable|service temporarily", re.I)),
     ]),
     ("OUT_OF_OFFICE", [
-        ("subject", re.compile(r"out of office|away|automatic reply|auto[\s-]?reply|vacation|on leave", re.I)),
-        ("snippet", re.compile(r"out of office|i am away|on annual leave|back on \d|ooo\b|automatic reply", re.I)),
+        ("subject", re.compile(r"out of office|away|automatic reply|auto[\s-]?reply|vacation|on leave"
+                               r"|abwesenheitsnotiz|abwesend", re.I)),
+        ("snippet", re.compile(r"out of office|i am away|on annual leave|back on \d|ooo\b|automatic reply"
+                               r"|abwesenheitsnotiz|abwesend|urlaub.{0,20}r[uü]ckkehr|nicht im b[uü]ro", re.I)),
     ]),
     ("AUTO_ACKNOWLEDGE", [
         ("subject", re.compile(
@@ -47,10 +49,17 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
             r"|your (request|inquiry|case) has been",
             re.I)),
         ("snippet", re.compile(
-            r"received your request|we will process|has been logged"
+            r"received your (request|email|message)|we will process|has been logged"
             r"|case number|ticket number|reference number"
             r"|\[\d{1,2}-\d{10,}\]"            # Google ticket format
-            r"|your (request|inquiry) has been received",
+            r"|your (request|inquiry) has been received"
+            r"|thank you for (contacting|reaching out).{0,80}(request|privacy|gdpr|data)"
+            r"|representative will be in touch|will be in touch as soon"
+            r"|a (member|representative|specialist|agent).{0,60}(will contact|will respond|will be in touch|will reach out)"
+            r"|someone (from our team|will be in touch|will contact)"
+            r"|automatisch generiert[ea]\s+(e-?mail|nachricht)"
+            r"|wir haben (ihre|deine) (anfrage|e-?mail|nachricht) erhalten"
+            r"|vielen dank.{0,50}(anfrage|kontakt)",
             re.I)),
     ]),
     ("CONFIRMATION_REQUIRED", [
@@ -92,7 +101,12 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
             # Self-service deflection — company telling user to manage data themselves
             r"|via our self-service|self-service portal|self-service tool"
             r"|can do so directly via"
-            r"|via your (account|profile|dashboard)",
+            r"|via your (account|profile|dashboard)"
+            # Channel mismatch — company says this request can't be handled here
+            r"|not able to process.{0,60}(request|this).{0,60}(over chat|chat|this (channel|address|inbox))"
+            r"|unable to process.{0,60}(request|this).{0,60}(over chat|chat|this (channel|address|inbox))"
+            r"|this type of request.{0,60}(over chat|chat|email|this channel)"
+            r"|pursue this (further|request).{0,40}(through|via)",
             re.I)),
     ]),
     ("REQUEST_ACCEPTED", [
@@ -172,6 +186,15 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
             r"|not applicable under gdpr",
             re.I)),
     ]),
+    # Google security/account notifications that land in SAR threads but are unrelated to the SAR
+    ("NON_GDPR", [
+        ("snippet", re.compile(
+            r"account.{0,20}(recovered|recovery|has been recovered)"
+            r"|google account.{0,30}(was|has been).{0,20}(accessed|recovered|changed|used)"
+            r"|recent (security |account )?activity.{0,40}account"
+            r"|someone (just )?signed in|new sign[\s-]?in",
+            re.I)),
+    ]),
     ("FULFILLED_DELETION", [
         ("snippet", re.compile(
             r"data has been deleted|account.{0,20}removed"
@@ -224,6 +247,17 @@ _RE_ZENDESK_ATTACHMENT_B = re.compile(
 # Characters to strip from the right end of any extracted URL
 _URL_TRAILING_JUNK = re.compile(r'[\s.,;)\u201c\u201d\u2018\u2019"\']+$')
 
+# Body-level AUTO_ACKNOWLEDGE detection: catches escalation/ticket signals buried below the snippet.
+# Covers AI-bot auto-responders that assign a ticket and escalate to a human team.
+_RE_BODY_AUTO_ACKNOWLEDGE = re.compile(
+    r"escalating your request.{0,60}(human|specialist|team|privacy|data protection)"
+    r"|ticket number[\s:]+TICKET-\d"
+    r"|TICKET_REF:TICKET-"
+    r"|you don.t need to do anything else at this point"
+    r"|a member of.{0,60}(privacy|support|human).{0,40}(will review|will respond|will follow)",
+    re.I | re.S,
+)
+
 # Body-level WRONG_CHANNEL detection: catches self-service deflection buried in the body.
 # Matches responses where the company redirects to general account/settings pages rather
 # than actually delivering data (e.g. Google "available to you through our online tools").
@@ -237,8 +271,10 @@ _RE_BODY_WRONG_CHANNEL = re.compile(
 
 _RE_PORTAL_URL   = re.compile(r"https?://\S+", re.I)  # fallback URL near portal keywords
 
-# Tags considered "informative" — having only AUTO_ACKNOWLEDGE still warrants LLM
-_LLM_TRIGGER_STATES = {frozenset(), frozenset({"AUTO_ACKNOWLEDGE"})}
+# Tags considered "not yet useful" — LLM is called only when regex produced nothing at all.
+# AUTO_ACKNOWLEDGE alone is intentionally excluded: regex/body-level detection is reliable
+# enough, and calling LLM on top tends to pile on noisy secondary tags (IN_PROGRESS, HUMAN_REVIEW).
+_LLM_TRIGGER_STATES = {frozenset()}
 
 # Cache LLM results to avoid re-classifying identical auto-replies (domain reuse)
 # Key: (from_addr, subject) — value: LLM result dict or None
@@ -318,8 +354,17 @@ _RE_DATA_URL = re.compile(
 )
 
 
+_RE_DATA_URL_EXCLUDE = re.compile(
+    r"/(sub-processors?|vendors?|privacy[-_]policy|privacy|legal|cookies?|terms)"
+    r"(?:/|$)",
+    re.I,
+)
+
+
 def _is_data_url(url: str) -> bool:
     """Return True if a URL plausibly points to a data file rather than a generic webpage."""
+    if _RE_DATA_URL_EXCLUDE.search(url):
+        return False
     return bool(_RE_DATA_URL.search(url))
 
 
@@ -379,6 +424,9 @@ def classify(
     # --- Body-level tag promotion ---
     # Pass 1 only checks subject/snippet. Some companies bury key language in the body.
     if body and not _is_bounce:
+        # Escalation/ticket signals (AI bots that assign a ticket and hand off to humans)
+        if "AUTO_ACKNOWLEDGE" not in tags and _RE_BODY_AUTO_ACKNOWLEDGE.search(body):
+            tags.append("AUTO_ACKNOWLEDGE")
         # Self-service deflection (e.g. Google "available through our online tools")
         if "WRONG_CHANNEL" not in tags and _RE_BODY_WRONG_CHANNEL.search(body):
             tags.append("WRONG_CHANNEL")
@@ -410,6 +458,9 @@ def classify(
             tags = llm_result.get("tags", tags)
             extracted.update({k: v for k, v in llm_result.items() if k in extracted and v})
             llm_used = True
+            # HUMAN_REVIEW is a last-resort fallback — drop it if any substantive tag is present
+            if "HUMAN_REVIEW" in tags and len(tags) > 1:
+                tags = [t for t in tags if t != "HUMAN_REVIEW"]
 
     if not tags:
         tags = ["HUMAN_REVIEW"]
@@ -432,15 +483,15 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
     text = f"{subject} {snippet}"
     full_text = f"{text} {body}" if body else text
 
-    # Reference numbers: header-level only (subject + snippet)
+    # Reference numbers: search subject+snippet first, fall back to body
     reference_number = ""
     for pattern in (_RE_REF_ZENDESK, _RE_REF_GOOGLE, _RE_REF_TICKET):
-        m = pattern.search(text)
+        m = pattern.search(text) or pattern.search(full_text)
         if m:
             reference_number = m.group(0)
             break
     if not reference_number:
-        m = _RE_REF_GENERIC.search(text)
+        m = _RE_REF_GENERIC.search(text) or _RE_REF_GENERIC.search(full_text)
         if m:
             reference_number = m.group(1)
 
@@ -510,6 +561,7 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
         "data_links": data_links,        # all URLs (e.g. Substack sends 2 zips)
         "portal_url": portal_url,
         "deadline_extension_days": None,
+        "summary": "",                   # filled by LLM fallback path only
     }
 
 
@@ -539,6 +591,69 @@ def reextract_data_links(reply_record_dict: dict, body: str) -> dict:
     return existing
 
 
+_ACTION_DRAFT_TAGS: frozenset[str] = frozenset({
+    "WRONG_CHANNEL", "MORE_INFO_REQUIRED", "CONFIRMATION_REQUIRED",
+    "IDENTITY_REQUIRED", "HUMAN_REVIEW",
+})
+
+_ACTION_DRAFT_TAG_LABELS: dict[str, str] = {
+    "WRONG_CHANNEL":         "company redirected to a different channel without specifying which",
+    "MORE_INFO_REQUIRED":    "company asked for more information",
+    "CONFIRMATION_REQUIRED": "company requires you to confirm the request",
+    "IDENTITY_REQUIRED":     "company requires identity verification",
+    "HUMAN_REVIEW":          "reply needs manual review — unclear response",
+}
+
+
+def generate_reply_draft(
+    reply_body: str,
+    tags: list[str],
+    company_name: str,
+    *,
+    api_key: str | None = None,
+) -> str:
+    """Call Claude Haiku to draft a follow-up reply. Returns empty string on failure."""
+    if not api_key:
+        return ""
+    action_tags = [t for t in tags if t in _ACTION_DRAFT_TAGS]
+    if not action_tags:
+        return ""
+    try:
+        import anthropic
+        from contact_resolver import cost_tracker
+
+        issues = "; ".join(_ACTION_DRAFT_TAG_LABELS.get(t, t) for t in action_tags)
+        prompt = (
+            "You are helping a data subject follow up on a GDPR Subject Access Request.\n"
+            "The company has replied but the response is unclear or requires action.\n\n"
+            f"Company: {company_name}\n"
+            f"Detected issue(s): {issues}\n"
+            f"Their reply:\n{reply_body[:3000]}\n\n"
+            "Write a concise professional follow-up email body (3-5 sentences, no salutation, no sign-off).\n"
+            "The reply should acknowledge their message and ask for the specific clarification needed.\n"
+            "Reference GDPR Article 15 rights if relevant. Return ONLY the email body text."
+        )
+        model = "claude-haiku-4-5-20251001"
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model=model,
+            max_tokens=400,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        cost_tracker.record_llm_call(
+            company_name=company_name,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            model=model,
+            found=True,
+            source="reply_draft",
+            purpose="Follow-up reply drafting",
+        )
+        return response.content[0].text.strip()
+    except Exception:
+        return ""
+
+
 def _llm_classify(message: dict, api_key: str) -> dict | None:
     """Call Claude Haiku to classify a message that regex couldn't tag."""
     try:
@@ -546,37 +661,66 @@ def _llm_classify(message: dict, api_key: str) -> dict | None:
         from contact_resolver import cost_tracker
 
         client = anthropic.Anthropic(api_key=api_key)
-        body_preview = (message.get("body", "") or "")[:500]
+        body_preview = (message.get("body", "") or "")[:1500]
+        subject = message.get("subject", "")
+        # Detect request type from subject so the LLM has accurate context
+        if "subprocessor" in subject.lower():
+            request_type = "Subprocessor Disclosure Request (asking company to list their data sub-processors under GDPR Art. 13/14)"
+        else:
+            request_type = "Subject Access Request (SAR) under GDPR Article 15"
         prompt = (
-            "You are a GDPR compliance assistant. Classify this email reply to a Subject Access Request.\n\n"
+            "You are a GDPR compliance assistant. Classify this email reply to a GDPR request.\n\n"
+            f"Request type sent: {request_type}\n"
             f"From: {message.get('from', '')}\n"
-            f"Subject: {message.get('subject', '')}\n"
+            f"Subject: {subject}\n"
             f"Body snippet: {message.get('snippet', '')}\n"
-            f"Body (first 500 chars): {body_preview}\n\n"
-            "Reply in JSON with these keys:\n"
-            '  "tags": list of strings from: AUTO_ACKNOWLEDGE, OUT_OF_OFFICE, BOUNCE_PERMANENT, '
-            "BOUNCE_TEMPORARY, CONFIRMATION_REQUIRED, IDENTITY_REQUIRED, MORE_INFO_REQUIRED, "
-            "WRONG_CHANNEL, REQUEST_ACCEPTED, EXTENDED, IN_PROGRESS, "
-            "DATA_PROVIDED_LINK, DATA_PROVIDED_ATTACHMENT, DATA_PROVIDED_PORTAL, REQUEST_DENIED, "
-            "NO_DATA_HELD, NOT_GDPR_APPLICABLE, FULFILLED_DELETION, HUMAN_REVIEW, NON_GDPR\n"
-            "Tag guidance:\n"
-            "- Use DATA_PROVIDED_LINK when the email contains a URL pointing to a data export or "
-            "download, even if the body is a notification shell (e.g. 'Your export is ready — click here'). "
-            "The presence of a download/export URL is sufficient.\n"
-            "- Use NON_GDPR for emails unrelated to the SAR (e.g. security alerts, "
-            "marketing, account notifications).\n"
-            "- Use NOT_GDPR_APPLICABLE only when the company explicitly states the user is not covered by GDPR.\n"
-            '  "reference_number": string or null\n'
-            '  "confirmation_url": string or null\n'
-            '  "data_link": string or null\n'
-            '  "portal_url": string or null\n'
-            '  "deadline_extension_days": integer or null\n'
-            "Reply with JSON only, no explanation."
+            f"Body (first 1500 chars): {body_preview}\n\n"
+            "## Tag definitions\n"
+            "Choose one or more tags from this list. Definitions are strict — do not invent tags.\n\n"
+            "AUTO_ACKNOWLEDGE — Company acknowledged receipt and will respond later. This is the correct tag for:\n"
+            "  - Any generic 'we received your email / a representative will be in touch / someone will get back to you' reply\n"
+            "  - Support desk auto-replies ('Thanks for contacting us, our team will respond shortly')\n"
+            "  - Ticket/case/reference number assigned\n"
+            "  - Request escalated to privacy/data protection team\n"
+            "  - Bot replies that say 'you don't need to do anything else'\n"
+            "  Key: if the email says nothing actionable and just promises a future response, it is AUTO_ACKNOWLEDGE.\n\n"
+            "REQUEST_ACCEPTED — Company explicitly confirmed they are processing the GDPR request (beyond mere receipt).\n\n"
+            "IN_PROGRESS — Company confirmed work has started (e.g. 'we are compiling your data').\n\n"
+            "EXTENDED — Company invoked the 2-month extension under GDPR Art. 12(3). Extract days if stated.\n\n"
+            "IDENTITY_REQUIRED — Company requires proof of identity before proceeding.\n\n"
+            "CONFIRMATION_REQUIRED — Company requires the user to click a link or reply to confirm the request.\n\n"
+            "MORE_INFO_REQUIRED — Company cannot process without additional information from the user.\n\n"
+            "WRONG_CHANNEL — Company says this email address is unmonitored, or directs to a portal/form instead.\n\n"
+            "DATA_PROVIDED_LINK — Email contains a URL to download the user's data export.\n\n"
+            "DATA_PROVIDED_ATTACHMENT — Email has an attached file containing the user's data.\n\n"
+            "DATA_PROVIDED_PORTAL — Company says data is available via a self-service portal (no direct link).\n\n"
+            "REQUEST_DENIED — Company refuses to fulfil the request, citing a legal basis.\n\n"
+            "NO_DATA_HELD — Company confirms they hold no personal data about the user.\n\n"
+            "NOT_GDPR_APPLICABLE — Company explicitly states the user is not covered by GDPR.\n\n"
+            "FULFILLED_DELETION — Company confirmed deletion/erasure is complete.\n\n"
+            "OUT_OF_OFFICE — Sender is on leave; auto-reply with return date.\n\n"
+            "BOUNCE_PERMANENT — Delivery failure; address does not exist.\n\n"
+            "BOUNCE_TEMPORARY — Delivery failure; mailbox full or temporary error.\n\n"
+            "NON_GDPR — Email is unrelated to the GDPR request (security alert, marketing, billing, etc.).\n\n"
+            "HUMAN_REVIEW — LAST RESORT ONLY. Use only when the email is clearly a substantive GDPR response "
+            "(contains legal analysis, specific decisions, or detailed data) but genuinely fits none of the tags above. "
+            "NEVER use alongside AUTO_ACKNOWLEDGE. NEVER use for generic 'we'll be in touch' replies.\n\n"
+            "## Output format\n"
+            "Reply with JSON only, no explanation:\n"
+            "{\n"
+            '  "tags": [<one or more tag strings from the list above>],\n'
+            '  "reference_number": <ticket/case ref string, or null>,\n'
+            '  "confirmation_url": <URL to confirm request, or null>,\n'
+            '  "data_link": <first data export URL, or null>,\n'
+            '  "portal_url": <self-service portal URL, or null>,\n'
+            '  "deadline_extension_days": <integer days of extension, or null>,\n'
+            '  "summary": <one plain-English sentence ≤15 words describing what this reply says>\n'
+            "}"
         )
         model = "claude-haiku-4-5-20251001"
         response = client.messages.create(
             model=model,
-            max_tokens=300,
+            max_tokens=400,
             messages=[{"role": "user", "content": prompt}],
         )
         cost_tracker.record_llm_call(

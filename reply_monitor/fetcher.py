@@ -52,15 +52,15 @@ def fetch_replies_for_sar(
     messages: list[dict] = []
 
     if thread_id:
+        # Thread-based lookup is authoritative: only messages in our SAR's Gmail
+        # thread are genuine replies. Do NOT also search by domain — that picks up
+        # newsletters, marketing mail, and other unrelated emails from the same sender.
         thread_msgs = _fetch_by_thread(service, thread_id, user_email, seen_ids, verbose)
         messages.extend(thread_msgs)
-        for m in thread_msgs:
-            seen_ids.add(m["id"])
-
-    # Always also run the search — catches replies that arrive in a separate thread
-    # (e.g. Zendesk/Freshdesk tickets opened by the company after receiving the SAR)
-    search_msgs = _fetch_by_search(service, sent_record, user_email, seen_ids, verbose)
-    messages.extend(search_msgs)
+    else:
+        # No thread_id: legacy record or portal/postal SAR — fall back to domain search.
+        search_msgs = _fetch_by_search(service, sent_record, user_email, seen_ids, verbose)
+        messages.extend(search_msgs)
 
     return messages
 
@@ -87,15 +87,17 @@ def _fetch_by_thread(
         return []
 
     results = []
-    for msg in thread.get("messages", []):
+    for i, msg in enumerate(thread.get("messages", [])):
+        if i == 0:
+            continue  # First message is the original letter we sent — always skip
         if msg["id"] in existing_ids:
             continue
         from_header = _get_header(msg, "From")
-        # Skip own outgoing messages
-        if user_email and user_email.lower() in from_header.lower():
-            continue
+        from_self = bool(user_email and user_email.lower() in from_header.lower())
         parsed = _parse_message(msg)
         if parsed:
+            if from_self:
+                parsed["from_self"] = True
             results.append(parsed)
     return results
 

@@ -41,10 +41,12 @@ def _make_state(domain="example.com", company_name="ExampleCo", replies=None,
     )
 
 
-def _make_reply(tags, msg_id="msg001", snippet="test snippet"):
+def _make_reply(tags, msg_id="msg001", snippet="test snippet", received_at="2026-03-17T10:00:00Z",
+                suggested_reply="", reply_review_status="",
+                sent_reply_body="", sent_reply_at=""):
     return ReplyRecord(
         gmail_message_id=msg_id,
-        received_at="2026-03-17T10:00:00Z",
+        received_at=received_at,
         from_addr="privacy@example.com",
         subject="Re: SAR",
         snippet=snippet,
@@ -53,6 +55,10 @@ def _make_reply(tags, msg_id="msg001", snippet="test snippet"):
         llm_used=False,
         has_attachment=False,
         attachment_catalog=None,
+        suggested_reply=suggested_reply,
+        reply_review_status=reply_review_status,
+        sent_reply_body=sent_reply_body,
+        sent_reply_at=sent_reply_at,
     )
 
 
@@ -135,6 +141,36 @@ class TestComputeStatus:
         )
         assert compute_status(state) == "COMPLETED"
 
+    def test_user_replied_when_all_action_replies_sent(self):
+        # WRONG_CHANNEL reply, user replied → USER_REPLIED
+        state = _make_state(replies=[
+            _make_reply(["WRONG_CHANNEL"], reply_review_status="sent"),
+        ])
+        assert compute_status(state) == "USER_REPLIED"
+
+    def test_action_required_when_some_action_replies_not_sent(self):
+        # Two action replies, only one replied to → still ACTION_REQUIRED
+        state = _make_state(replies=[
+            _make_reply(["IDENTITY_REQUIRED"], msg_id="msg001", reply_review_status="sent"),
+            _make_reply(["MORE_INFO_REQUIRED"], msg_id="msg002", reply_review_status=""),
+        ])
+        assert compute_status(state) == "ACTION_REQUIRED"
+
+    def test_action_required_when_reply_is_pending(self):
+        # pending (draft ready but not sent) → ACTION_REQUIRED
+        state = _make_state(replies=[
+            _make_reply(["WRONG_CHANNEL"], reply_review_status="pending"),
+        ])
+        assert compute_status(state) == "ACTION_REQUIRED"
+
+    def test_user_replied_ignores_non_gdpr(self):
+        # Action reply replied to + NON_GDPR reply → USER_REPLIED (NON_GDPR excluded)
+        state = _make_state(replies=[
+            _make_reply(["WRONG_CHANNEL"], msg_id="msg001", reply_review_status="sent"),
+            _make_reply(["NON_GDPR"], msg_id="msg002", reply_review_status=""),
+        ])
+        assert compute_status(state) == "USER_REPLIED"
+
 
 # ---------------------------------------------------------------------------
 # Status priority tests
@@ -161,6 +197,45 @@ class TestStatusPriority:
     def test_sort_key_ordering(self):
         keys = [status_sort_key(s) for s in ["PENDING", "ACKNOWLEDGED", "COMPLETED", "OVERDUE"]]
         assert keys == sorted(keys)  # ascending by urgency in sort_key
+
+
+# ---------------------------------------------------------------------------
+# Bounce superseded / exhausted tests
+# ---------------------------------------------------------------------------
+
+class TestBounceSuperseded:
+    def test_bounce_superseded_by_later_reply(self):
+        # SAR bounced first, then we sent to a new address and got acknowledged.
+        # Status should reflect the later reply, not the old bounce.
+        state = _make_state(replies=[
+            _make_reply(["BOUNCE_PERMANENT"], msg_id="msg001", received_at="2026-03-10T10:00:00Z"),
+            _make_reply(["REQUEST_ACCEPTED"], msg_id="msg002", received_at="2026-03-15T10:00:00Z"),
+        ])
+        assert compute_status(state) == "ACKNOWLEDGED"
+
+    def test_bounce_not_superseded_when_latest(self):
+        # Only bounce reply — should still return BOUNCED.
+        state = _make_state(replies=[
+            _make_reply(["BOUNCE_PERMANENT"], msg_id="msg001"),
+        ])
+        assert compute_status(state) == "BOUNCED"
+
+    def test_two_bounces_returns_bounced(self):
+        # Two bounce replies — most recent event is still a bounce → BOUNCED.
+        # (ACTION_REQUIRED / ADDRESS_NOT_FOUND only fires once address_exhausted=True.)
+        state = _make_state(replies=[
+            _make_reply(["BOUNCE_PERMANENT"], msg_id="msg001", received_at="2026-03-10T10:00:00Z"),
+            _make_reply(["BOUNCE_PERMANENT"], msg_id="msg002", received_at="2026-03-15T10:00:00Z"),
+        ])
+        assert compute_status(state) == "BOUNCED"
+
+    def test_bounce_superseded_non_gdpr_ignored(self):
+        # NON_GDPR reply after bounce should not count as superseding it.
+        state = _make_state(replies=[
+            _make_reply(["BOUNCE_PERMANENT"], msg_id="msg001", received_at="2026-03-10T10:00:00Z"),
+            _make_reply(["NON_GDPR"], msg_id="msg002", received_at="2026-03-15T10:00:00Z"),
+        ])
+        assert compute_status(state) == "BOUNCED"
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +331,57 @@ class TestPersistence:
         path.write_text("NOT VALID JSON")
         result = load_state("user@gmail.com", path=path)
         assert result == {}
+
+    def test_reply_record_new_fields_roundtrip(self, tmp_path):
+        path = tmp_path / "reply_state.json"
+        reply = _make_reply(
+            ["WRONG_CHANNEL"],
+            suggested_reply="Please clarify which channel to use.",
+            reply_review_status="pending",
+        )
+        state = _make_state(replies=[reply])
+        save_state("user@gmail.com", {"example.com": state}, path=path)
+        loaded = load_state("user@gmail.com", path=path)
+        r = loaded["example.com"].replies[0]
+        assert r.suggested_reply == "Please clarify which channel to use."
+        assert r.reply_review_status == "pending"
+
+    def test_reply_record_old_dict_loads_with_defaults(self):
+        """Old reply_state.json entries without new fields load with empty defaults."""
+        d = {
+            "gmail_message_id": "msg001",
+            "received_at": "2026-03-17T10:00:00Z",
+            "from": "privacy@example.com",
+            "subject": "Re: SAR",
+            "snippet": "test",
+            "tags": ["AUTO_ACKNOWLEDGE"],
+            "extracted": {},
+            "llm_used": False,
+            "has_attachment": False,
+            "attachment_catalog": None,
+            # no suggested_reply, reply_review_status, sent_reply_body, sent_reply_at
+        }
+        r = ReplyRecord.from_dict(d)
+        assert r.suggested_reply == ""
+        assert r.reply_review_status == ""
+        assert r.sent_reply_body == ""
+        assert r.sent_reply_at == ""
+
+    def test_sent_reply_fields_roundtrip(self, tmp_path):
+        """sent_reply_body and sent_reply_at survive a save/load cycle."""
+        path = tmp_path / "reply_state.json"
+        reply = _make_reply(
+            ["WRONG_CHANNEL"],
+            reply_review_status="sent",
+            sent_reply_body="I will re-submit via the web form.",
+            sent_reply_at="2026-03-27T10:00:00Z",
+        )
+        state = _make_state(replies=[reply])
+        save_state("user@gmail.com", {"example.com": state}, path=path)
+        loaded = load_state("user@gmail.com", path=path)
+        r = loaded["example.com"].replies[0]
+        assert r.sent_reply_body == "I will re-submit via the web form."
+        assert r.sent_reply_at == "2026-03-27T10:00:00Z"
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,8 @@
 {
   "meta": {
     "version": "1.0",
-    "last_updated": "2026-03-17",
-    "total_companies": 11
+    "last_updated": "2026-03-28",
+    "total_companies": 22
   },
   "companies": {
     "google.com": {
@@ -32,6 +32,13 @@
         "special_instructions": "Use the Google Account Data & Privacy portal to submit your SAR.",
         "identity_verification_required": true,
         "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-28T08:47:50.678824+00:00",
+        "source_url": "https://workspace.google.com/terms/subprocessors/, https://cloud.google.com/terms/subprocessors, https://firebase.google.com/terms/subprocessors",
+        "subprocessors": [],
+        "fetch_status": "not_found",
+        "error_message": ""
       }
     },
     "substack.com": {
@@ -61,7 +68,8 @@
         "special_instructions": "",
         "identity_verification_required": false,
         "known_response_time_days": 30
-      }
+      },
+      "subprocessors": null
     },
     "hrtechprivacy.com": {
       "company_name": "HR Tech Privacy / Indeed, Inc",
@@ -90,7 +98,8 @@
         "special_instructions": "Data subject requests should be submitted through automated self-service system. DPO email is for policy-related inquiries only. For Glassdoor services, submit requests via privacy portal. EU GDPR representative: Glassdoor Hiring Solutions Ireland Ltd; UK GDPR representative: Glassdoor Global Ltd",
         "identity_verification_required": true,
         "known_response_time_days": 30
-      }
+      },
+      "subprocessors": null
     },
     "indeed.zendesk.com": {
       "company_name": "Zendesk",
@@ -119,7 +128,8 @@
         "special_instructions": "Contact Privacy Team and DPO at listed address. Zendesk is a data processor under GDPR; customer data controllers bear primary responsibility for GDPR compliance.",
         "identity_verification_required": true,
         "known_response_time_days": 30
-      }
+      },
+      "subprocessors": null
     },
     "interactivebrokers.com": {
       "company_name": "Interactive Brokers",
@@ -148,7 +158,8 @@
         "special_instructions": "Contact Data Protection Officer via email for GDPR inquiries. Alternative Luxembourg office contact: dpo@interactivebrokers.lu. For general client inquiries contact IBKR Client Service through IBKR website at ibkr.com/help",
         "identity_verification_required": false,
         "known_response_time_days": 30
-      }
+      },
+      "subprocessors": null
     },
     "paypal.com": {
       "company_name": "PayPal",
@@ -177,6 +188,13 @@
         "special_instructions": "",
         "identity_verification_required": false,
         "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-28T08:48:25.882176+00:00",
+        "source_url": "https://paypal.com/legal/sub-processors",
+        "subprocessors": [],
+        "fetch_status": "not_found",
+        "error_message": ""
       }
     },
     "polymarket.intercom-mail.com": {
@@ -206,7 +224,8 @@
         "special_instructions": "Requests can be submitted through Privacy Request Form or via email to DPO. Messenger contact also available through Intercom platform.",
         "identity_verification_required": false,
         "known_response_time_days": 30
-      }
+      },
+      "subprocessors": null
     },
     "reflexivity.com": {
       "company_name": "Reflexivity",
@@ -235,6 +254,48 @@
         "special_instructions": "",
         "identity_verification_required": false,
         "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-23T21:33:57.219394+00:00",
+        "source_url": "https://reflexivity.com/privacy-policy",
+        "subprocessors": [
+          {
+            "domain": "stripe.com",
+            "company_name": "Stripe",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "payment processing"
+            ],
+            "data_categories": [
+              "payment data"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://reflexivity.com/privacy-policy",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "checkout.com",
+            "company_name": "Checkout.com",
+            "hq_country": "United Kingdom",
+            "hq_country_code": "GB",
+            "purposes": [
+              "payment processing"
+            ],
+            "data_categories": [
+              "payment data"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://reflexivity.com/privacy-policy",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          }
+        ],
+        "fetch_status": "ok",
+        "error_message": ""
       }
     },
     "substackinc.com": {
@@ -264,35 +325,13 @@
         "special_instructions": "For GDPR data subject access requests (DSAR), contact privacy@substackinc.com. EEA and UK users should contact Substack local representatives (contact details in privacy policy).",
         "identity_verification_required": false,
         "known_response_time_days": 30
-      }
-    },
-    "whop.com": {
-      "company_name": "Whop",
-      "legal_entity_name": "Whop Inc.",
-      "source": "llm_search",
-      "source_confidence": "medium",
-      "last_verified": "2026-03-17",
-      "contact": {
-        "dpo_email": "",
-        "privacy_email": "support@whop.com",
-        "gdpr_portal_url": "",
-        "postal_address": {
-          "line1": "300 Kent Ave #401",
-          "city": "Brooklyn",
-          "postcode": "NY 11249",
-          "country": "United States"
-        },
-        "preferred_method": "email"
       },
-      "flags": {
-        "portal_only": false,
-        "email_accepted": true,
-        "auto_send_possible": false
-      },
-      "request_notes": {
-        "special_instructions": "Contact support@whop.com for privacy inquiries. Whop's privacy policy references GDPR compliance but does not list a dedicated DPO email or GDPR-specific contact portal on the main whop.com site.",
-        "identity_verification_required": false,
-        "known_response_time_days": 30
+      "subprocessors": {
+        "fetched_at": "2026-03-28T08:51:37.592194+00:00",
+        "source_url": "",
+        "subprocessors": [],
+        "fetch_status": "not_found",
+        "error_message": ""
       }
     },
     "glassdoor.com": {
@@ -322,6 +361,1082 @@
         "special_instructions": "EU representative: Glassdoor Hiring Solutions Ireland Ltd. UK representative: Glassdoor Global Ltd. Identity verification required for all requests.",
         "identity_verification_required": true,
         "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-28T08:51:46.628726+00:00",
+        "source_url": "",
+        "subprocessors": [],
+        "fetch_status": "not_found",
+        "error_message": ""
+      }
+    },
+    "finalroundai.com": {
+      "company_name": "Final Round AI",
+      "legal_entity_name": "Pump Labs Inc., dba Final Round AI",
+      "source": "llm_search",
+      "source_confidence": "medium",
+      "last_verified": "2026-03-19",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "hi@finalroundai.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": true
+      },
+      "request_notes": {
+        "special_instructions": "No specific DPO email listed; use general privacy contact email for GDPR requests",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-28T08:48:03.032238+00:00",
+        "source_url": "",
+        "subprocessors": [],
+        "fetch_status": "not_found",
+        "error_message": ""
+      }
+    },
+    "paypal.co.uk": {
+      "company_name": "PayPal",
+      "legal_entity_name": "PayPal UK Ltd",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-20",
+      "contact": {
+        "dpo_email": "dpo@paypal.com",
+        "privacy_email": "dpo@paypal.com",
+        "gdpr_portal_url": "https://www.paypal.com/uk/webapps/mpp/paypal-and-your-data",
+        "postal_address": {
+          "line1": "5 Fleet Place",
+          "city": "London",
+          "postcode": "EC4M 7RD",
+          "country": "United Kingdom"
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": true
+      },
+      "request_notes": {
+        "special_instructions": "UK residents can also contact Bird & Bird GDPR Representative UK at 12 New Fetter Lane, Holburn, London EC4A 1JP for UK-specific GDPR inquiries. DPO can be contacted online or offline. Privacy requests can also be submitted through PayPal's Privacy Hub by clicking 'Ask questions about privacy'.",
+        "identity_verification_required": true,
+        "known_response_time_days": 30
+      },
+      "subprocessors": null
+    },
+    "emails.paypal.com": {
+      "company_name": "PayPal",
+      "legal_entity_name": "PayPal (Europe) S.à.r.l. et Cie, S.C.A.",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-20",
+      "contact": {
+        "dpo_email": "dpo@paypal.com",
+        "privacy_email": "dpo@paypal.com",
+        "gdpr_portal_url": "https://www.paypal.com/us/webapps/mpp/ua/privacy-full",
+        "postal_address": {
+          "line1": "22-24 Boulevard Royal",
+          "city": "Luxembourg",
+          "postcode": "L-2449",
+          "country": "Luxembourg"
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": true
+      },
+      "request_notes": {
+        "special_instructions": "PayPal also provides online contact through Privacy Hub. Account holders can submit requests through 'Data and Privacy' in Account Settings. Non-account holders can access privacy portal. Alternative UK contact: PayPal UK Ltd, 5 Fleet Place, London EC4M 7RD, United Kingdom.",
+        "identity_verification_required": true,
+        "known_response_time_days": 30
+      },
+      "subprocessors": null
+    },
+    "xoom.com": {
+      "company_name": "Xoom",
+      "legal_entity_name": "PayPal (Europe) S.à.r.l. et Cie, S.C.A.",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-20",
+      "contact": {
+        "dpo_email": "dpo@paypal.com",
+        "privacy_email": "help-eea@xoom.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "22-24 Boulevard Royal",
+          "city": "Luxembourg",
+          "postcode": "L-2449",
+          "country": "Luxembourg"
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": true
+      },
+      "request_notes": {
+        "special_instructions": "Xoom is a service of PayPal, Inc. GDPR contacts are listed in the Privacy Statement for EEA residents. For EEA residents, use help-eea@xoom.com or contact the PayPal DPO.",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      },
+      "subprocessors": null
+    },
+    "figma.com": {
+      "company_name": "Figma",
+      "legal_entity_name": "",
+      "source": "privacy_scrape",
+      "source_confidence": "medium",
+      "last_verified": "2026-03-20",
+      "contact": {
+        "dpo_email": "data-protection@2x.png",
+        "privacy_email": "privacy@figma.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-23T21:38:57.573077+00:00",
+        "source_url": "https://figma.com/sub-processors",
+        "subprocessors": [
+          {
+            "domain": "agora.io",
+            "company_name": "Agora, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "voice communication"
+            ],
+            "data_categories": [
+              "customer-provided audio content"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "aws.amazon.com",
+            "company_name": "Amazon Web Services, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "cloud infrastructure"
+            ],
+            "data_categories": [
+              "customer data"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "cloudflare.com",
+            "company_name": "Cloudflare, Ltd.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "web infrastructure"
+            ],
+            "data_categories": [
+              "identifiers",
+              "email address",
+              "user ID",
+              "IP address"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "datadog.com",
+            "company_name": "Datadog, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "infrastructure monitoring"
+            ],
+            "data_categories": [
+              "authorized user data"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "sentry.io",
+            "company_name": "Functional Software, Inc. (Sentry)",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "error tracking"
+            ],
+            "data_categories": [
+              "authorized user data"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "modallabs.com",
+            "company_name": "Modal Labs, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "cloud infrastructure"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "snowflake.com",
+            "company_name": "Snowflake, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "data warehouse"
+            ],
+            "data_categories": [
+              "authorized user data"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "twilio.com",
+            "company_name": "Twilio, Inc. (Segment)",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "data analytics"
+            ],
+            "data_categories": [
+              "authorized user data"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "anthropic.com",
+            "company_name": "Anthropic PBC",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI model provider"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "bria.ai",
+            "company_name": "Bria Artificial Intelligence Ltd",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI model provider"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "cerebras.net",
+            "company_name": "Cerebras Systems, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI infrastructure"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "fal.ai",
+            "company_name": "Features & Labels, Inc. (FAL)",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI image generation"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "fireworks.ai",
+            "company_name": "Fireworks.ai, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI infrastructure"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "freepik.com",
+            "company_name": "Freepik, Inc.",
+            "hq_country": "Spain",
+            "hq_country_code": "ES",
+            "purposes": [
+              "AI model provider"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "google.com",
+            "company_name": "Google LLC (Vertex)",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI model provider"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "groq.com",
+            "company_name": "Groq, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI infrastructure"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "jasper.ai",
+            "company_name": "Jasper AI, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI model provider"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "lightricks.com",
+            "company_name": "Lightricks Ltd",
+            "hq_country": "Israel",
+            "hq_country_code": "IL",
+            "purposes": [
+              "AI model provider"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "lumalabs.ai",
+            "company_name": "Luma AI, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI model provider"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "microsoft.com",
+            "company_name": "Microsoft Corporation (Azure)",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "cloud infrastructure"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "openai.com",
+            "company_name": "OpenAI, LLC",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI model provider"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "recraft.ai",
+            "company_name": "Recraft, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "AI model provider"
+            ],
+            "data_categories": [
+              "prompt inputs and outputs"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "decagon.ai",
+            "company_name": "Decagon AI, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "customer support automation"
+            ],
+            "data_categories": [
+              "requester identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "gainsight.com",
+            "company_name": "Gainsight, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "support forum hosting"
+            ],
+            "data_categories": [
+              "requester identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "firebase.google.com",
+            "company_name": "Google LLC (Firebase)",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "push notifications"
+            ],
+            "data_categories": [
+              "recipient identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "hex.tech",
+            "company_name": "Hex, Inc",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "data analytics"
+            ],
+            "data_categories": [
+              "requester identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "intercom.com",
+            "company_name": "Intercom, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "customer support"
+            ],
+            "data_categories": [
+              "requester identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "intouchcx.com",
+            "company_name": "IntouchCX, Inc.",
+            "hq_country": "Canada",
+            "hq_country_code": "CA",
+            "purposes": [
+              "customer support"
+            ],
+            "data_categories": [
+              "requester identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "posthog.com",
+            "company_name": "PostHog, Inc.",
+            "hq_country": "Germany",
+            "hq_country_code": "DE",
+            "purposes": [
+              "analytics"
+            ],
+            "data_categories": [
+              "requester identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "premiertalentpartners.com",
+            "company_name": "Premier Talent Partners",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "customer support"
+            ],
+            "data_categories": [
+              "requester identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "sendgrid.com",
+            "company_name": "SendGrid, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "email notifications"
+            ],
+            "data_categories": [
+              "recipient identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "sprinklr.com",
+            "company_name": "Sprinklr, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "customer support"
+            ],
+            "data_categories": [
+              "requester identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "zendesk.com",
+            "company_name": "Zendesk, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "customer support"
+            ],
+            "data_categories": [
+              "requester identity information"
+            ],
+            "transfer_basis": "SCCs",
+            "source_url": "https://figma.com/sub-processors",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          }
+        ],
+        "fetch_status": "ok",
+        "error_message": ""
+      }
+    },
+    "whop.com": {
+      "company_name": "Whop",
+      "legal_entity_name": "Whop Inc.",
+      "source": "privacy_scrape",
+      "source_confidence": "high",
+      "last_verified": "2026-03-21",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "support@whop.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "300 Kent Ave #401",
+          "city": "Brooklyn",
+          "postcode": "NY 11249",
+          "country": "United States"
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "Whop privacy policy explicitly directs GDPR/data subject requests to support@whop.com — no dedicated DPO email exists.",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-28T08:52:32.386525+00:00",
+        "source_url": "https://whop.com/sub-processors",
+        "subprocessors": [],
+        "fetch_status": "not_found",
+        "error_message": ""
+      }
+    },
+    "intercom.io": {
+      "company_name": "intercom.io",
+      "legal_entity_name": "",
+      "source": "llm_search",
+      "source_confidence": "low",
+      "last_verified": "2026-03-23",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-23T21:29:52.676994+00:00",
+        "source_url": "https://www.intercom.com/legal/subprocessors-list",
+        "subprocessors": [
+          {
+            "domain": "aws.amazon.com",
+            "company_name": "Amazon Web Services, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "hosting",
+              "storage",
+              "data processing",
+              "AI processing"
+            ],
+            "data_categories": [
+              "customer data",
+              "conversation data",
+              "user records"
+            ],
+            "transfer_basis": "unknown",
+            "source_url": "https://www.intercom.com/legal/subprocessors-list",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "snowflake.com",
+            "company_name": "Snowflake Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "data warehouse",
+              "analytics",
+              "data processing including AI"
+            ],
+            "data_categories": [
+              "customer data",
+              "analytics data"
+            ],
+            "transfer_basis": "unknown",
+            "source_url": "https://www.intercom.com/legal/subprocessors-list",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "mailgun.com",
+            "company_name": "Mailgun Technologies, L.L.C.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "email delivery",
+              "bulk email campaigns"
+            ],
+            "data_categories": [
+              "email data",
+              "recipient addresses"
+            ],
+            "transfer_basis": "unknown",
+            "source_url": "https://www.intercom.com/legal/subprocessors-list",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "sparkpost.com",
+            "company_name": "Message Systems, Inc. (d/b/a Sparkpost)",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "email delivery",
+              "bulk email campaigns"
+            ],
+            "data_categories": [
+              "email data",
+              "recipient addresses"
+            ],
+            "transfer_basis": "unknown",
+            "source_url": "https://www.intercom.com/legal/subprocessors-list",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          },
+          {
+            "domain": "twilio.com",
+            "company_name": "Twilio, Inc.",
+            "hq_country": "United States",
+            "hq_country_code": "US",
+            "purposes": [
+              "SMS services",
+              "phone calls",
+              "video calls"
+            ],
+            "data_categories": [
+              "phone numbers",
+              "conversation data",
+              "SMS content"
+            ],
+            "transfer_basis": "unknown",
+            "source_url": "https://www.intercom.com/legal/subprocessors-list",
+            "source": "llm_search",
+            "last_fetched": "2026-03-23",
+            "sub_subprocessors": []
+          }
+        ],
+        "fetch_status": "ok",
+        "error_message": ""
+      }
+    },
+    "qcex.com": {
+      "company_name": "qcex.com",
+      "legal_entity_name": "",
+      "source": "llm_search",
+      "source_confidence": "low",
+      "last_verified": "2026-03-23",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-28T08:47:39.796588+00:00",
+        "source_url": "https://qcex.com/sub-processors",
+        "subprocessors": [],
+        "fetch_status": "not_found",
+        "error_message": ""
+      }
+    },
+    "zendesk.com": {
+      "company_name": "zendesk.com",
+      "legal_entity_name": "",
+      "source": "llm_search",
+      "source_confidence": "low",
+      "last_verified": "2026-03-23",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-28T08:52:02.064288+00:00",
+        "source_url": "https://support.zendesk.com/hc/en-us/articles/4408883061530-Sub-processor-Policy",
+        "subprocessors": [],
+        "fetch_status": "not_found",
+        "error_message": ""
+      }
+    },
+    "clubavolta.com": {
+      "company_name": "Clubavolta",
+      "legal_entity_name": "",
+      "source": "privacy_scrape",
+      "source_confidence": "medium",
+      "last_verified": "2026-03-28",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "privacy@avolta.net",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      },
+      "subprocessors": null
+    },
+    "society.zendesk.com": {
+      "company_name": "Zendesk",
+      "legal_entity_name": "Zendesk, Inc.",
+      "source": "llm_search",
+      "source_confidence": "high",
+      "last_verified": "2026-03-28",
+      "contact": {
+        "dpo_email": "euprivacy@zendesk.com",
+        "privacy_email": "privacy@zendesk.com",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "181 Fremont Street",
+          "city": "San Francisco",
+          "postcode": "CA 94105",
+          "country": "United States"
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": true
+      },
+      "request_notes": {
+        "special_instructions": "Contact DPO and Privacy Team. Zendesk is a data processor, not a controller, for customer data processed through products. For questions about how Zendesk uses your personal data (website visitors, business contacts), use the contacts above.",
+        "identity_verification_required": true,
+        "known_response_time_days": 30
+      },
+      "subprocessors": null
+    },
+    "avolta.net": {
+      "company_name": "avolta.net",
+      "legal_entity_name": "",
+      "source": "llm_search",
+      "source_confidence": "low",
+      "last_verified": "2026-03-28",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-03-28T08:52:58.465155+00:00",
+        "source_url": "",
+        "subprocessors": [],
+        "fetch_status": "not_found",
+        "error_message": ""
       }
     }
   }

@@ -26,17 +26,33 @@ REPLY_TAGS = [
     "NOT_GDPR_APPLICABLE",
     "FULFILLED_DELETION",
     "HUMAN_REVIEW",
+    "YOUR_REPLY",  # Manual reply sent by the user directly in Gmail (not via dashboard)
 ]
 
-# Derived company statuses (computed, never stored)
+# Derived per-stream statuses (computed, never stored)
 COMPANY_STATUSES = [
     "PENDING",
     "BOUNCED",
+    "ADDRESS_NOT_FOUND",
     "ACKNOWLEDGED",
     "ACTION_REQUIRED",
+    "USER_REPLIED",
     "EXTENDED",
     "COMPLETED",
     "DENIED",
+    "OVERDUE",
+]
+
+# Derived company-level (two-stream) statuses (computed, never stored)
+COMPANY_LEVEL_STATUSES = [
+    "PENDING",
+    "SP_PENDING",
+    "IN_PROGRESS",
+    "FULLY_RESOLVED",
+    "DATA_RECEIVED",
+    "USER_REPLIED",
+    "STALLED",
+    "ACTION_REQUIRED",
     "OVERDUE",
 ]
 
@@ -119,6 +135,10 @@ class ReplyRecord:
     llm_used: bool
     has_attachment: bool
     attachment_catalog: dict | None
+    suggested_reply: str = ""
+    reply_review_status: str = ""   # "" | "pending" | "sent" | "dismissed"
+    sent_reply_body: str = ""       # actual text user sent (may differ from suggested_reply if edited)
+    sent_reply_at: str = ""         # ISO timestamp of when user sent it
 
     def to_dict(self) -> dict:
         return {
@@ -132,6 +152,10 @@ class ReplyRecord:
             "llm_used": self.llm_used,
             "has_attachment": self.has_attachment,
             "attachment_catalog": self.attachment_catalog,
+            "suggested_reply": self.suggested_reply,
+            "reply_review_status": self.reply_review_status,
+            "sent_reply_body": self.sent_reply_body,
+            "sent_reply_at": self.sent_reply_at,
         }
 
     @classmethod
@@ -147,6 +171,10 @@ class ReplyRecord:
             llm_used=d["llm_used"],
             has_attachment=d["has_attachment"],
             attachment_catalog=d.get("attachment_catalog"),
+            suggested_reply=d.get("suggested_reply", ""),
+            reply_review_status=d.get("reply_review_status", ""),
+            sent_reply_body=d.get("sent_reply_body", ""),
+            sent_reply_at=d.get("sent_reply_at", ""),
         )
 
 
@@ -159,13 +187,18 @@ class ReplyRecord:
 class CompanyState:
     domain: str
     company_name: str
-    sar_sent_at: str          # ISO datetime string
-    to_email: str
+    sar_sent_at: str          # ISO datetime string — most recent attempt
+    to_email: str             # most recent attempt address
     subject: str
-    gmail_thread_id: str
-    deadline: str             # ISO date YYYY-MM-DD
+    gmail_thread_id: str      # most recent attempt thread
+    deadline: str             # ISO date YYYY-MM-DD — most recent attempt deadline
     replies: list[ReplyRecord] = field(default_factory=list)
     last_checked: str = ""
+    # Older attempts (bounced / superseded), ordered oldest-first.
+    # Each entry: {to_email, gmail_thread_id, sar_sent_at, deadline, replies: [...]}
+    past_attempts: list[dict] = field(default_factory=list)
+    # Set True when all address retry attempts are exhausted (no more addresses to try)
+    address_exhausted: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -178,6 +211,8 @@ class CompanyState:
             "deadline": self.deadline,
             "replies": [r.to_dict() for r in self.replies],
             "last_checked": self.last_checked,
+            "past_attempts": self.past_attempts,
+            "address_exhausted": self.address_exhausted,
         }
 
     @classmethod
@@ -193,4 +228,6 @@ class CompanyState:
             deadline=d["deadline"],
             replies=replies,
             last_checked=d.get("last_checked", ""),
+            past_attempts=d.get("past_attempts", []),
+            address_exhausted=d.get("address_exhausted", False),
         )

@@ -75,14 +75,19 @@
         <div class="card-body">
           <h5 class="card-title mb-1">{{ item.company_name }}</h5>
           <div class="text-muted small mb-2">{{ item.domain }}</div>
-          <div class="mb-2">
-            <span class="badge bg-{{ item.status_color or 'secondary' }}">{{ item.status }}</span>
+          {% if item.tried_emails %}
+            {% for addr in item.tried_emails %}
+              <div class="text-muted small"><s>&#x2709; {{ addr }}</s></div>
+            {% endfor %}
+          {% endif %}
+          <div class="mb-2 mt-1">
+            <span class="badge bg-{{ item.status_color or 'secondary' }}">{{ item.status.replace('_', ' ') }}</span>
             {% if item.days_remaining is not none %}
             <span class="text-muted small ms-2">{{ item.days_remaining }}d remaining</span>
             {% endif %}
           </div>
           {% if item.latest_tag %}
-          <div class="small text-muted">Latest: {{ item.latest_tag }}</div>
+          <div class="small text-muted">Latest: {{ item.latest_tag.replace('_', ' ') }}</div>
           {% endif %}
         </div>
         <div class="card-footer bg-transparent">

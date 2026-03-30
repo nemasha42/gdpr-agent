@@ -32,6 +32,31 @@ class RequestNotes(BaseModel):
     known_response_time_days: int = 30
 
 
+class Subprocessor(BaseModel):
+    domain: str
+    company_name: str
+    hq_country: str = ""
+    hq_country_code: str = ""
+    purposes: list[str] = Field(default_factory=list)
+    data_categories: list[str] = Field(default_factory=list)
+    transfer_basis: Literal["adequacy_decision", "SCCs", "BCRs", "consent", "none", "unknown"] = "unknown"
+    source_url: str = ""
+    source: Literal["scrape_subprocessor_page", "scrape_privacy_policy", "llm_search"] = "llm_search"
+    last_fetched: str = ""
+    sub_subprocessors: list["Subprocessor"] = Field(default_factory=list)
+
+
+Subprocessor.model_rebuild()
+
+
+class SubprocessorRecord(BaseModel):
+    fetched_at: str
+    source_url: str = ""
+    subprocessors: list[Subprocessor] = Field(default_factory=list)
+    fetch_status: Literal["ok", "not_found", "error", "pending"] = "pending"
+    error_message: str = ""
+
+
 class CompanyRecord(BaseModel):
     company_name: str
     legal_entity_name: str = ""
@@ -41,6 +66,7 @@ class CompanyRecord(BaseModel):
     contact: Contact = Field(default_factory=Contact)
     flags: Flags = Field(default_factory=Flags)
     request_notes: RequestNotes = Field(default_factory=RequestNotes)
+    subprocessors: SubprocessorRecord | None = None
 
 
 class DBMeta(BaseModel):

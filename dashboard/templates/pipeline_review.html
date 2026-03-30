@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Review Letters — GDPR SAR{% endblock %}
+
+{% block nav_extra %}
+<a href="/pipeline?account={{ account }}" class="btn btn-sm btn-outline-secondary ms-3">← Pipeline</a>
+{% endblock %}
+
+{% block content %}
+
+{% if not send_token_valid %}
+<div class="alert alert-warning d-flex align-items-center gap-3" role="alert">
+  <div>
+    <strong>Gmail send authorization expired.</strong>
+    Your send token has been revoked or expired and needs to be re-authorized before letters can be sent.
+    {% if send_auth_error %}
+      <br><small class="text-muted">Error: {{ send_auth_error }}</small>
+    {% endif %}
+  </div>
+  <a href="/pipeline/reauth-send?account={{ account }}"
+     class="btn btn-warning btn-sm ms-auto text-nowrap">
+    Re-authorize Gmail send
+  </a>
+</div>
+{% endif %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h4 class="mb-0">Review SAR Letters</h4>
+    <p class="text-muted small mb-0">{{ account }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-outline-secondary btn-sm" onclick="setAll(true)">Approve all</button>
+    <button class="btn btn-outline-danger btn-sm" onclick="setAll(false)">Skip all</button>
+    <button id="send-btn" class="btn btn-success btn-sm" onclick="sendApproved()"
+            {% if not review_items or not send_token_valid %}disabled{% endif %}
+            {% if not send_token_valid %}title="Re-authorize Gmail send access first"{% endif %}>
+      Send approved
+    </button>
+  </div>
+</div>
+
+{% if not review_items %}
+  <div class="alert alert-info">No letters ready to review. Complete contact resolution first.</div>
+{% else %}
+  <p class="text-muted small mb-3">
+    {{ review_items | length }} letter{% if review_items | length != 1 %}s{% endif %} ready.
+    Check the ones you want to send, then click "Send approved".
+  </p>
+
+  {% for item in review_items %}
+  <div class="card mb-2" id="card-{{ item.domain | replace('.', '-') }}">
+    <div class="card-body py-2 px-3">
+      <div class="d-flex align-items-start gap-3">
+        <div class="pt-1">
+          <input type="checkbox" class="form-check-input approval-check"
+                 data-domain="{{ item.domain }}"
+                 id="chk-{{ loop.index }}"
+                 {% if item.approved %}checked{% endif %}
+                 onchange="onCheckChange(this)">
+        </div>
+        <div class="flex-grow-1">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <label class="fw-semibold mb-0" for="chk-{{ loop.index }}">{{ item.company_name }}</label>
+            <span class="badge {% if item.confidence == 'HIGH' %}bg-success{% elif item.confidence == 'MEDIUM' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+              {{ item.confidence }}
+            </span>
+            {% if item.method == 'email' %}
+              <span class="badge bg-primary">EMAIL</span>
+              <span class="text-muted small">{{ item.to_email }}</span>
+            {% elif item.method == 'portal' %}
+              <span class="badge bg-info text-dark">PORTAL</span>
+              <span class="text-muted small text-truncate" style="max-width:200px">{{ item.portal_url }}</span>
+            {% else %}
+              <span class="badge bg-secondary">POSTAL</span>
+            {% endif %}
+          </div>
+          {% if item.method != 'email' %}
+            <div class="alert alert-warning py-1 px-2 mt-1 mb-0 small">
+              Manual action required — you must submit this yourself via the {{ item.method }}.
+            </div>
+          {% endif %}
+          <div class="mt-1">
+            <button class="btn btn-link btn-sm p-0 text-muted"
+                    onclick="togglePreview('prev-{{ loop.index }}', this)">
+              Show letter
+            </button>
+            <pre id="prev-{{ loop.index }}"
+                 class="d-none mt-2 p-2 bg-light border rounded small"
+                 style="white-space:pre-wrap;font-size:0.78rem">{{ item.body }}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<script>
+const ACCOUNT = {{ account | tojson }};
+let pendingSave = null;
+
+function onCheckChange(el) {
+  // Debounce: send batch update 600ms after last change
+  clearTimeout(pendingSave);
+  pendingSave = setTimeout(saveApprovals, 600);
+}
+
+function saveApprovals() {
+  const approvals = {};
+  document.querySelectorAll('.approval-check').forEach(el => {
+    approvals[el.dataset.domain] = el.checked;
+  });
+  fetch('/pipeline/approve', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({account: ACCOUNT, approvals})
+  });
+}
+
+function setAll(approved) {
+  document.querySelectorAll('.approval-check').forEach(el => { el.checked = approved; });
+  clearTimeout(pendingSave);
+  saveApprovals();
+}
+
+function togglePreview(id, btn) {
+  const el = document.getElementById(id);
+  const hidden = el.classList.toggle('d-none');
+  btn.textContent = hidden ? 'Show letter' : 'Hide letter';
+}
+
+function sendApproved() {
+  // Save current state first, then submit the send form
+  saveApprovals();
+  setTimeout(() => {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/pipeline/send';
+    const acc = document.createElement('input');
+    acc.type = 'hidden'; acc.name = 'account'; acc.value = ACCOUNT;
+    form.appendChild(acc);
+    document.body.appendChild(form);
+    form.submit();
+  }, 700);
+}
+</script>
+{% endblock %}

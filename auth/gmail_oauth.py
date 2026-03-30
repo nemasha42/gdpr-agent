@@ -156,6 +156,34 @@ def get_gmail_service(
     return service, email
 
 
+def check_send_token_valid(
+    email: str,
+    tokens_dir: Path = _TOKENS_DIR,
+) -> tuple[bool, str]:
+    """Return (is_valid, error_message).
+
+    Attempts a silent token refresh if the token is expired.  Does NOT open a
+    browser.  Returns (False, reason) if the token is missing, invalid, or the
+    refresh failed (e.g. revoked).
+    """
+    token_path = tokens_dir / f"{_safe_email(email)}_send.json"
+    if not token_path.exists():
+        return False, "No send token found"
+    creds = _load_creds(token_path, SEND_SCOPES)
+    if creds is None:
+        return False, "Could not load send token"
+    if creds.valid:
+        return True, ""
+    if creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+            token_path.write_text(creds.to_json())
+            return True, ""
+        except Exception as exc:
+            return False, str(exc)
+    return False, "Send token invalid — no refresh token"
+
+
 def get_gmail_send_service(
     email: str,
     credentials_path: Path = _CREDENTIALS_PATH,

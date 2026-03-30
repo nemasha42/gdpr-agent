@@ -76,8 +76,15 @@ class TestCompose:
         assert "Jane Doe" in letter.body
         assert "jane@example.com" in letter.body
 
-    def test_email_prefers_dpo_over_privacy(self) -> None:
+    def test_email_prefers_privacy_over_dpo(self) -> None:
+        # privacy@ is preferred for SAR sends; dpo@ is for regulatory/authority contact
         record = _make_record(dpo_email="dpo@acme.com", privacy_email="privacy@acme.com")
+        with patch("letter_engine.composer.settings", **_MOCK_SETTINGS):
+            letter = compose(record)
+        assert letter.to_email == "privacy@acme.com"
+
+    def test_email_falls_back_to_dpo_when_no_privacy(self) -> None:
+        record = _make_record(dpo_email="dpo@acme.com", privacy_email="")
         with patch("letter_engine.composer.settings", **_MOCK_SETTINGS):
             letter = compose(record)
         assert letter.to_email == "dpo@acme.com"

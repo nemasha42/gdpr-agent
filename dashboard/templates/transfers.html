@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% block title %}Data Transfer Map — GDPR SAR{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-12 d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+      <h4 class="mb-0">Data Transfer Map</h4>
+      <p class="text-muted small mb-0">Subprocessors used by companies you've sent SARs to</p>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <form method="POST" action="/transfers/fetch" class="d-flex align-items-center gap-2">
+        <input type="hidden" name="account" value="{{ account }}">
+        {% if running_task %}
+          <span class="badge bg-warning text-dark">Fetching…</span>
+          <div class="spinner-border spinner-border-sm text-warning" id="fetch-spinner"></div>
+        {% else %}
+          <button type="submit" class="btn btn-sm btn-outline-primary">Fetch all subprocessors</button>
+        {% endif %}
+      </form>
+      <form method="POST" action="/transfers/request-all" class="d-flex align-items-center gap-2">
+        <input type="hidden" name="account" value="{{ account }}">
+        {% if running_request_task %}
+          <span class="badge bg-secondary">Sending requests…</span>
+          <div class="spinner-border spinner-border-sm text-secondary"></div>
+        {% else %}
+          <button type="submit" class="btn btn-sm btn-outline-secondary"
+                  title="Send a formal disclosure request to all companies with an email contact">
+            Request from all
+          </button>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+</div>
+
+{% if running_task %}
+<div class="alert alert-info py-2 mb-3" id="task-progress-bar-wrap">
+  <div class="d-flex justify-content-between mb-1">
+    <small>Fetching subprocessors…</small>
+    <small id="task-progress-text">{{ running_task.progress }}/{{ running_task.total }}</small>
+  </div>
+  <div class="progress" style="height:6px">
+    <div class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+         id="task-progress-bar"
+         style="width: {% if running_task.total > 0 %}{{ (running_task.progress / running_task.total * 100)|int }}{% else %}100{% endif %}%">
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Filter bar ───────────────────────────────────────────────────────────── #}
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-center">
+      <div class="col-auto">
+        <input type="text" id="kw-filter" class="form-control form-control-sm" placeholder="Search…" style="width:160px">
+      </div>
+      <div class="col-auto">
+        <select id="country-filter" class="form-select form-select-sm" style="width:160px">
+          <option value="">All countries</option>
+        </select>
+      </div>
+      <div class="col-auto ms-auto">
+        <span class="text-muted small" id="visible-count"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if not rows %}
+  <div class="text-center text-muted py-5">
+    <div class="fs-1">🗺️</div>
+    <p class="mt-2">No companies found. Send some SARs first, then click "Fetch all subprocessors".</p>
+  </div>
+{% else %}
+
+<div class="accordion" id="transfers-accordion">
+{% for row in rows %}
+  {% set sp = row.subprocessors %}
+  {% set sp_list = sp.subprocessors if sp else [] %}
+  {% set fetch_status = sp.fetch_status if sp else 'pending' %}
+
+  <div class="accordion-item company-accordion-item mb-2 border rounded"
+       data-company="{{ row.company_name }}"
+       data-domain="{{ row.domain }}">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed py-2" type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#acc-{{ loop.index }}"
+              aria-expanded="false">
+        <div class="d-flex align-items-center gap-2 flex-wrap w-100">
+          <span class="fw-semibold">{{ row.company_name }}</span>
+          <span class="text-muted small">{{ row.domain }}</span>
+          <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+            {% if sp_list %}
+              <span class="text-muted small">{{ sp_list|length }} subprocessors</span>
+            {% elif fetch_status == 'ok' %}
+              <span class="badge bg-secondary">No subprocessors found</span>
+            {% elif fetch_status == 'pending' %}
+              <span class="badge bg-light text-muted border">Not fetched</span>
+            {% elif fetch_status == 'error' %}
+              <span class="badge bg-danger">Error</span>
+            {% elif fetch_status == 'not_found' %}
+              <span class="badge bg-secondary">None found</span>
+            {% endif %}
+            {% if sp and sp.fetched_at %}
+              <span class="text-muted small">{{ sp.fetched_at[:10] }}</span>
+            {% endif %}
+            {% if row.request_sent %}
+              <span class="badge
+                {% if row.sp_status == 'COMPLETED' %}bg-success
+                {% elif row.sp_status == 'ACKNOWLEDGED' %}bg-info text-dark
+                {% elif row.sp_status == 'OVERDUE' %}bg-danger
+                {% elif row.sp_status == 'ACTION_REQUIRED' %}bg-warning text-dark
+                {% else %}bg-light text-muted border{% endif %}"
+                style="font-size:0.72rem"
+                title="Disclosure request sent — {{ row.sp_status or 'Pending' }}">
+                SP: {{ (row.sp_status or 'Pending') | replace('_', ' ') | title }}
+              </span>
+            {% elif row.has_email %}
+              <form method="POST" action="/transfers/request-letter/{{ row.domain }}" style="display:inline" onclick="event.stopPropagation()">
+                <input type="hidden" name="account" value="{{ account }}">
+                <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem">
+                  Request disclosure
+                </button>
+              </form>
+            {% else %}
+              <span class="text-muted" style="font-size:0.72rem" title="No email contact on file">No contact</span>
+            {% endif %}
+          </div>
+        </div>
+      </button>
+    </h2>
+    <div id="acc-{{ loop.index }}" class="accordion-collapse collapse">
+      <div class="accordion-body p-0">
+        {% if sp_list %}
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Subprocessor</th>
+                  <th>Country</th>
+                  <th>Purposes</th>
+                  <th>Data Categories</th>
+                  <th>Basis</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for s in sp_list %}
+                <tr class="sp-row"
+                    data-country="{{ s.hq_country_code }}"
+                    data-purposes="{{ s.purposes|join(' ') }}"
+                    data-name="{{ s.company_name }} {{ s.domain }}">
+                  <td>
+                    <div class="fw-semibold">{{ s.company_name }}</div>
+                    <div class="text-muted small">{{ s.domain }}</div>
+                  </td>
+                  <td>
+                    {% if s.hq_country_code %}
+                      {{ s.hq_country_code | flag_emoji }}
+                    {% endif %}
+                    <span class="small">{{ s.hq_country }}</span>
+                  </td>
+                  <td>
+                    {% for p in s.purposes %}
+                      <span class="badge bg-light text-dark border me-1 mb-1" style="font-size:0.72rem">{{ p }}</span>
+                    {% endfor %}
+                  </td>
+                  <td>
+                    {% for c in s.data_categories %}
+                      <span class="data-category-chip">{{ c }}</span>
+                    {% endfor %}
+                  </td>
+                  <td>
+                    <span class="badge bg-light text-dark border" style="font-size:0.72rem">{{ s.transfer_basis }}</span>
+                  </td>
+                  <td>
+                    {% if s.source_url %}
+                      <a href="{{ s.source_url }}" target="_blank" rel="noopener" class="text-muted small">↗</a>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% elif fetch_status == 'error' %}
+          <div class="p-3 text-danger small">Error: {{ sp.error_message if sp else 'Unknown error' }}</div>
+        {% elif fetch_status == 'not_found' %}
+          <div class="p-3 text-muted small">No subprocessors found for this company.</div>
+        {% else %}
+          <div class="p-3 text-muted small">Not yet fetched. Click "Fetch all subprocessors" above.</div>
+        {% endif %}
+        {% if row.sp_replies %}
+        <div class="p-3 border-top" id="{{ row.domain }}">
+          <div class="text-muted small fw-semibold mb-2">Disclosure replies ({{ row.sp_replies|length }})</div>
+          {% for r in row.sp_replies %}
+          <div class="reply-row mb-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <span class="text-muted small">{{ r.received_at[:10] }}</span>
+              {% for tag in r.tags %}
+                <span class="badge bg-secondary" style="font-size:0.68rem">{{ tag | replace('_', ' ') }}</span>
+              {% endfor %}
+            </div>
+            <div class="snippet-text mt-1 small text-muted">{{ r.snippet }}</div>
+            {% if r.gmail_message_id %}
+            <div class="mt-1">
+              <button class="expand-btn btn btn-link btn-sm p-0 text-muted"
+                      data-domain="{{ row.domain }}"
+                      data-msgid="{{ r.gmail_message_id }}"
+                      data-account="{{ account }}"
+                      style="font-size:0.78rem">&#x25BC; Expand email</button>
+              <pre class="d-none mt-1 p-2 bg-light rounded" style="font-size:0.78rem;white-space:pre-wrap;max-height:300px;overflow-y:auto"></pre>
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endfor %}
+</div>
+{% endif %}
+
+<script>
+// ---------------------------------------------------------------------------
+// Filter logic
+// ---------------------------------------------------------------------------
+const kwInput = document.getElementById('kw-filter');
+const countrySelect = document.getElementById('country-filter');
+const visibleCount = document.getElementById('visible-count');
+
+// Build country dropdown from data
+const allCountries = new Set();
+document.querySelectorAll('.sp-row[data-country]').forEach(r => {
+  if (r.dataset.country) allCountries.add(r.dataset.country);
+});
+[...allCountries].sort().forEach(cc => {
+  const opt = document.createElement('option');
+  opt.value = cc;
+  opt.textContent = cc;
+  countrySelect.appendChild(opt);
+});
+
+function applyFilters() {
+  const kw = kwInput.value.toLowerCase();
+  const cc = countrySelect.value;
+
+  let visibleRows = 0;
+  let visibleCompanies = 0;
+
+  document.querySelectorAll('.company-accordion-item').forEach(item => {
+    const rows = item.querySelectorAll('.sp-row');
+    if (rows.length === 0) {
+      // No subprocessors — always show accordion item
+      item.style.display = '';
+      visibleCompanies++;
+      return;
+    }
+    let anyVisible = false;
+    rows.forEach(row => {
+      const country = row.dataset.country || '';
+      const name = (row.dataset.name || '').toLowerCase();
+      const purposes = (row.dataset.purposes || '').toLowerCase();
+
+      const countryOk = !cc || country === cc;
+      const kwOk = !kw || name.includes(kw) || purposes.includes(kw);
+
+      if (countryOk && kwOk) {
+        row.style.display = '';
+        anyVisible = true;
+        visibleRows++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    item.style.display = anyVisible ? '' : 'none';
+    if (anyVisible) visibleCompanies++;
+  });
+
+  visibleCount.textContent = `${visibleRows} subprocessors across ${visibleCompanies} companies`;
+}
+
+kwInput.addEventListener('input', applyFilters);
+countrySelect.addEventListener('change', applyFilters);
+applyFilters();
+
+// ---------------------------------------------------------------------------
+// Expand email body (disclosure replies)
+// ---------------------------------------------------------------------------
+document.addEventListener('click', async function(e) {
+  const btn = e.target.closest('.expand-btn');
+  if (!btn) return;
+  const pre = btn.nextElementSibling;
+  if (!pre) return;
+  if (!pre.classList.contains('d-none')) {
+    pre.classList.add('d-none');
+    btn.textContent = '\u25BC Expand email';
+    return;
+  }
+  if (pre.textContent.trim()) {
+    pre.classList.remove('d-none');
+    btn.textContent = '\u25B2 Collapse';
+    return;
+  }
+  btn.textContent = '\u2026loading';
+  const { domain, msgid, account } = btn.dataset;
+  try {
+    const res = await fetch(`/api/body/${domain}/${msgid}?account=${account}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    pre.textContent = data.body;
+    pre.classList.remove('d-none');
+    btn.textContent = '\u25B2 Collapse';
+  } catch (err) {
+    pre.textContent = `Error: ${err.message}`;
+    pre.classList.remove('d-none');
+    btn.textContent = '\u25B2 Collapse';
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Progress bar polling
+// ---------------------------------------------------------------------------
+{% if running_task %}
+(function poll() {
+  fetch('/api/transfers/task?task_id={{ running_task.id }}')
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'running') {
+        const bar = document.getElementById('task-progress-bar');
+        const txt = document.getElementById('task-progress-text');
+        if (bar && data.total > 0) {
+          bar.style.width = Math.round(data.progress / data.total * 100) + '%';
+        }
+        if (txt) txt.textContent = data.progress + '/' + data.total;
+        setTimeout(poll, 2000);
+      } else {
+        window.location.reload();
+      }
+    })
+    .catch(() => setTimeout(poll, 3000));
+})();
+{% endif %}
+</script>
+{% endblock %}

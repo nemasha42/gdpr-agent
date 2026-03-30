@@ -7,6 +7,7 @@ from pathlib import Path
 from letter_engine.models import SARLetter
 
 _TRACKER_PATH = Path(__file__).parent.parent / "user_data" / "sent_letters.json"
+_SUBPROCESSOR_REQUESTS_PATH = Path(__file__).parent.parent / "user_data" / "subprocessor_requests.json"
 
 
 def record_sent(letter: SARLetter, *, path: Path = _TRACKER_PATH) -> None:
@@ -14,6 +15,28 @@ def record_sent(letter: SARLetter, *, path: Path = _TRACKER_PATH) -> None:
     log = get_log(path=path)
     log.append({
         "sent_at": datetime.now().isoformat(timespec="seconds"),
+        "company_name": letter.company_name,
+        "method": letter.method,
+        "to_email": letter.to_email,
+        "subject": letter.subject,
+        "gmail_message_id": letter.gmail_message_id,
+        "gmail_thread_id": letter.gmail_thread_id,
+    })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(log, indent=2))
+
+
+def record_subprocessor_request(
+    letter: SARLetter,
+    domain: str,
+    *,
+    path: Path = _SUBPROCESSOR_REQUESTS_PATH,
+) -> None:
+    """Append a sent subprocessor disclosure request to the tracker file."""
+    log = get_log(path=path)
+    log.append({
+        "sent_at": datetime.now().isoformat(timespec="seconds"),
+        "domain": domain,
         "company_name": letter.company_name,
         "method": letter.method,
         "to_email": letter.to_email,

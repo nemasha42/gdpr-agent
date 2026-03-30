@@ -1,148 +1,422 @@
 {% extends "base.html" %}
 
-{% block title %}{{ state.company_name }} — GDPR SAR{% endblock %}
+{% block title %}{{ state.company_name }} — GDPR Agent{% endblock %}
 
 {% block nav_extra %}
   <a href="/?account={{ account }}" class="btn btn-sm btn-outline-secondary">&larr; Dashboard</a>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center gap-3 mb-4">
-  <div>
+<style>
+  /* Stream panels */
+  .stream-panel { border: none; box-shadow: 0 1px 6px rgba(0,0,0,0.10); border-radius: 10px; overflow: hidden; }
+  .stream-header { background: #fff; border-bottom: 1px solid #e9ecef; }
+  .stream-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6c757d; }
+
+  /* Thread messages */
+  .thread-body { background: #f8f9fa; }
+  .msg-wrap { padding: 0 1.25rem; }
+
+  /* Sent letter (system outgoing) */
+  .msg-sent-letter {
+    background: #eef3fb;
+    border-left: 3px solid #0d6efd;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 12px 0;
+  }
+
+  /* Company reply */
+  .msg-company {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-left: 3px solid #adb5bd;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 12px 0;
+  }
+
+  /* Your reply */
+  .msg-you {
+    background: #f0faf3;
+    border-left: 3px solid #198754;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 12px 0;
+    margin-left: 2rem;
+  }
+
+  /* Expand toggle */
+  .expand-toggle { font-size: 0.8rem; color: #6c757d; background: none; border: none; padding: 0; cursor: pointer; }
+  .expand-toggle:hover { color: #0d6efd; }
+
+  /* Draft form */
+  .draft-panel { background: #fffbea; border-top: 2px solid #ffc107; padding: 16px 20px; }
+
+  /* Status reason */
+  .status-reason { font-size: 0.82rem; color: #495057; }
+
+  /* Thread toggle button */
+  .thread-toggle-btn { font-size: 0.82rem; }
+</style>
+
+{# ── Page header ── #}
+<div class="d-flex align-items-start gap-3 mb-4">
+  <div class="flex-grow-1">
     <h4 class="mb-0 fw-bold">{{ state.company_name }}</h4>
     <span class="text-muted small">{{ domain }}</span>
   </div>
-  <span class="badge bg-{{ status_colour }} fs-6 status-badge">{{ status.replace('_', ' ') }}</span>
+  <div class="text-end">
+    <span class="badge bg-{{ company_status_colour }} fs-6">{{ company_status.replace('_', ' ') }}</span>
+    <div class="text-muted small mt-1">Deadline {{ state.deadline }}
+      {% if sar_days_left > 0 %}· {{ sar_days_left }} days left
+      {% elif sar_days_left == 0 %}· Due today
+      {% else %}· {{ (-sar_days_left)|int }} days overdue{% endif %}
+    </div>
+  </div>
 </div>
 
-{# Summary row #}
-<div class="row g-2 mb-4">
-  <div class="col-auto">
-    <div class="card px-3 py-2 text-center">
-      <div class="small text-muted">SAR Sent</div>
-      <div class="fw-semibold">{{ state.sar_sent_at[:10] }}</div>
+{# ── Past attempts (bounced addresses) ── #}
+{% if past_attempts %}
+<details class="mb-4">
+  <summary class="text-muted small" style="cursor:pointer">
+    Previous addresses tried ({{ past_attempts | selectattr('duplicate', 'equalto', false) | list | length }})
+  </summary>
+  <div class="mt-2">
+  {% for pa in past_attempts %}{% if not pa.duplicate %}
+  <div class="card mb-2 border-secondary opacity-75 p-0">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-2 px-3">
+      <span class="small"><s>&#x2709; {{ pa.to_email }}</s> <span class="text-muted">{{ pa.sar_sent_at }}</span></span>
+      <span class="badge bg-secondary">BOUNCED</span>
     </div>
-  </div>
-  <div class="col-auto">
-    <div class="card px-3 py-2 text-center">
-      <div class="small text-muted">Deadline</div>
-      <div class="fw-semibold">{{ state.deadline }}</div>
+    {% if pa.reply_rows %}
+    <div class="card-body py-2 px-3">
+      {% for r in pa.reply_rows %}
+      <div class="small text-muted mb-1">
+        {% for tag in r.tags %}
+          <span class="tag-chip bg-{{ tag_colour.get(tag, 'secondary') }} text-white">{{ tag_names.get(tag, tag) }}</span>
+        {% endfor %}
+        {{ r.from_addr }} — {{ r.received_at }}
+      </div>
+      {% endfor %}
     </div>
+    {% endif %}
   </div>
-  <div class="col-auto">
-    <div class="card px-3 py-2 text-center">
-      <div class="small text-muted">GDPR Replies</div>
-      <div class="fw-semibold">{{ reply_rows | selectattr('non_gdpr', 'equalto', false) | list | length }}</div>
-    </div>
+  {% endif %}{% endfor %}
   </div>
-  {% if state.to_email %}
-  <div class="col-auto">
-    <div class="card px-3 py-2 text-center">
-      <div class="small text-muted">Sent to</div>
-      <div class="fw-semibold small">{{ state.to_email }}</div>
-    </div>
-  </div>
-  {% endif %}
-</div>
+</details>
+{% endif %}
 
-{# Reply thread #}
-{% if reply_rows %}
-  <h6 class="text-muted mb-3">Reply Thread (newest first)</h6>
-  {% for r in reply_rows %}
-  <div class="card mb-3 {% if r.non_gdpr %}opacity-50{% endif %}">
-    <div class="card-body">
-      <div class="d-flex justify-content-between align-items-start mb-1">
-        <div>
-          <span class="fw-semibold small">{{ r.from_addr }}</span>
-          <span class="text-muted small ms-2">{{ r.received_at }}</span>
+{# ════════════════════════════════════════════════════════════════
+   MACRO: renders one stream panel (SAR or SP)
+   stream_label     — "Subject Access Request" / "Subprocessor Disclosure Request"
+   stream_id        — "sar" / "sp"   (used as DOM id prefix)
+   stream_status    — computed status string
+   status_colour    — Bootstrap color name
+   sent_date        — display date string
+   sent_to          — email address
+   deadline_str     — deadline date or "" (SAR only)
+   thread_events    — list of event dicts (oldest first)
+   followup_url     — POST url for sending reply
+   dismiss_url      — POST url for dismissing draft
+   ════════════════════════════════════════════════════════════════ #}
+{% macro stream_panel(stream_label, stream_id, stream_status, s_colour, sent_date, sent_to, deadline_str, thread_events, followup_url, dismiss_url) %}
+
+{# Derive the "why" one-liner from the thread #}
+{% set company_msgs = thread_events | selectattr('type', 'equalto', 'reply') | selectattr('non_gdpr', 'equalto', false) | list %}
+{% set your_msgs    = thread_events | selectattr('type', 'equalto', 'your_reply') | list %}
+{% set last_company = company_msgs[-1] if company_msgs else none %}
+{% set last_yours   = your_msgs[-1]   if your_msgs   else none %}
+
+{% if last_yours and (not last_company or last_yours.sort_key >= last_company.sort_key) %}
+  {% set why = "You replied — awaiting company response" %}
+{% elif not last_company %}
+  {% set why = "Awaiting first response" %}
+{% elif 'WRONG_CHANNEL' in last_company.tags %}
+  {% set why = "Company says to use a different channel" %}
+{% elif 'IDENTITY_REQUIRED' in last_company.tags %}
+  {% set why = "Identity verification required before processing" %}
+{% elif 'CONFIRMATION_REQUIRED' in last_company.tags %}
+  {% set why = "Company requires you to confirm the request" %}
+{% elif 'MORE_INFO_REQUIRED' in last_company.tags %}
+  {% set why = "Company has asked for more information" %}
+{% elif 'DATA_PROVIDED_LINK' in last_company.tags or 'DATA_PROVIDED_ATTACHMENT' in last_company.tags or 'DATA_PROVIDED_PORTAL' in last_company.tags %}
+  {% set why = "Data export received" %}
+{% elif 'FULFILLED_DELETION' in last_company.tags %}
+  {% set why = "Deletion confirmed" %}
+{% elif 'REQUEST_DENIED' in last_company.tags %}
+  {% set why = "Company denied the request" %}
+{% elif 'NO_DATA_HELD' in last_company.tags %}
+  {% set why = "Company says no personal data is held" %}
+{% elif 'NOT_GDPR_APPLICABLE' in last_company.tags %}
+  {% set why = "Company claims GDPR does not apply" %}
+{% elif 'BOUNCE_PERMANENT' in last_company.tags %}
+  {% set why = "Email bounced permanently" %}
+{% elif 'EXTENDED' in last_company.tags %}
+  {% set why = "Company extended the response deadline" %}
+{% elif 'IN_PROGRESS' in last_company.tags %}
+  {% set why = "Company confirmed the request is being processed" %}
+{% elif 'REQUEST_ACCEPTED' in last_company.tags %}
+  {% set why = "Request formally accepted — awaiting data export" %}
+{% elif 'AUTO_ACKNOWLEDGE' in last_company.tags %}
+  {% set why = "Auto-acknowledged — awaiting substantive response" %}
+{% elif 'HUMAN_REVIEW' in last_company.tags %}
+  {% set why = "Reply needs manual review" %}
+{% else %}
+  {% set why = "Awaiting response" %}
+{% endif %}
+
+{# Find the pending draft (if any) #}
+{% set pending_drafts = thread_events | selectattr('type', 'equalto', 'reply') | selectattr('has_action_draft', 'equalto', true) | selectattr('reply_review_status', 'equalto', 'pending') | list %}
+{% set has_draft = pending_drafts | length > 0 %}
+
+{# Count visible events (NON_GDPR replies are hidden) #}
+{% set msg_count = (thread_events | selectattr('type', 'ne', 'reply') | list | length) + (thread_events | selectattr('type', 'equalto', 'reply') | selectattr('non_gdpr', 'equalto', false) | list | length) %}
+
+<div class="stream-panel mb-4">
+
+  {# ── Panel header ── #}
+  <div class="stream-header px-4 py-3">
+    <div class="d-flex align-items-center gap-3 mb-2">
+      <span class="stream-title">{{ stream_label }}</span>
+      <span class="badge bg-{{ s_colour }}">{{ stream_status.replace('_', ' ') }}</span>
+      {% if has_draft %}
+        <span class="badge bg-warning text-dark ms-auto">&#x270F; Draft reply ready</span>
+      {% endif %}
+    </div>
+
+    <div class="status-reason mb-2">{{ why }}</div>
+
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="text-muted small">
+        Sent {{ sent_date }}
+        {% if sent_to %}&rarr; {{ sent_to }}{% endif %}
+        {% if deadline_str %}&nbsp;&middot;&nbsp;Deadline {{ deadline_str }}{% endif %}
+      </div>
+      <button class="btn btn-sm btn-outline-secondary thread-toggle-btn"
+              data-target="{{ stream_id }}-thread"
+              onclick="toggleThread('{{ stream_id }}-thread', this)">
+        Show {{ msg_count }} message{{ 's' if msg_count != 1 else '' }} &#x25BC;
+      </button>
+    </div>
+  </div>
+
+  {# ── Thread body (hidden by default) ── #}
+  <div class="thread-body" id="{{ stream_id }}-thread" style="display:none">
+    <div class="msg-wrap py-1">
+
+    {% for ev in thread_events %}
+
+      {# Sent letter #}
+      {% if ev.type == 'sent' %}
+      <div class="msg-sent-letter">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="small fw-semibold text-primary">&#x2192; You sent</span>
+          <span class="text-muted small">{{ ev.display_at }}</span>
+          {% if ev.to_email %}<span class="text-muted small">&#x2192; {{ ev.to_email }}</span>{% endif %}
         </div>
-        {% if r.llm_used %}
-          <span class="badge bg-light text-muted border">LLM classified</span>
+        <div class="small fw-semibold">{{ ev.subject }}</div>
+      </div>
+
+      {# Your reply #}
+      {% elif ev.type == 'your_reply' %}
+      <div class="msg-you">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="small fw-semibold text-success">&#x2191; Your reply</span>
+          <span class="text-muted small">{{ ev.display_at }}</span>
+        </div>
+        <pre class="mb-0 small" style="white-space:pre-wrap;font-family:inherit;color:#2d3748">{{ ev.body }}</pre>
+      </div>
+
+      {# Company reply — skip NON_GDPR messages entirely #}
+      {% elif ev.type == 'reply' and not ev.non_gdpr %}
+      <div class="msg-company">
+        <div class="d-flex align-items-start justify-content-between gap-2 mb-1">
+          <div>
+            <span class="fw-semibold small">{{ ev.from_addr }}</span>
+            <span class="text-muted small ms-2">{{ ev.display_at }}</span>
+          </div>
+          <div class="d-flex gap-1 flex-wrap justify-content-end">
+            {% for tag in ev.tags if tag != 'NON_GDPR' %}
+              <span class="tag-chip bg-{{ tag_colour.get(tag, 'secondary') }} text-white">{{ tag_names.get(tag, tag) }}</span>
+            {% endfor %}
+            {% if ev.llm_used %}<span class="tag-chip bg-light text-muted border">LLM</span>{% endif %}
+          </div>
+        </div>
+
+        <div class="text-muted small mb-1" style="font-size:0.78rem">{{ ev.subject }}</div>
+
+        {% if ev.extracted and ev.extracted.get('summary') %}
+          <p class="snippet-text mb-1 fst-italic">{{ ev.extracted.summary }}</p>
+        {% else %}
+          <p class="snippet-text mb-1">{{ ev.snippet }}</p>
+        {% endif %}
+
+        <button class="expand-toggle expand-btn"
+                data-domain="{{ domain }}"
+                data-msgid="{{ ev.gmail_message_id }}"
+                data-account="{{ account }}">&#x25BC; Expand email</button>
+        <pre class="body-text d-none mt-2 p-2 bg-white rounded small border"
+             style="white-space:pre-wrap;max-height:400px;overflow-y:auto"></pre>
+
+        {% if ev.extracted %}{% set ex = ev.extracted %}
+          {# Gate each link type on the tags that make it meaningful #}
+          {% set data_tags = ['DATA_PROVIDED_LINK', 'DATA_PROVIDED_ATTACHMENT', 'DATA_PROVIDED_PORTAL', 'FULFILLED_DELETION'] %}
+          {% set portal_tags = ['WRONG_CHANNEL', 'DATA_PROVIDED_PORTAL', 'CONFIRMATION_REQUIRED', 'MORE_INFO_REQUIRED'] %}
+          {% set has_data_tag = ev.tags | select('in', data_tags) | list | length > 0 %}
+          {% set has_portal_tag = ev.tags | select('in', portal_tags) | list | length > 0 %}
+          {% set has_confirm_tag = 'CONFIRMATION_REQUIRED' in ev.tags %}
+          <div class="d-flex flex-wrap gap-3 mt-2 small text-muted">
+            {% if ex.reference_number %}<span>&#x1F4CB; Ref: <strong>{{ ex.reference_number }}</strong></span>{% endif %}
+            {% if has_confirm_tag and ex.confirmation_url %}<span>&#x1F517; <a href="{{ ex.confirmation_url }}" target="_blank">Confirm request</a></span>{% endif %}
+            {% if has_data_tag and ex.data_link %}<span>&#x2B07;&#xFE0F; <a href="{{ ex.data_link }}" target="_blank">Download data</a></span>{% endif %}
+            {% if has_data_tag %}<a href="/data/{{ domain }}?account={{ account }}" class="btn btn-sm btn-outline-success py-0 px-2" style="font-size:0.78rem">&#x1F4C2; View received data</a>{% endif %}
+            {% if has_portal_tag and ex.portal_url %}<span>&#x1F4BB; <a href="{{ ex.portal_url }}" target="_blank">Privacy portal</a></span>{% endif %}
+            {% if ex.deadline_extension_days %}<span>&#x23F1; Extended {{ ex.deadline_extension_days }} days</span>{% endif %}
+          </div>
+        {% endif %}
+        {% if ev.has_attachment %}
+          <div class="mt-1 d-flex align-items-center gap-3">
+            <span class="text-success small">&#x1F4CE; Attachment received</span>
+            <a href="/data/{{ domain }}?account={{ account }}" class="btn btn-sm btn-outline-success py-0 px-2" style="font-size:0.78rem">&#x1F4C2; View received data</a>
+          </div>
         {% endif %}
       </div>
+      {% endif %}
 
-      <div class="text-muted small mb-2">{{ r.subject }}</div>
+    {% endfor %}
 
-      {# Tags #}
-      <div class="mb-2">
-        {% for tag in r.tags %}
-          <span class="tag-chip bg-{{ tag_colour.get(tag, 'secondary') }} {% if tag == 'NON_GDPR' %}text-muted{% else %}text-white{% endif %}">
-            {{ tag.replace('_', ' ') }}
-          </span>
-        {% endfor %}
+    </div>{# /msg-wrap #}
+
+    {# ── Pending draft (at bottom of thread) ── #}
+    {% if has_draft %}
+    {% for ev in pending_drafts %}
+    <div class="draft-panel" id="{{ stream_id }}-draft">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="fw-semibold small">&#x270F; Draft reply</span>
+        <span class="text-muted small">In response to: {{ ev.from_addr }}</span>
+        <span class="badge bg-warning text-dark ms-auto">Review &amp; send</span>
       </div>
-
-      {# Snippet #}
-      <p class="snippet-text mb-2">{{ r.snippet }}</p>
-      <div>
-        <button class="btn btn-link btn-sm p-0 text-muted expand-btn"
-                data-domain="{{ domain }}"
-                data-msgid="{{ r.gmail_message_id }}"
-                data-account="{{ account }}">
-          &#x25BC; Expand email
-        </button>
-        <pre class="body-text d-none mt-2 p-2 bg-light rounded small"
-             style="white-space:pre-wrap; max-height:400px; overflow-y:auto;"></pre>
-      </div>
-
-      {# Extracted info (skip for non-GDPR noise) #}
-      {% if r.extracted and not r.non_gdpr %}
-        {% set ex = r.extracted %}
-        <div class="small text-muted d-flex flex-wrap gap-3">
-          {% if ex.reference_number %}
-            <span>&#x1F4CB; Ref: <strong>{{ ex.reference_number }}</strong></span>
-          {% endif %}
-          {% if ex.confirmation_url %}
-            <span>&#x1F517; <a href="{{ ex.confirmation_url }}" target="_blank">Confirm request</a></span>
-          {% endif %}
-          {% if ex.data_link %}
-            <span>&#x2B07;&#xFE0F; <a href="{{ ex.data_link }}" target="_blank">Download data</a></span>
-          {% endif %}
-          {% if ex.portal_url %}
-            <span>&#x1F4BB; <a href="{{ ex.portal_url }}" target="_blank">Privacy portal</a></span>
-          {% endif %}
-          {% if ex.deadline_extension_days %}
-            <span>&#x23F1; Extended by {{ ex.deadline_extension_days }} days</span>
-          {% endif %}
+      <form method="POST" action="{{ followup_url }}">
+        <input type="hidden" name="account" value="{{ account }}">
+        <input type="hidden" name="gmail_message_id" value="{{ ev.gmail_message_id }}">
+        <input type="hidden" name="to_addr" value="{{ ev.to_addr }}">
+        <input type="hidden" name="subject" value="{{ ev.subject }}">
+        {% if ev.thread_id %}<input type="hidden" name="thread_id" value="{{ ev.thread_id }}">{% endif %}
+        <textarea name="reply_body" class="form-control form-control-sm mb-2"
+                  rows="6" style="font-size:0.85rem">{{ ev.suggested_reply }}</textarea>
+        <div class="d-flex gap-2 align-items-center">
+          <button type="submit" class="btn btn-sm btn-primary">Send reply</button>
+          <span class="text-muted small">to {{ ev.to_addr }}</span>
         </div>
-      {% endif %}
-
-      {% if r.has_attachment and not r.non_gdpr %}
-        <div class="mt-2 text-success small">&#x1F4CE; Attachment received</div>
-      {% endif %}
-
-      {% if r.non_gdpr %}
-        <div class="small text-muted mt-1"><em>Filtered: non-GDPR email (newsletter / marketing)</em></div>
-      {% endif %}
+      </form>
+      <form method="POST" action="{{ dismiss_url }}" class="mt-2">
+        <input type="hidden" name="account" value="{{ account }}">
+        <input type="hidden" name="gmail_message_id" value="{{ ev.gmail_message_id }}">
+        <button type="submit" class="btn btn-link btn-sm p-0 text-muted small">Dismiss draft</button>
+      </form>
     </div>
-  </div>
-  {% endfor %}
-{% else %}
-  <div class="alert alert-light">No replies received yet.</div>
+    {% endfor %}
+    {% endif %}
+
+  </div>{# /thread-body #}
+</div>{# /stream-panel #}
+{% endmacro %}
+
+{# ── Render SAR panel ── #}
+{{ stream_panel(
+  "Subject Access Request",
+  "sar",
+  status,
+  status_colour,
+  state.sar_sent_at[:10],
+  state.to_email,
+  state.deadline,
+  sar_thread,
+  "/company/" ~ domain ~ "/send-followup",
+  "/company/" ~ domain ~ "/dismiss-followup"
+) }}
+
+{# ── Render SP panel (if applicable) ── #}
+{% if sp_sent %}
+{{ stream_panel(
+  "Subprocessor Disclosure Request",
+  "sp",
+  sp_status or "PENDING",
+  sp_status_colour or "secondary",
+  sp_sent.get("sent_at", "")[:10],
+  sp_sent.get("to", ""),
+  "",
+  sp_thread,
+  "/company/" ~ domain ~ "/send-sp-followup",
+  "/company/" ~ domain ~ "/dismiss-sp-followup"
+) }}
 {% endif %}
 
 <script>
+function toggleThread(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const hidden = el.style.display === 'none';
+  el.style.display = hidden ? 'block' : 'none';
+  const count = btn.dataset.count || btn.textContent.match(/\d+/)?.[0] || '';
+  if (hidden) {
+    btn.innerHTML = 'Hide messages &#x25B2;';
+    // Scroll draft into view if present
+    const draft = el.querySelector('.draft-panel');
+    if (draft) setTimeout(() => draft.scrollIntoView({behavior:'smooth', block:'nearest'}), 150);
+  } else {
+    const n = el.querySelectorAll('.msg-sent-letter,.msg-company,.msg-you').length;
+    btn.innerHTML = `Show ${n} message${n !== 1 ? 's' : ''} &#x25BC;`;
+  }
+}
+
+// Expand email body (lazy load from Gmail API)
 document.querySelectorAll('.expand-btn').forEach(btn => {
-  btn.addEventListener('click', async function() {
+  btn.addEventListener('click', async function () {
     const pre = this.nextElementSibling;
     if (!pre.classList.contains('d-none')) {
       pre.classList.add('d-none');
-      this.textContent = '\u25BC Expand email';
+      this.innerHTML = '&#x25BC; Expand email';
       return;
     }
     if (pre.textContent.trim()) {
       pre.classList.remove('d-none');
-      this.textContent = '\u25B2 Collapse';
+      this.innerHTML = '&#x25B2; Collapse';
       return;
     }
-    this.textContent = '\u2026loading';
+    this.innerHTML = '&hellip;loading';
     const { domain, msgid, account } = this.dataset;
-    const res = await fetch(`/api/body/${domain}/${msgid}?account=${account}`);
-    const { body } = await res.json();
-    pre.textContent = body;
-    pre.classList.remove('d-none');
-    this.textContent = '\u25B2 Collapse';
+    try {
+      const res = await fetch(`/api/body/${domain}/${msgid}?account=${account}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      pre.textContent = data.body;
+      pre.style.color = '';
+      pre.classList.remove('d-none');
+      this.innerHTML = '&#x25B2; Collapse';
+    } catch (e) {
+      pre.textContent = `Could not load email body (${e.message}). Check Gmail auth.`;
+      pre.style.color = '#dc3545';
+      pre.classList.remove('d-none');
+      this.innerHTML = '&#x25BC; Expand email';
+    }
   });
+});
+
+// Auto-expand threads that have a pending draft or ACTION_REQUIRED status
+document.querySelectorAll('.stream-panel').forEach(panel => {
+  const hasDraft = panel.querySelector('.draft-panel');
+  const badge = panel.querySelector('.badge');
+  const isAction = badge && badge.textContent.includes('ACTION REQUIRED');
+  if (hasDraft || isAction) {
+    const body = panel.querySelector('.thread-body');
+    const btn = panel.querySelector('.thread-toggle-btn');
+    if (body && btn && body.style.display === 'none') {
+      body.style.display = 'block';
+      btn.innerHTML = 'Hide messages &#x25B2;';
+    }
+  }
 });
 </script>
 {% endblock %}

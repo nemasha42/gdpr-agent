@@ -55,6 +55,40 @@ def preview_and_send(letter: SARLetter, *, dry_run: bool = False, scan_email: st
 # ---------------------------------------------------------------------------
 
 
+def send_letter(
+    letter: SARLetter,
+    scan_email: str,
+    *,
+    record: bool = True,
+) -> tuple[bool, str, str]:
+    """Send *letter* without an interactive Y/N prompt.
+
+    Args:
+        record: If False, skip writing to sent_letters.json. Pass False when
+                sending subprocessor disclosure requests — those are recorded
+                separately in subprocessor_requests.json by the caller.
+
+    Returns:
+        (success, message_id, thread_id).
+        For portal/postal methods success is always True (user must act manually);
+        message_id and thread_id are empty strings.
+    """
+    if letter.method == "email":
+        msg_id, thread_id = _dispatch_email(letter, scan_email)
+        letter.gmail_message_id = msg_id
+        letter.gmail_thread_id = thread_id
+        if msg_id and record:
+            # Only record when Gmail API confirmed delivery — empty msg_id means the
+            # API call failed and the email was never sent.
+            tracker.record_sent(letter)
+        return bool(msg_id), msg_id, thread_id
+
+    # portal / postal — record as sent; user handles submission manually
+    if record:
+        tracker.record_sent(letter)
+    return True, "", ""
+
+
 def _print_preview(letter: SARLetter) -> None:
     print("\n" + "═" * _WIDTH)
     print(f"  SAR PREVIEW — {letter.company_name}")
@@ -72,6 +106,36 @@ def _print_preview(letter: SARLetter) -> None:
     print("─" * _WIDTH)
     print(letter.body)
     print("═" * _WIDTH)
+
+
+def send_thread_reply(
+    thread_id: str,
+    to_addr: str,
+    subject: str,
+    body: str,
+    scan_email: str,
+) -> tuple[bool, str, str]:
+    """Send a reply within an existing Gmail thread.
+
+    Returns (success, message_id, thread_id).
+    """
+    try:
+        from auth.gmail_oauth import get_gmail_send_service
+        service = get_gmail_send_service(scan_email)
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["to"] = to_addr
+        msg["subject"] = subject if subject.startswith("Re:") else f"Re: {subject}"
+        msg["In-Reply-To"] = thread_id
+        msg["References"] = thread_id
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        result = service.users().messages().send(
+            userId="me",
+            body={"raw": raw, "threadId": thread_id},
+        ).execute()
+        return True, result.get("id", ""), result.get("threadId", "")
+    except Exception as exc:
+        print(f"[send_thread_reply] failed: {exc}")
+        return False, "", ""
 
 
 def _dispatch_email(letter: SARLetter, scan_email: str) -> tuple[str, str]:

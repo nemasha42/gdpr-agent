@@ -14,6 +14,9 @@ from reply_monitor.models import AttachmentCatalog, FileEntry
 
 _RECEIVED_DIR = Path(__file__).parent.parent / "user_data" / "received"
 
+# Extensions that are never data exports (images, web assets, etc.)
+_NON_DATA_EXTS = {"png", "jpg", "jpeg", "gif", "ico", "svg", "webp", "bmp", "pdf"}
+
 # Filename patterns → data category names
 _CATEGORY_HINTS: list[tuple[str, str]] = [
     (r"location|geo|maps",          "Location"),
@@ -54,6 +57,11 @@ def handle_attachment(
     attachment_id = part.get("attachmentId", "")
     filename = part.get("filename", "attachment")
     size = part.get("size", 0)
+
+    # Skip non-data file types (images, web assets) — never actual data exports
+    ext_check = Path(filename).suffix.lstrip(".").lower()
+    if ext_check in _NON_DATA_EXTS:
+        return None
 
     # Download raw bytes
     try:
