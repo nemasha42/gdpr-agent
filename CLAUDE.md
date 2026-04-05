@@ -28,6 +28,26 @@ python monitor.py [--account EMAIL] [--verbose]
 
 # Web dashboard (Flask, port 5001)
 python dashboard/app.py
+
+# --- GDPR Universe (subproject, port 5002) ---
+
+# Start the universe dashboard
+python -m gdpr_universe.app
+
+# Import seed companies from CSV
+python -m gdpr_universe.seed_importer --csv seeds.csv
+python -m gdpr_universe.seed_importer --list-indices
+
+# Run subprocessor crawl (wave 0 = seeds, wave 1 = discovered SPs)
+python -m gdpr_universe.crawl_scheduler --wave 0 --max-llm 500
+python -m gdpr_universe.crawl_scheduler --domain stripe.com
+
+# Database utilities
+python -m gdpr_universe.db --init
+python -m gdpr_universe.db --stats
+
+# Run universe tests only
+.venv/bin/pytest tests/unit/test_universe_*.py -v
 ```
 
 ## Architecture
@@ -107,6 +127,33 @@ Invariant: **SP can only escalate; `sp_sent=False` never downgrades.** `DATA_REC
 
 **Config** (`config/settings.py`): Pydantic `Settings` model loaded from `.env` at project root. Fields: `GOOGLE_CLIENT_ID/SECRET`, `ANTHROPIC_API_KEY`, `USER_FULL_NAME`, `USER_EMAIL`, `USER_ADDRESS_*`, `GDPR_FRAMEWORK`.
 
+## GDPR Universe (subproject)
+
+Standalone Flask app (`gdpr_universe/`, port 5002) that maps the subprocessor dependency graph for ~1,000 EU+UK listed companies from stock indices (FTSE 350, EURO STOXX 600, etc.).
+
+**Architecture:** SQLite database (`gdpr_universe/data/universe.db`, gitignored) with explicit `edges` table enabling recursive CTE graph queries. Five tables: `companies`, `index_constituents`, `edges`, `fetch_log`, `analytics_cache`. All entities (seed companies + discovered SPs) live in `companies`; `is_seed` distinguishes them. One edge per parent→child relationship; purposes/data_categories stored as JSON arrays.
+
+**Shared modules** (imported, not copied — improvements benefit both projects):
+- `contact_resolver.subprocessor_fetcher` — SP discovery pipeline
+- `contact_resolver.service_categorizer` — domain classification
+- `dashboard.services.jurisdiction` — risk assessment, country inference
+
+**Adapter layer** (`gdpr_universe/adapters.py`): converts `SubprocessorRecord` → SQLite rows. `store_fetch_result(engine, domain, record)` upserts Company + Edge rows and writes FetchLog.
+
+**Graph queries** (`gdpr_universe/graph_queries.py`): `blast_radius()`, `sharing_counts()`, `concentration_risk()`, `neighborhood()`, `risky_chains()`, `chain_depth_distribution()` — all recursive CTEs on the edges table.
+
+**Seed importer** (`gdpr_universe/seed_importer.py`): CSV → `companies` + `index_constituents` tables. Falls back to `data/domain_map.json` (~40 top EU/UK companies) when CSV lacks domain column.
+
+**Crawl scheduler** (`gdpr_universe/crawl_scheduler.py`): Wave-based fetching. Wave 0 = seed companies, Wave 1+ = discovered SPs. Skip logic: fresh "ok" → skip, "not_found" → skip, "error" → always retry. Resumable via `fetch_log`.
+
+**Dashboard views:** `/` (company table + stats + SP leaderboard), `/company/<domain>` (detail + D3 neighborhood graph), `/contagion/<domain>` (blast radius trace), `/analytics` (6 insight panels), `/api/graph` (D3 JSON API), `/crawl` (trigger + status).
+
+**Key constraints:**
+- Zero changes to parent project code — shared modules imported read-only
+- `gdpr_universe/data/universe.db` is gitignored (covered by existing `*.db` rule)
+- `sys.path.insert` used in routes to import from `dashboard.services.jurisdiction` — fragile but functional
+- Design spec: `docs/superpowers/specs/2026-04-05-gdpr-universe-design.md`
+
 ## Key constraints
 
 - `data/companies.json` stores public contact info only — committed to repo, never contains PII
@@ -142,6 +189,8 @@ Invariant: **SP can only escalate; `sp_sent=False` never downgrades.** `DATA_REC
 
 All tests in `tests/unit/` use dependency injection or `unittest.mock` — no real network, Gmail, or Anthropic calls. `ContactResolver` accepts injectable `http_get`, `llm_search`, and `privacy_scrape` callables. Mock Anthropic responses must set `response.usage.input_tokens` and `response.usage.output_tokens` as integers (not MagicMock auto-attributes) or cost recording will fail.
 
+**GDPR Universe tests** (`tests/unit/test_universe_*.py`): 36 tests covering DB schema, adapters, graph queries, seed importer, crawl scheduler, and integration (all routes render). Use `tmp_path` for isolated SQLite DBs. Crawl scheduler tests mock `_do_fetch` to avoid real network calls. Integration tests use `create_app(db_path)` with test client.
+
 ## Known Issues / Tech Debt
 
 Issues discovered in code review (2026-03-16). 18 issues fixed; open items below.
@@ -153,6 +202,9 @@ Issues discovered in code review (2026-03-16). 18 issues fixed; open items below
 | P2 | `reply_monitor/classifier.py` | `_is_data_url()` matches vendor/sub-processor list pages (e.g. `figma.com/sub-processors/`) as `DATA_PROVIDED_LINK` — path segments like `/sub-processors`, `/vendors`, `/privacy` should be excluded from the data-URL heuristic. Note: separate concern from snippet cleaning (`_clean_snippet` is display-only in `dashboard/app.py`) |
 | P3 | `dashboard/app.py` | Flask routes and template rendering have no test coverage — only pure helper functions (`_clean_snippet`, `_is_human_friendly`) are tested via `test_snippet_clean.py` |
 | — | Scaling | GitHub API rate limit (60/hour) will block 500+ company runs — add `GITHUB_TOKEN` to `.env` |
+| P3 | `gdpr_universe/routes/graph.py` | `sys.path.insert` used to import `jurisdiction.py` — should use proper package imports or move jurisdiction to a shared location |
+| P3 | `gdpr_universe/` | No Wikipedia table scraper yet — seed import only supports CSV files; `--index` flag documented but not implemented |
+| P3 | `gdpr_universe/` | `Subprocessor` Pydantic model lacks `service_category` field — adapter sets it on Company rows directly after `store_fetch_result`, but the field comes through as empty from the fetcher JSON parsing |
 
 <details><summary>Fixed issues (18 items — click to expand)</summary>
 
