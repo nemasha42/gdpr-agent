@@ -49,6 +49,10 @@ def create_app(db_path: str | None = None) -> Flask:
 
     app.register_blueprint(analytics_bp)
 
+    from gdpr_universe.routes.crawl import bp as crawl_bp
+
+    app.register_blueprint(crawl_bp)
+
     return app
 
 
