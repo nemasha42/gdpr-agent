@@ -45,6 +45,10 @@ def create_app(db_path: str | None = None) -> Flask:
 
     app.register_blueprint(contagion_bp)
 
+    from gdpr_universe.routes.analytics_routes import bp as analytics_bp
+
+    app.register_blueprint(analytics_bp)
+
     return app
 
 

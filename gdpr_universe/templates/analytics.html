@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics — GDPR Universe{% endblock %}
+
+{% block content %}
+{# ── Header ── #}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="mb-0">Analytics</h3>
+    <form method="POST" action="/analytics/refresh" class="d-inline">
+        <button type="submit" class="btn btn-primary btn-sm">Refresh Analytics</button>
+    </form>
+</div>
+
+{% if not has_data %}
+<div class="alert alert-warning">
+    No analytics data cached yet. Click <strong>Refresh Analytics</strong> to compute.
+</div>
+{% endif %}
+
+{% if has_data %}
+<div class="row">
+
+    {# ── 1. Most Depended-On Subprocessors ── #}
+    <div class="col-lg-6 mb-4">
+        <div class="card bg-dark border-secondary h-100">
+            <div class="card-header border-secondary">
+                <strong>Most Depended-On Subprocessors</strong>
+            </div>
+            <div class="card-body p-0">
+                {% if sharing_counts %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Subprocessor</th>
+                                <th class="text-end">Companies Sharing</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for domain, count in sharing_counts.items() %}
+                            {% if loop.index <= 20 %}
+                            <tr role="button" onclick="window.location='/contagion/{{ domain }}'">
+                                <td class="text-muted">{{ loop.index }}</td>
+                                <td>
+                                    <img src="https://www.google.com/s2/favicons?domain={{ domain }}&sz=16"
+                                         alt="" width="16" height="16" class="me-1">
+                                    {{ domain }}
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge bg-info rounded-pill">{{ count }}</span>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted p-3 mb-0">No data available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 2. Largest Blast Radius ── #}
+    <div class="col-lg-6 mb-4">
+        <div class="card bg-dark border-secondary h-100">
+            <div class="card-header border-secondary">
+                <strong>Largest Blast Radius</strong>
+            </div>
+            <div class="card-body p-0">
+                {% if blast_radius_top50 %}
+                {% set sorted_blast = blast_radius_top50 | dictsort(by='value', reverse=true) %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Subprocessor</th>
+                                <th class="text-end">Affected Entities</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for domain, affected in sorted_blast %}
+                            {% if loop.index <= 20 %}
+                            <tr role="button" onclick="window.location='/contagion/{{ domain }}'">
+                                <td class="text-muted">{{ loop.index }}</td>
+                                <td>
+                                    <img src="https://www.google.com/s2/favicons?domain={{ domain }}&sz=16"
+                                         alt="" width="16" height="16" class="me-1">
+                                    {{ domain }}
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge bg-warning text-dark rounded-pill">{{ affected }}</span>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted p-3 mb-0">No data available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 3. Concentration Risk by Category ── #}
+    <div class="col-lg-6 mb-4">
+        <div class="card bg-dark border-secondary h-100">
+            <div class="card-header border-secondary">
+                <strong>Concentration Risk by Category</strong>
+            </div>
+            <div class="card-body">
+                {% if concentration %}
+                {% for category, leaders in concentration.items() %}
+                {% if leaders %}
+                <h6 class="text-uppercase text-muted mt-3 mb-2">{{ category | replace("_", " ") }}</h6>
+                <ul class="list-group list-group-flush mb-2">
+                    {% for item in leaders %}
+                    <li class="list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary py-1">
+                        <span>
+                            <img src="https://www.google.com/s2/favicons?domain={{ item.domain }}&sz=16"
+                                 alt="" width="16" height="16" class="me-1">
+                            {{ item.company_name or item.domain }}
+                        </span>
+                        <span class="badge bg-danger rounded-pill">{{ item.user_count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                {% endfor %}
+                {% else %}
+                <p class="text-muted mb-0">No data available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 4. Chain Depth Distribution ── #}
+    <div class="col-lg-3 mb-4">
+        <div class="card bg-dark border-secondary h-100">
+            <div class="card-header border-secondary">
+                <strong>Chain Depth</strong>
+            </div>
+            <div class="card-body p-0">
+                {% if chain_depth %}
+                <ul class="list-group list-group-flush">
+                    {% for depth, count in chain_depth.items() %}
+                    <li class="list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary">
+                        <span>Depth {{ depth }}</span>
+                        <span class="badge bg-secondary rounded-pill">{{ count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted p-3 mb-0">No data available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 5. SP Jurisdictions ── #}
+    <div class="col-lg-3 mb-4">
+        <div class="card bg-dark border-secondary h-100">
+            <div class="card-header border-secondary">
+                <strong>SP Jurisdictions</strong>
+            </div>
+            <div class="card-body p-0">
+                {% if sp_countries %}
+                <ul class="list-group list-group-flush">
+                    {% for country, count in sp_countries.items() %}
+                    <li class="list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary">
+                        <span>{{ country }}</span>
+                        <span class="badge bg-info rounded-pill">{{ count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted p-3 mb-0">No data available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 6. Most Outsourced Functions ── #}
+    <div class="col-lg-6 mb-4">
+        <div class="card bg-dark border-secondary h-100">
+            <div class="card-header border-secondary">
+                <strong>Most Outsourced Functions</strong>
+            </div>
+            <div class="card-body p-0">
+                {% if category_edges %}
+                <ul class="list-group list-group-flush">
+                    {% for category, count in category_edges.items() %}
+                    <li class="list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary">
+                        <span>{{ category | replace("_", " ") | title }}</span>
+                        <span class="badge bg-success rounded-pill">{{ count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted p-3 mb-0">No data available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endif %}
+{% endblock %}
