@@ -1,0 +1,77 @@
+/* GDPR Universe — core styles */
+
+/* Stat cards */
+.stat-card {
+    background: #1a1d23;
+    border: 1px solid #2d3139;
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #e9ecef;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.25rem;
+}
+
+/* Risk colors */
+.risk-high { color: #dc3545; }
+.risk-medium { color: #ffc107; }
+.risk-low { color: #198754; }
+.risk-adequate { color: #0dcaf0; }
+
+/* Company table */
+.company-table tbody tr.clickable-row {
+    cursor: pointer;
+}
+
+.company-table tbody tr.clickable-row:hover {
+    background-color: #2b3035 !important;
+}
+
+/* Fetch status badges */
+.fetch-status {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2em 0.6em;
+    border-radius: 0.25rem;
+    text-transform: uppercase;
+}
+
+.fetch-status-ok {
+    background-color: rgba(25, 135, 84, 0.2);
+    color: #198754;
+}
+
+.fetch-status-error {
+    background-color: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+}
+
+.fetch-status-pending {
+    background-color: rgba(108, 117, 125, 0.2);
+    color: #6c757d;
+}
+
+.fetch-status-not_found {
+    background-color: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+/* Leaderboard */
+.leaderboard-item {
+    border-color: #2d3139 !important;
+}
+
+.leaderboard-item:hover {
+    background-color: #2b3035 !important;
+}

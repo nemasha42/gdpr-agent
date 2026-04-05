@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — GDPR Universe{% endblock %}
+
+{% block content %}
+<!-- Stats bar -->
+<div class="row g-3 mb-4">
+    <div class="col">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total_companies }}</div>
+            <div class="stat-label">Seed Companies</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total_sps }}</div>
+            <div class="stat-label">Subprocessors</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total_edges }}</div>
+            <div class="stat-label">Data Flows</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.countries_reached }}</div>
+            <div class="stat-label">Countries</div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.coverage_pct }}%</div>
+            <div class="stat-label">Coverage</div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Company table -->
+    <div class="col-lg-9">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Seed Companies</h5>
+                <form class="d-flex" method="get" action="/">
+                    <input type="text" class="form-control form-control-sm me-2"
+                           name="search" placeholder="Search companies..."
+                           value="{{ search }}">
+                    <button type="submit" class="btn btn-sm btn-outline-light">Search</button>
+                </form>
+            </div>
+            <div class="card-body p-0">
+                {% if companies %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover company-table mb-0">
+                        <thead>
+                            <tr>
+                                {% set cols = [
+                                    ('company_name', 'Name'),
+                                    ('hq_country_code', 'Country'),
+                                    ('sector', 'Sector'),
+                                    ('sp_count', 'SPs'),
+                                    ('fetch_status', 'Status'),
+                                ] %}
+                                {% for col_key, col_label in cols %}
+                                <th>
+                                    <a href="?sort={{ col_key }}&order={{ 'desc' if sort == col_key and order == 'asc' else 'asc' }}{% if search %}&search={{ search }}{% endif %}"
+                                       class="text-decoration-none text-light">
+                                        {{ col_label }}
+                                        {% if sort == col_key %}
+                                            {{ '&#9650;' if order == 'asc' else '&#9660;' }}
+                                        {% endif %}
+                                    </a>
+                                </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in companies %}
+                            <tr class="clickable-row" data-href="/company/{{ c.domain }}">
+                                <td>
+                                    <img src="https://www.google.com/s2/favicons?domain={{ c.domain }}&sz=16"
+                                         alt="" class="me-2" width="16" height="16">
+                                    {{ c.company_name }}
+                                </td>
+                                <td>{{ c.hq_country_code }}</td>
+                                <td>{{ c.sector }}</td>
+                                <td>{{ c.sp_count }}</td>
+                                <td><span class="fetch-status fetch-status-{{ c.fetch_status }}">{{ c.fetch_status }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-5">
+                    {% if search %}
+                        No companies matching "{{ search }}".
+                    {% else %}
+                        No seed companies yet. Import an index to get started.
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Subprocessors leaderboard -->
+    <div class="col-lg-3">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header">
+                <h5 class="mb-0">Top Subprocessors</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if top_sps %}
+                <div class="list-group list-group-flush">
+                    {% for sp in top_sps %}
+                    <a href="/contagion/{{ sp.domain }}"
+                       class="list-group-item list-group-item-action bg-dark text-light leaderboard-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-truncate me-2">{{ sp.company_name }}</span>
+                            <span class="badge bg-primary rounded-pill">{{ sp.count }}</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    No subprocessor data yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.clickable-row').forEach(row => {
+    row.addEventListener('click', () => {
+        window.location.href = row.dataset.href;
+    });
+});
+</script>
+{% endblock %}
