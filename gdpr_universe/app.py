@@ -41,6 +41,10 @@ def create_app(db_path: str | None = None) -> Flask:
 
     app.register_blueprint(graph_bp)
 
+    from gdpr_universe.routes.contagion import bp as contagion_bp
+
+    app.register_blueprint(contagion_bp)
+
     return app
 
 
