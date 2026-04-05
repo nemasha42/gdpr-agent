@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}{{ company.company_name or company.domain }} — GDPR Universe{% endblock %}
+
+{% block content %}
+<a href="/" class="btn btn-sm btn-outline-secondary mb-3">&larr; Back to Dashboard</a>
+
+{# ── Company header ── #}
+<div class="d-flex align-items-center mb-4">
+    <img src="https://www.google.com/s2/favicons?domain={{ company.domain }}&sz=32"
+         alt="" width="32" height="32" class="me-3 rounded">
+    <div>
+        <h3 class="mb-0">
+            {{ company.company_name or company.domain }}
+            <small class="text-muted fs-6">{{ company.domain }}</small>
+        </h3>
+        <span class="text-muted small">
+            {% if company.hq_country_code %}{{ company.hq_country_code }}{% endif %}
+            {% if company.sector %}&middot; {{ company.sector }}{% endif %}
+        </span>
+    </div>
+    <div class="ms-auto d-flex align-items-center gap-2">
+        {% for idx in indices %}
+        <span class="badge bg-info">{{ idx.index_name }}{% if idx.ticker %} ({{ idx.ticker }}){% endif %}</span>
+        {% endfor %}
+        {% if latest_fetch %}
+        <span class="badge {% if latest_fetch.fetch_status == 'ok' %}bg-success{% elif latest_fetch.fetch_status == 'error' %}bg-danger{% else %}bg-secondary{% endif %}">
+            {{ latest_fetch.fetch_status or 'pending' }}
+        </span>
+        {% else %}
+        <span class="badge bg-secondary">pending</span>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Two-column layout ── #}
+<div class="row">
+    {# Left: SP table #}
+    <div class="col-lg-6 mb-4">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header border-secondary">
+                <strong>Subprocessors</strong>
+                <span class="badge bg-secondary ms-2">{{ sps|length }}</span>
+            </div>
+            <div class="card-body p-0">
+                {% if sps %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Company</th>
+                                <th>Country</th>
+                                <th>Category</th>
+                                <th>Transfer Basis</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sp in sps %}
+                            <tr role="button" onclick="window.location='/company/{{ sp.domain }}'">
+                                <td>
+                                    <img src="https://www.google.com/s2/favicons?domain={{ sp.domain }}&sz=16"
+                                         alt="" width="16" height="16" class="me-1">
+                                    {{ sp.company_name }}
+                                </td>
+                                <td>{{ sp.hq_country_code }}</td>
+                                <td>{{ sp.service_category }}</td>
+                                <td>{{ sp.transfer_basis }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted p-3 mb-0">No subprocessors discovered yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# Right: Graph #}
+    <div class="col-lg-6 mb-4">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header border-secondary">
+                <strong>Data Flow Graph (2 hops)</strong>
+            </div>
+            <div class="card-body p-2">
+                <svg id="neighborhood-graph" width="100%" height="450" style="min-height:450px;"></svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script id="graph-nodes" type="application/json">{{ graph_nodes|safe }}</script>
+<script id="graph-edges" type="application/json">{{ graph_edges|safe }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+(function() {
+    const rawNodes = JSON.parse(document.getElementById("graph-nodes").textContent);
+    const rawEdges = JSON.parse(document.getElementById("graph-edges").textContent);
+    const centerDomain = {{ company.domain | tojson }};
+
+    const RISK_COLORS = {
+        adequate:    "#3fb950",
+        safeguarded: "#d29922",
+        risky:       "#f85149",
+        unknown:     "#8b949e"
+    };
+    const CENTER_COLOR = "#0d6efd";
+
+    // Build risk map via API
+    const riskMap = {};
+
+    // Enrich nodes with size and risk info
+    const nodes = rawNodes.map(n => {
+        const isCenter = n.domain === centerDomain;
+        const isSeed = n.is_seed;
+        const size = isCenter ? 48 : (isSeed ? 40 : 32);
+        return {
+            id: n.domain,
+            label: n.company_name || n.domain,
+            country: n.hq_country_code || "",
+            isCenter: isCenter,
+            isSeed: isSeed,
+            serviceCategory: n.service_category || "",
+            risk: "unknown",
+            size: size
+        };
+    });
+
+    const edges = rawEdges.map(e => ({
+        source: e.parent_domain,
+        target: e.child_domain,
+        depth: e.depth
+    }));
+
+    // Fetch risk info from graph API
+    fetch(`/api/graph?domain=${encodeURIComponent(centerDomain)}&hops=2`)
+        .then(r => r.json())
+        .then(data => {
+            const riskLookup = {};
+            (data.nodes || []).forEach(n => { riskLookup[n.id] = n.risk; });
+            nodes.forEach(n => { n.risk = riskLookup[n.id] || "unknown"; });
+            updateColors();
+        })
+        .catch(() => {});
+
+    const svg = d3.select("#neighborhood-graph");
+    const width = svg.node().getBoundingClientRect().width || 600;
+    const height = 450;
+
+    // Zoom group
+    const g = svg.append("g");
+    svg.call(d3.zoom()
+        .scaleExtent([0.3, 4])
+        .on("zoom", (event) => g.attr("transform", event.transform))
+    );
+
+    // Tooltip
+    const tooltip = d3.select("body").append("div")
+        .attr("class", "position-absolute bg-dark text-white px-2 py-1 rounded small")
+        .style("pointer-events", "none")
+        .style("opacity", 0)
+        .style("z-index", 9999);
+
+    // Force simulation
+    const simulation = d3.forceSimulation(nodes)
+        .force("link", d3.forceLink(edges).id(d => d.id).distance(80))
+        .force("charge", d3.forceManyBody().strength(-120))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collide", d3.forceCollide(25));
+
+    // Edges
+    const link = g.selectAll(".link")
+        .data(edges)
+        .join("line")
+        .attr("class", "link")
+        .attr("stroke", "#484f58")
+        .attr("stroke-width", 1.5)
+        .attr("stroke-opacity", 0.6);
+
+    // Node groups
+    const node = g.selectAll(".node")
+        .data(nodes)
+        .join("g")
+        .attr("class", "node")
+        .call(d3.drag()
+            .on("start", (event, d) => {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x; d.fy = d.y;
+            })
+            .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+            .on("end", (event, d) => {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null; d.fy = null;
+            })
+        );
+
+    // Rects
+    node.append("rect")
+        .attr("width", d => d.size)
+        .attr("height", d => d.size)
+        .attr("x", d => -d.size / 2)
+        .attr("y", d => -d.size / 2)
+        .attr("rx", 4)
+        .attr("fill", "#161b22")
+        .attr("stroke", d => d.isCenter ? CENTER_COLOR : RISK_COLORS[d.risk] || RISK_COLORS.unknown)
+        .attr("stroke-width", 2);
+
+    // Labels below nodes
+    node.append("text")
+        .attr("y", d => d.size / 2 + 14)
+        .attr("text-anchor", "middle")
+        .attr("fill", "#c9d1d9")
+        .attr("font-size", "10px")
+        .text(d => d.label.length > 12 ? d.label.slice(0, 12) + "…" : d.label);
+
+    // Tooltip events
+    node.on("mouseover", (event, d) => {
+        tooltip.style("opacity", 1)
+            .html(`<strong>${d.label}</strong><br>${d.id}<br>Country: ${d.country || "—"}<br>Risk: ${d.risk}`)
+            .style("left", (event.pageX + 12) + "px")
+            .style("top", (event.pageY - 10) + "px");
+    })
+    .on("mousemove", (event) => {
+        tooltip.style("left", (event.pageX + 12) + "px")
+               .style("top", (event.pageY - 10) + "px");
+    })
+    .on("mouseout", () => tooltip.style("opacity", 0));
+
+    // Click to navigate
+    node.on("click", (event, d) => {
+        window.location = `/company/${d.id}`;
+    }).style("cursor", "pointer");
+
+    // Tick
+    simulation.on("tick", () => {
+        link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+        node.attr("transform", d => `translate(${d.x},${d.y})`);
+    });
+
+    function updateColors() {
+        node.select("rect")
+            .attr("stroke", d => d.isCenter ? CENTER_COLOR : RISK_COLORS[d.risk] || RISK_COLORS.unknown);
+    }
+})();
+</script>
+{% endblock %}

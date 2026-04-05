@@ -33,6 +33,14 @@ def create_app(db_path: str | None = None) -> Flask:
 
     app.register_blueprint(dashboard_bp)
 
+    from gdpr_universe.routes.company import bp as company_bp
+
+    app.register_blueprint(company_bp)
+
+    from gdpr_universe.routes.graph import bp as graph_bp
+
+    app.register_blueprint(graph_bp)
+
     return app
 
 
