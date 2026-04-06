@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from gdpr_universe.db import get_session
+from gdpr_universe.graph_builder import build_full_graph
 from gdpr_universe.graph_queries import sharing_counts
 
 bp = Blueprint("dashboard", __name__)
@@ -121,6 +122,7 @@ def index():
     order = request.args.get("order", "asc")
 
     companies = _get_company_rows(engine, search=search, sort=sort, order=order)
+    graph_data = build_full_graph(engine)
 
     # Top 20 subprocessors by sharing count
     sc = sharing_counts(engine, limit=20)
@@ -148,4 +150,5 @@ def index():
         search=search,
         sort=sort,
         order=order,
+        graph_json=graph_data,
     )

@@ -37,6 +37,34 @@
     </div>
 </div>
 
+{# ── Graph Visualization ── #}
+{% if graph_json.nodes %}
+<div class="card bg-dark border-secondary mb-4">
+  <div class="card-body p-0 position-relative" style="height:550px;overflow:hidden">
+    <svg id="universe-graph" width="100%" height="100%"></svg>
+    {# Legend — bottom-left #}
+    <div class="position-absolute bottom-0 start-0 m-2 bg-dark bg-opacity-90 border border-secondary rounded p-2" style="font-size:0.72rem;z-index:10">
+      <div class="d-flex gap-2 flex-wrap align-items-center text-light">
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #3fb950;vertical-align:middle"></span> adequate</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #d29922;vertical-align:middle"></span> safeguarded</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #f85149;vertical-align:middle"></span> risky</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #8b949e;vertical-align:middle"></span> unknown</span>
+      </div>
+      <div class="d-flex gap-2 flex-wrap align-items-center mt-1 text-muted">
+        <span>■ seed company</span>
+        <span>□ subprocessor</span>
+      </div>
+    </div>
+    {# Controls — bottom-right #}
+    <div class="position-absolute bottom-0 end-0 m-2 d-flex gap-1" style="z-index:10">
+      <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="graph-zoom-in" style="font-size:0.75rem">+</button>
+      <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="graph-zoom-out" style="font-size:0.75rem">-</button>
+      <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="graph-reset" style="font-size:0.75rem">reset</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="row">
     <!-- Company table -->
     <div class="col-lg-9">
@@ -134,9 +162,14 @@
         </div>
     </div>
 </div>
+<script id="graph-data" type="application/json" data-mode="full">
+{{ graph_json | tojson }}
+</script>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="{{ url_for('static', filename='js/universe-graph.js') }}"></script>
 <script>
 document.querySelectorAll('.clickable-row').forEach(row => {
     row.addEventListener('click', () => {
