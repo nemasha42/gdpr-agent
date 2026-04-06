@@ -80,172 +80,36 @@
     {# Right: Graph #}
     <div class="col-lg-6 mb-4">
         <div class="card bg-dark border-secondary">
-            <div class="card-header border-secondary">
+            <div class="card-header border-secondary d-flex justify-content-between align-items-center">
                 <strong>Data Flow Graph (2 hops)</strong>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="graph-zoom-in" style="font-size:0.75rem">+</button>
+                  <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="graph-zoom-out" style="font-size:0.75rem">-</button>
+                  <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="graph-reset" style="font-size:0.75rem">reset</button>
+                </div>
             </div>
-            <div class="card-body p-2">
-                <svg id="neighborhood-graph" width="100%" height="450" style="min-height:450px;"></svg>
+            <div class="card-body p-0 position-relative" style="height:450px;overflow:hidden">
+                <svg id="universe-graph" width="100%" height="100%"></svg>
+                {# Legend — bottom-left #}
+                <div class="position-absolute bottom-0 start-0 m-2 bg-dark bg-opacity-90 border border-secondary rounded p-2" style="font-size:0.72rem;z-index:10">
+                  <div class="d-flex gap-2 flex-wrap align-items-center text-light">
+                    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #3fb950;vertical-align:middle"></span> adequate</span>
+                    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #d29922;vertical-align:middle"></span> safeguarded</span>
+                    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #f85149;vertical-align:middle"></span> risky</span>
+                    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #8b949e;vertical-align:middle"></span> unknown</span>
+                  </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<script id="graph-nodes" type="application/json">{{ graph_nodes|safe }}</script>
-<script id="graph-edges" type="application/json">{{ graph_edges|safe }}</script>
+<script id="graph-data" type="application/json" data-mode="neighborhood" data-center="{{ company.domain }}">
+{{ graph_json | tojson }}
+</script>
 {% endblock %}
 
 {% block scripts %}
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<script>
-(function() {
-    const rawNodes = JSON.parse(document.getElementById("graph-nodes").textContent);
-    const rawEdges = JSON.parse(document.getElementById("graph-edges").textContent);
-    const centerDomain = {{ company.domain | tojson }};
-
-    const RISK_COLORS = {
-        adequate:    "#3fb950",
-        safeguarded: "#d29922",
-        risky:       "#f85149",
-        unknown:     "#8b949e"
-    };
-    const CENTER_COLOR = "#0d6efd";
-
-    // Build risk map via API
-    const riskMap = {};
-
-    // Enrich nodes with size and risk info
-    const nodes = rawNodes.map(n => {
-        const isCenter = n.domain === centerDomain;
-        const isSeed = n.is_seed;
-        const size = isCenter ? 48 : (isSeed ? 40 : 32);
-        return {
-            id: n.domain,
-            label: n.company_name || n.domain,
-            country: n.hq_country_code || "",
-            isCenter: isCenter,
-            isSeed: isSeed,
-            serviceCategory: n.service_category || "",
-            risk: "unknown",
-            size: size
-        };
-    });
-
-    const edges = rawEdges.map(e => ({
-        source: e.parent_domain,
-        target: e.child_domain,
-        depth: e.depth
-    }));
-
-    // Fetch risk info from graph API
-    fetch(`/api/graph?domain=${encodeURIComponent(centerDomain)}&hops=2`)
-        .then(r => r.json())
-        .then(data => {
-            const riskLookup = {};
-            (data.nodes || []).forEach(n => { riskLookup[n.id] = n.risk; });
-            nodes.forEach(n => { n.risk = riskLookup[n.id] || "unknown"; });
-            updateColors();
-        })
-        .catch(() => {});
-
-    const svg = d3.select("#neighborhood-graph");
-    const width = svg.node().getBoundingClientRect().width || 600;
-    const height = 450;
-
-    // Zoom group
-    const g = svg.append("g");
-    svg.call(d3.zoom()
-        .scaleExtent([0.3, 4])
-        .on("zoom", (event) => g.attr("transform", event.transform))
-    );
-
-    // Tooltip
-    const tooltip = d3.select("body").append("div")
-        .attr("class", "position-absolute bg-dark text-white px-2 py-1 rounded small")
-        .style("pointer-events", "none")
-        .style("opacity", 0)
-        .style("z-index", 9999);
-
-    // Force simulation
-    const simulation = d3.forceSimulation(nodes)
-        .force("link", d3.forceLink(edges).id(d => d.id).distance(80))
-        .force("charge", d3.forceManyBody().strength(-120))
-        .force("center", d3.forceCenter(width / 2, height / 2))
-        .force("collide", d3.forceCollide(25));
-
-    // Edges
-    const link = g.selectAll(".link")
-        .data(edges)
-        .join("line")
-        .attr("class", "link")
-        .attr("stroke", "#484f58")
-        .attr("stroke-width", 1.5)
-        .attr("stroke-opacity", 0.6);
-
-    // Node groups
-    const node = g.selectAll(".node")
-        .data(nodes)
-        .join("g")
-        .attr("class", "node")
-        .call(d3.drag()
-            .on("start", (event, d) => {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x; d.fy = d.y;
-            })
-            .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
-            .on("end", (event, d) => {
-                if (!event.active) simulation.alphaTarget(0);
-                d.fx = null; d.fy = null;
-            })
-        );
-
-    // Rects
-    node.append("rect")
-        .attr("width", d => d.size)
-        .attr("height", d => d.size)
-        .attr("x", d => -d.size / 2)
-        .attr("y", d => -d.size / 2)
-        .attr("rx", 4)
-        .attr("fill", "#161b22")
-        .attr("stroke", d => d.isCenter ? CENTER_COLOR : RISK_COLORS[d.risk] || RISK_COLORS.unknown)
-        .attr("stroke-width", 2);
-
-    // Labels below nodes
-    node.append("text")
-        .attr("y", d => d.size / 2 + 14)
-        .attr("text-anchor", "middle")
-        .attr("fill", "#c9d1d9")
-        .attr("font-size", "10px")
-        .text(d => d.label.length > 12 ? d.label.slice(0, 12) + "…" : d.label);
-
-    // Tooltip events
-    node.on("mouseover", (event, d) => {
-        tooltip.style("opacity", 1)
-            .html(`<strong>${d.label}</strong><br>${d.id}<br>Country: ${d.country || "—"}<br>Risk: ${d.risk}`)
-            .style("left", (event.pageX + 12) + "px")
-            .style("top", (event.pageY - 10) + "px");
-    })
-    .on("mousemove", (event) => {
-        tooltip.style("left", (event.pageX + 12) + "px")
-               .style("top", (event.pageY - 10) + "px");
-    })
-    .on("mouseout", () => tooltip.style("opacity", 0));
-
-    // Click to navigate
-    node.on("click", (event, d) => {
-        window.location = `/company/${d.id}`;
-    }).style("cursor", "pointer");
-
-    // Tick
-    simulation.on("tick", () => {
-        link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
-            .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
-        node.attr("transform", d => `translate(${d.x},${d.y})`);
-    });
-
-    function updateColors() {
-        node.select("rect")
-            .attr("stroke", d => d.isCenter ? CENTER_COLOR : RISK_COLORS[d.risk] || RISK_COLORS.unknown);
-    }
-})();
-</script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="{{ url_for('static', filename='js/universe-graph.js') }}"></script>
 {% endblock %}

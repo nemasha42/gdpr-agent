@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from gdpr_universe.db import Company, Edge, FetchLog, IndexConstituent, get_session
-from gdpr_universe.graph_queries import neighborhood
+from gdpr_universe.graph_builder import build_neighborhood_graph
 
 bp = Blueprint("company", __name__)
 
@@ -72,7 +72,7 @@ def detail(domain: str):
             session.expunge(latest_fetch)
 
     # 5. Neighborhood graph
-    graph_nodes, graph_edges = neighborhood(engine, domain, hops=2)
+    graph_data = build_neighborhood_graph(engine, domain, hops=2)
 
     # 6. Render
     return render_template(
@@ -82,6 +82,5 @@ def detail(domain: str):
         indices=indices,
         sps=sps,
         latest_fetch=latest_fetch,
-        graph_nodes=json.dumps(graph_nodes),
-        graph_edges=json.dumps(graph_edges),
+        graph_json=graph_data,
     )
