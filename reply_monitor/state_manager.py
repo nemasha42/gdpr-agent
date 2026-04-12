@@ -50,11 +50,13 @@ _ACK_TAGS = frozenset({"AUTO_ACKNOWLEDGE", "REQUEST_ACCEPTED", "IN_PROGRESS"})
 # ---------------------------------------------------------------------------
 
 
-def load_state(account_email: str, *, path: Path = _STATE_PATH) -> dict[str, CompanyState]:
+def load_state(account_email: str, *, path: Path | None = None, data_dir: Path | None = None) -> dict[str, CompanyState]:
     """Load per-domain states for account_email from reply_state.json.
 
     Returns empty dict if the file doesn't exist or has no data for this account.
     """
+    if path is None:
+        path = (data_dir / "reply_state.json") if data_dir else _STATE_PATH
     key = _safe_email(account_email)
     if not path.exists():
         return {}
@@ -73,9 +75,12 @@ def save_state(
     account_email: str,
     states: dict[str, CompanyState],
     *,
-    path: Path = _STATE_PATH,
+    path: Path | None = None,
+    data_dir: Path | None = None,
 ) -> None:
     """Persist per-domain states for account_email to reply_state.json."""
+    if path is None:
+        path = (data_dir / "reply_state.json") if data_dir else _STATE_PATH
     key = _safe_email(account_email)
     path.parent.mkdir(parents=True, exist_ok=True)
 

@@ -66,8 +66,7 @@ _MOCK_SETTINGS = {
 class TestCompose:
     def test_email_method_sets_correct_fields(self) -> None:
         record = _make_record(dpo_email="dpo@acme.com", preferred_method="email")
-        with patch("letter_engine.composer.settings", **_MOCK_SETTINGS):
-            letter = compose(record)
+        letter = compose(record, user_identity=_MOCK_SETTINGS)
 
         assert letter.method == "email"
         assert letter.to_email == "dpo@acme.com"
@@ -79,20 +78,17 @@ class TestCompose:
     def test_email_prefers_privacy_over_dpo(self) -> None:
         # privacy@ is preferred for SAR sends; dpo@ is for regulatory/authority contact
         record = _make_record(dpo_email="dpo@acme.com", privacy_email="privacy@acme.com")
-        with patch("letter_engine.composer.settings", **_MOCK_SETTINGS):
-            letter = compose(record)
+        letter = compose(record, user_identity=_MOCK_SETTINGS)
         assert letter.to_email == "privacy@acme.com"
 
     def test_email_falls_back_to_dpo_when_no_privacy(self) -> None:
         record = _make_record(dpo_email="dpo@acme.com", privacy_email="")
-        with patch("letter_engine.composer.settings", **_MOCK_SETTINGS):
-            letter = compose(record)
+        letter = compose(record, user_identity=_MOCK_SETTINGS)
         assert letter.to_email == "dpo@acme.com"
 
     def test_email_falls_back_to_privacy_email(self) -> None:
         record = _make_record(dpo_email="", privacy_email="privacy@acme.com")
-        with patch("letter_engine.composer.settings", **_MOCK_SETTINGS):
-            letter = compose(record)
+        letter = compose(record, user_identity=_MOCK_SETTINGS)
         assert letter.to_email == "privacy@acme.com"
 
     def test_portal_method(self) -> None:
@@ -100,8 +96,7 @@ class TestCompose:
             portal_url="https://privacy.acme.com/sar",
             preferred_method="portal",
         )
-        with patch("letter_engine.composer.settings", **_MOCK_SETTINGS):
-            letter = compose(record)
+        letter = compose(record, user_identity=_MOCK_SETTINGS)
 
         assert letter.method == "portal"
         assert letter.portal_url == "https://privacy.acme.com/sar"
@@ -112,8 +107,7 @@ class TestCompose:
             line1="1 Corp Street", city="Manchester", postcode="M1 1AA", country="UK"
         )
         record = _make_record(preferred_method="postal", postal=postal)
-        with patch("letter_engine.composer.settings", **_MOCK_SETTINGS):
-            letter = compose(record)
+        letter = compose(record, user_identity=_MOCK_SETTINGS)
 
         assert letter.method == "postal"
         assert "10 Test Road" in letter.body  # user address block
@@ -122,15 +116,13 @@ class TestCompose:
     def test_postal_address_formatted(self) -> None:
         postal = PostalAddress(line1="5 Lane", city="Bristol", postcode="BS1", country="UK")
         record = _make_record(preferred_method="postal", postal=postal)
-        with patch("letter_engine.composer.settings", **_MOCK_SETTINGS):
-            letter = compose(record)
+        letter = compose(record, user_identity=_MOCK_SETTINGS)
         assert "5 Lane" in letter.postal_address
         assert "Bristol" in letter.postal_address
 
     def test_missing_postal_address_shows_placeholder(self) -> None:
         record = _make_record(preferred_method="postal")
-        with patch("letter_engine.composer.settings", **_MOCK_SETTINGS):
-            letter = compose(record)
+        letter = compose(record, user_identity=_MOCK_SETTINGS)
         assert "(address not available)" in letter.postal_address
 
 

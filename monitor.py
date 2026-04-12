@@ -87,18 +87,21 @@ def main() -> None:
         sys.exit(1)
 
     print("Connecting to Gmail...")
+    from dashboard.user_model import user_data_dir
     service, email = get_gmail_service(email_hint=args.account)
+    data_dir = user_data_dir(email)
+    data_dir.mkdir(parents=True, exist_ok=True)
     print(f"Monitoring: {email}\n")
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
 
-    sent_log = get_log()
+    sent_log = get_log(data_dir=data_dir)
     if not sent_log:
         print("No sent SARs found in user_data/sent_letters.json. Nothing to monitor.")
         return
 
     # Load existing state
-    states = load_state(email, path=_STATE_PATH)
+    states = load_state(email, data_dir=data_dir)
 
     # Group all sent records by domain (multiple attempts possible per domain)
     records_by_domain: dict[str, list[dict]] = {}
@@ -205,11 +208,11 @@ def main() -> None:
         if new_replies:
             states[domain] = update_state(state, new_replies)
 
-    save_state(email, states, path=_STATE_PATH)
+    save_state(email, states, data_dir=data_dir)
 
     # --reprocess: re-classify existing HUMAN_REVIEW / AUTO_ACKNOWLEDGE replies
     if args.reprocess:
-        sp_states = load_state(email, path=_SUBPROCESSOR_STATE_PATH)
+        sp_states = load_state(email, path=data_dir / "subprocessor_reply_state.json")
         all_states = {**states, **{f"sp:{k}": v for k, v in sp_states.items()}}
         n_changed = _reprocess_existing(all_states, api_key, verbose=args.verbose, dry_run=args.dry_run)
         print(f"[reprocess] {n_changed} reply(ies) reclassified")
@@ -217,49 +220,49 @@ def main() -> None:
             # Split back and save both
             sar_states = {k: v for k, v in all_states.items() if not k.startswith("sp:")}
             sp_states2 = {k[3:]: v for k, v in all_states.items() if k.startswith("sp:")}
-            save_state(email, sar_states, path=_STATE_PATH)
-            save_state(email, sp_states2, path=_SUBPROCESSOR_STATE_PATH)
+            save_state(email, sar_states, data_dir=data_dir)
+            save_state(email, sp_states2, path=data_dir / "subprocessor_reply_state.json")
         if args.dry_run:
             print("[reprocess] dry-run: no changes saved")
         return
 
     # --draft-backfill: generate suggested_reply for existing action-tagged replies
     if args.draft_backfill:
-        sp_states = load_state(email, path=_SUBPROCESSOR_STATE_PATH)
+        sp_states = load_state(email, path=data_dir / "subprocessor_reply_state.json")
         n_sar = _backfill_reply_drafts(states, api_key, service, verbose=args.verbose)
         n_sp = _backfill_reply_drafts(sp_states, api_key, service, verbose=args.verbose)
         print(f"[draft-backfill] {n_sar} SAR + {n_sp} SP reply draft(s) generated")
         if n_sar:
-            save_state(email, states, path=_STATE_PATH)
+            save_state(email, states, data_dir=data_dir)
         if n_sp:
-            save_state(email, sp_states, path=_SUBPROCESSOR_STATE_PATH)
+            save_state(email, sp_states, path=data_dir / "subprocessor_reply_state.json")
         cost_tracker.print_cost_summary()
         return
 
     # Poll Gmail for subprocessor disclosure request replies
-    sp_count = _monitor_subprocessor_requests(service, email, email)
+    sp_count = _monitor_subprocessor_requests(service, email, email, data_dir=data_dir)
     if sp_count and args.verbose:
         print(f"[subprocessor] {sp_count} new reply(ies) for subprocessor disclosure requests\n")
 
     # Re-resolve and auto-send for bounced companies
-    if _handle_bounce_retries(email, states, verbose=args.verbose):
-        save_state(email, states, path=_STATE_PATH)
+    if _handle_bounce_retries(email, states, verbose=args.verbose, data_dir=data_dir):
+        save_state(email, states, data_dir=data_dir)
 
     # Auto-download data links (Playwright handles Cloudflare-protected sites)
-    _auto_download_data_links(email, states, api_key, verbose=args.verbose)
+    _auto_download_data_links(email, states, api_key, verbose=args.verbose, data_dir=data_dir)
 
     # Print summary table
     _print_summary(email, states, new_counts)
     cost_tracker.print_cost_summary()
 
 
-def _monitor_subprocessor_requests(service, email: str, account: str) -> int:
+def _monitor_subprocessor_requests(service, email: str, account: str, *, data_dir: Path) -> int:
     """Poll Gmail for replies to subprocessor disclosure requests. Returns new reply count."""
-    log = get_log(path=_SUBPROCESSOR_REQUESTS_PATH)
+    log = get_log(path=data_dir / "subprocessor_requests.json")
     if not log:
         return 0
 
-    sp_states = load_state(account, path=_SUBPROCESSOR_STATE_PATH)
+    sp_states = load_state(account, path=data_dir / "subprocessor_reply_state.json")
 
     # Group by domain (most recent sent wins)
     by_domain: dict[str, list[dict]] = {}
@@ -321,7 +324,7 @@ def _monitor_subprocessor_requests(service, email: str, account: str) -> int:
         if new_replies:
             sp_states[domain] = update_state(state, new_replies)
 
-    save_state(account, sp_states, path=_SUBPROCESSOR_STATE_PATH)
+    save_state(account, sp_states, path=data_dir / "subprocessor_reply_state.json")
     return total_new
 
 
@@ -329,6 +332,8 @@ def _handle_bounce_retries(
     account_email: str,
     states: dict[str, CompanyState],
     verbose: bool = False,
+    *,
+    data_dir: Path | None = None,
 ) -> bool:
     """For each BOUNCED company, re-resolve and auto-send to a new address.
 
@@ -381,7 +386,10 @@ def _handle_bounce_retries(
 
         # Compose and send to new address
         letter = compose(new_record)
-        success, msg_id, thread_id = send_letter(letter, scan_email=account_email)
+        tokens_dir = data_dir / "tokens" if data_dir else None
+        success, msg_id, thread_id = send_letter(
+            letter, scan_email=account_email, data_dir=data_dir, tokens_dir=tokens_dir,
+        )
 
         if not success:
             print(f"  [bounce-retry] {state.company_name}: send to {new_email} failed — will retry next run")
@@ -413,7 +421,8 @@ def _handle_bounce_retries(
 
 
 def _auto_download_data_links(
-    account: str, states: dict, api_key: str | None, verbose: bool = False
+    account: str, states: dict, api_key: str | None, verbose: bool = False,
+    *, data_dir: Path | None = None,
 ) -> None:
     """Automatically download any DATA_PROVIDED_LINK replies that have a URL but no catalog."""
     from reply_monitor.link_downloader import download_data_link
@@ -451,7 +460,7 @@ def _auto_download_data_links(
                     print(f"  [auto-download] ✗ {domain}: {exc}")
 
     if needs_save:
-        _save(account, states, path=_STATE_PATH)
+        _save(account, states, data_dir=data_dir)
 
 
 # ---------------------------------------------------------------------------

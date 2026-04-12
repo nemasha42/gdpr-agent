@@ -1,5 +1,6 @@
 """Unit tests for /api/body/<domain>/<message_id> in dashboard/app.py."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,9 +13,22 @@ from dashboard.app import app
 
 
 @pytest.fixture
-def client():
+def client(tmp_path):
+    from dashboard.user_model import User, save_user
+
+    user_dir = tmp_path / "test_at_example_com"
+    user_dir.mkdir()
+    (user_dir / "tokens").mkdir()
+
+    admin = User(email="test@example.com", name="Test", role="admin", data_root=tmp_path)
+    save_user(admin, path=tmp_path / "users.json")
+
     app.config["TESTING"] = True
+    app.config["USERS_PATH"] = tmp_path / "users.json"
+    app.config["USER_DATA_ROOT"] = tmp_path
     with app.test_client() as c:
+        with c.session_transaction() as sess:
+            sess["_user_id"] = "test@example.com"
         yield c
 
 

@@ -98,15 +98,16 @@ def test_resolver_returns_record_for_known_domain(tmp_path):
 
 
 def test_compose_produces_sar_letter():
-    with patch("letter_engine.composer.settings") as mock_settings:
-        mock_settings.user_full_name = "Jane Doe"
-        mock_settings.user_email = "jane@example.com"
-        mock_settings.user_address_line1 = "1 Main St"
-        mock_settings.user_address_city = "London"
-        mock_settings.user_address_postcode = "EC1A 1BB"
-        mock_settings.user_address_country = "United Kingdom"
-        mock_settings.gdpr_framework = "UK GDPR"
-        letter = compose(_RECORD)
+    user_identity = {
+        "user_full_name": "Jane Doe",
+        "user_email": "jane@example.com",
+        "user_address_line1": "1 Main St",
+        "user_address_city": "London",
+        "user_address_postcode": "EC1A 1BB",
+        "user_address_country": "United Kingdom",
+        "gdpr_framework": "UK GDPR",
+    }
+    letter = compose(_RECORD, user_identity=user_identity)
 
     assert isinstance(letter, SARLetter)
     assert letter.method == "email"

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Invite User — GDPR Agent{% endblock %}
+{% block content %}
+<div class="container mt-4" style="max-width: 600px;">
+  <h3>Invite a Friend</h3>
+  <form method="POST">
+    <div class="mb-3">
+      <label for="email" class="form-label">Friend's Gmail address</label>
+      <input type="email" class="form-control" id="email" name="email" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Generate Invite Link</button>
+  </form>
+  {% if invite_link %}
+  <div class="alert alert-success mt-3">
+    <strong>Share this link:</strong><br>
+    <code>{{ invite_link }}</code>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

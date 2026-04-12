@@ -2,6 +2,7 @@
 
 import base64
 from email.mime.text import MIMEText
+from pathlib import Path
 
 from letter_engine import tracker
 from letter_engine.models import SARLetter
@@ -9,7 +10,8 @@ from letter_engine.models import SARLetter
 _WIDTH = 62
 
 
-def preview_and_send(letter: SARLetter, *, dry_run: bool = False, scan_email: str = "") -> bool:
+def preview_and_send(letter: SARLetter, *, dry_run: bool = False, scan_email: str = "",
+                     data_dir: Path | None = None, tokens_dir: Path | None = None) -> bool:
     """Print a formatted preview, ask Y/N, dispatch on approval.
 
     Args:
@@ -37,7 +39,7 @@ def preview_and_send(letter: SARLetter, *, dry_run: bool = False, scan_email: st
         return True
 
     if letter.method == "email":
-        msg_id, thread_id = _dispatch_email(letter, scan_email)
+        msg_id, thread_id = _dispatch_email(letter, scan_email, tokens_dir=tokens_dir)
         letter.gmail_message_id = msg_id
         letter.gmail_thread_id = thread_id
     elif letter.method == "portal":
@@ -46,7 +48,7 @@ def preview_and_send(letter: SARLetter, *, dry_run: bool = False, scan_email: st
     else:  # postal
         print("\nPlease print and post the letter above.")
 
-    tracker.record_sent(letter)
+    tracker.record_sent(letter, data_dir=data_dir)
     return True
 
 
@@ -60,6 +62,8 @@ def send_letter(
     scan_email: str,
     *,
     record: bool = True,
+    data_dir: Path | None = None,
+    tokens_dir: Path | None = None,
 ) -> tuple[bool, str, str]:
     """Send *letter* without an interactive Y/N prompt.
 
@@ -74,18 +78,18 @@ def send_letter(
         message_id and thread_id are empty strings.
     """
     if letter.method == "email":
-        msg_id, thread_id = _dispatch_email(letter, scan_email)
+        msg_id, thread_id = _dispatch_email(letter, scan_email, tokens_dir=tokens_dir)
         letter.gmail_message_id = msg_id
         letter.gmail_thread_id = thread_id
         if msg_id and record:
             # Only record when Gmail API confirmed delivery — empty msg_id means the
             # API call failed and the email was never sent.
-            tracker.record_sent(letter)
+            tracker.record_sent(letter, data_dir=data_dir)
         return bool(msg_id), msg_id, thread_id
 
     # portal / postal — record as sent; user handles submission manually
     if record:
-        tracker.record_sent(letter)
+        tracker.record_sent(letter, data_dir=data_dir)
     return True, "", ""
 
 
@@ -114,6 +118,8 @@ def send_thread_reply(
     subject: str,
     body: str,
     scan_email: str,
+    *,
+    tokens_dir: Path | None = None,
 ) -> tuple[bool, str, str]:
     """Send a reply within an existing Gmail thread.
 
@@ -121,7 +127,7 @@ def send_thread_reply(
     """
     try:
         from auth.gmail_oauth import get_gmail_send_service
-        service = get_gmail_send_service(scan_email)
+        service = get_gmail_send_service(scan_email, tokens_dir=tokens_dir)
         msg = MIMEText(body, "plain", "utf-8")
         msg["to"] = to_addr
         msg["subject"] = subject if subject.startswith("Re:") else f"Re: {subject}"
@@ -138,7 +144,7 @@ def send_thread_reply(
         return False, "", ""
 
 
-def _dispatch_email(letter: SARLetter, scan_email: str) -> tuple[str, str]:
+def _dispatch_email(letter: SARLetter, scan_email: str, *, tokens_dir: Path | None = None) -> tuple[str, str]:
     """Send via Gmail API; fall back to printing instructions on failure.
 
     Returns:
@@ -146,7 +152,7 @@ def _dispatch_email(letter: SARLetter, scan_email: str) -> tuple[str, str]:
     """
     try:
         from auth.gmail_oauth import get_gmail_send_service
-        service = get_gmail_send_service(scan_email)
+        service = get_gmail_send_service(scan_email, tokens_dir=tokens_dir)
         msg = MIMEText(letter.body, 'plain', 'utf-8')
         msg["to"] = letter.to_email
         msg["subject"] = letter.subject

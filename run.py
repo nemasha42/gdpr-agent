@@ -46,8 +46,28 @@ def main() -> None:
 
     # ── Step 1: Gmail connection ─────────────────────────────────────────────
     print("Connecting to Gmail...")
+    from dashboard.user_model import user_data_dir, load_user
     service, email = get_gmail_service(email_hint=args.gmail)
+    data_dir = user_data_dir(email)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    tokens_dir = data_dir / "tokens"
     print(f"Scanning: {email}\n")
+
+    # Build user_identity for letter composition
+    user = load_user(email)
+    if user:
+        from config.settings import settings
+        user_identity = {
+            "user_full_name": user.name,
+            "user_email": email,
+            "user_address_line1": "",
+            "user_address_city": "",
+            "user_address_postcode": "",
+            "user_address_country": "",
+            "gdpr_framework": settings.gdpr_framework,
+        }
+    else:
+        user_identity = None  # composer falls back to settings
 
     # ── Step 2: Scan inbox ───────────────────────────────────────────────────
     print(f"Scanning inbox (up to {args.max_emails} emails)...")
@@ -80,7 +100,7 @@ def main() -> None:
         record = resolver.resolve(domain, name, verbose=False)
         if record:
             print(f"found ({record.source}, {record.contact.preferred_method})")
-            letters.append(compose(record))
+            letters.append(compose(record, user_identity=user_identity))
         else:
             print("not found — skipping")
             not_found.append(name)
@@ -96,7 +116,8 @@ def main() -> None:
     # ── Step 5: Preview and send ─────────────────────────────────────────────
     sent = skipped = 0
     for letter in letters:
-        result = preview_and_send(letter, dry_run=args.dry_run, scan_email=email)
+        result = preview_and_send(letter, dry_run=args.dry_run, scan_email=email,
+                                    data_dir=data_dir, tokens_dir=tokens_dir)
         if result:
             sent += 1
         else:

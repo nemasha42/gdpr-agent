@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Sign In — GDPR Agent{% endblock %}
+{% block content %}
+<div class="container mt-5" style="max-width: 480px;">
+  <h2>GDPR Agent</h2>
+  <p>Sign in with the Google account you used during setup.</p>
+  <a href="{{ url_for('auth.login_google') }}" class="btn btn-outline-dark w-100">
+    Sign in with Google
+  </a>
+</div>
+{% endblock %}

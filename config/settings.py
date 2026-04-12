@@ -22,6 +22,7 @@ class Settings(BaseModel):
     user_address_postcode: str
     user_address_country: str
     gdpr_framework: str
+    flask_secret_key: str
 
 
 def get_settings() -> Settings:
@@ -36,6 +37,7 @@ def get_settings() -> Settings:
         user_address_postcode=os.getenv("USER_ADDRESS_POSTCODE", ""),
         user_address_country=os.getenv("USER_ADDRESS_COUNTRY", ""),
         gdpr_framework=os.getenv("GDPR_FRAMEWORK", "UK GDPR"),
+        flask_secret_key=os.getenv("FLASK_SECRET_KEY", ""),
     )
 
 

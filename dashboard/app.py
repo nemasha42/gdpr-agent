@@ -27,7 +27,7 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
+from flask import Flask, Response, flash, jsonify, redirect, render_template, request, url_for
 
 from letter_engine.tracker import get_log, _SUBPROCESSOR_REQUESTS_PATH
 from reply_monitor.classifier import _ACTION_DRAFT_TAGS
@@ -78,12 +78,87 @@ def _is_human_friendly(text: str) -> bool:
 
 
 app = Flask(__name__, template_folder="templates")
-app.secret_key = "gdpr-agent-dashboard"  # needed for flash messages
-app.secret_key = "gdpr-agent-dashboard"  # non-sensitive local app
 
 _USER_DATA = _PROJECT_ROOT / "user_data"
 _STATE_PATH = _USER_DATA / "reply_state.json"
 _COMPANIES_PATH = _PROJECT_ROOT / "data" / "companies.json"
+
+# ---------------------------------------------------------------------------
+# Flask-Login & auth blueprints
+# ---------------------------------------------------------------------------
+from flask import g
+from flask_login import LoginManager, current_user, login_required
+from dashboard.user_model import (
+    _safe_email,
+    load_user as _load_user_by_email,
+    user_data_dir,
+    _safe_email_to_address as _safe_email_to_addr,
+)
+from dashboard.auth_routes import auth_bp
+from dashboard.admin_routes import admin_bp
+
+_SECRET_KEY_PATH = _USER_DATA / "secret_key.txt"
+_USER_DATA.mkdir(parents=True, exist_ok=True)
+if _SECRET_KEY_PATH.exists():
+    app.config["SECRET_KEY"] = _SECRET_KEY_PATH.read_text().strip()
+else:
+    import secrets as _secrets
+    _key = _secrets.token_hex(32)
+    _SECRET_KEY_PATH.write_text(_key)
+    app.config["SECRET_KEY"] = _key
+
+app.config["USERS_PATH"] = _USER_DATA / "users.json"
+app.config["USER_DATA_ROOT"] = _USER_DATA
+
+login_manager = LoginManager(app)
+login_manager.login_view = "auth.login"
+
+app.register_blueprint(auth_bp)
+app.register_blueprint(admin_bp)
+
+
+@login_manager.user_loader
+def _flask_load_user(email):
+    users_path = app.config.get("USERS_PATH", _USER_DATA / "users.json")
+    data_root = app.config.get("USER_DATA_ROOT", _USER_DATA)
+    return _load_user_by_email(email, path=users_path, data_root=data_root)
+
+
+@app.before_request
+def _inject_user():
+    """Set g.data_dir for authenticated users. Redirect to login for protected routes."""
+    if request.endpoint and request.endpoint.startswith(("auth.", "static")):
+        return
+    if not current_user.is_authenticated:
+        return login_manager.unauthorized()
+    g.user = current_user
+    g.data_dir = current_user.data_dir
+
+
+def _current_data_dir() -> Path:
+    """Return the current user's data directory, falling back to _USER_DATA for CLI."""
+    try:
+        return g.data_dir
+    except (AttributeError, RuntimeError):
+        return _USER_DATA
+
+
+def _current_state_path() -> Path:
+    return _current_data_dir() / "reply_state.json"
+
+
+def _current_sp_state_path() -> Path:
+    return _current_data_dir() / "subprocessor_reply_state.json"
+
+
+def _current_tokens_dir() -> Path:
+    return _current_data_dir() / "tokens"
+
+
+def _current_sp_requests_path() -> Path:
+    return _current_data_dir() / "subprocessor_requests.json"
+
+# ---------------------------------------------------------------------------
 
 # Extensibility hook: maps request type key → metadata
 # Adding a new type = one entry here + template section
@@ -279,23 +354,29 @@ def _dedup_reply_rows(sar_rows: list[dict], sp_rows: list[dict]) -> list[dict]:
 
 
 def _get_accounts() -> list[str]:
-    """Return all account emails found in reply_state.json."""
-    if not _STATE_PATH.exists():
-        return []
-    import json
-    try:
-        data = json.loads(_STATE_PATH.read_text())
-    except Exception:
-        return []
-    accounts = []
-    for safe_key in data.keys():
-        # Reverse _safe_email: trader1620_at_gmail_com → trader1620@gmail.com
-        if "_at_" in safe_key:
-            local, domain = safe_key.split("_at_", 1)
-            accounts.append(f"{local}@{domain.replace('_', '.')}")
-        else:
-            accounts.append(safe_key)
-    return accounts
+    """Return mailbox emails for the current logged-in user."""
+    data_dir = _current_data_dir()
+    accounts: set[str] = set()
+
+    # From reply_state.json
+    state_file = data_dir / "reply_state.json"
+    if state_file.exists():
+        import json as _json_mod
+        try:
+            data = _json_mod.loads(state_file.read_text())
+            for safe_key in data:
+                accounts.add(_safe_email_to_addr(safe_key))
+        except Exception:
+            pass
+
+    # From token files
+    tokens_dir = data_dir / "tokens"
+    if tokens_dir.exists():
+        for p in tokens_dir.glob("*_readonly.json"):
+            safe_key = p.stem.replace("_readonly", "")
+            accounts.add(_safe_email_to_addr(safe_key))
+
+    return sorted(accounts)
 
 
 def _build_card(domain: str, state, status: str) -> dict:
@@ -444,8 +525,8 @@ def dashboard():
         states = _load_all_states(account)
 
         # Load subprocessor reply states and sent domains for SP badges
-        sp_states = load_state(account, path=_SUBPROCESSOR_STATE_PATH)
-        sp_sent_domains: set[str] = {r.get("domain", "") for r in get_log(path=_SUBPROCESSOR_REQUESTS_PATH)}
+        sp_states = load_state(account, path=_current_sp_state_path())
+        sp_sent_domains: set[str] = {r.get("domain", "") for r in get_log(path=_current_sp_requests_path())}
 
         for domain, state in states.items():
             status = compute_status(state)
@@ -461,7 +542,7 @@ def dashboard():
         # Sort by company-level urgency
         cards.sort(key=lambda c: _COMPANY_STATUS_PRIORITY.get(c["company_status"], 0), reverse=True)
 
-    scan_state = load_scan_state(account) if account else {}
+    scan_state = load_scan_state(account, data_dir=_current_data_dir()) if account else {}
     return render_template(
         "dashboard.html",
         cards=cards,
@@ -538,9 +619,9 @@ def company_detail(domain: str):
         })
 
     # Load subprocessor sent record and state for this domain
-    sp_log = get_log(path=_SUBPROCESSOR_REQUESTS_PATH)
+    sp_log = get_log(path=_current_sp_requests_path())
     sp_sent = next((r for r in sp_log if r.get("domain") == domain), None)
-    sp_states = load_state(account, path=_SUBPROCESSOR_STATE_PATH)
+    sp_states = load_state(account, path=_current_sp_state_path())
     sp_state = sp_states.get(domain)
     sp_status = compute_status(sp_state) if sp_state else None
 
@@ -703,7 +784,7 @@ def send_followup(domain: str):
 
     from letter_engine.sender import send_thread_reply
 
-    states = load_state(account, path=_STATE_PATH)
+    states = load_state(account, path=_current_state_path())
     state = states.get(domain)
     if not state:
         flash("Company not found.", "danger")
@@ -715,13 +796,14 @@ def send_followup(domain: str):
         return redirect(url_for("company_detail", domain=domain, account=account))
 
     success, _msg_id, _thread_id = send_thread_reply(
-        state.gmail_thread_id, to_addr, subject, reply_body, account
+        state.gmail_thread_id, to_addr, subject, reply_body, account,
+        tokens_dir=_current_tokens_dir(),
     )
     if success:
         reply.reply_review_status = "sent"
         reply.sent_reply_body = reply_body
         reply.sent_reply_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-        save_state(account, states, path=_STATE_PATH)
+        save_state(account, states, path=_current_state_path())
         flash("Follow-up reply sent.", "success")
     else:
         flash("Failed to send follow-up reply. Check Gmail auth.", "danger")
@@ -734,13 +816,13 @@ def dismiss_followup(domain: str):
     account = request.form.get("account", "")
     gmail_message_id = request.form.get("gmail_message_id", "")
 
-    states = load_state(account, path=_STATE_PATH)
+    states = load_state(account, path=_current_state_path())
     state = states.get(domain)
     if state:
         reply = next((r for r in state.replies if r.gmail_message_id == gmail_message_id), None)
         if reply:
             reply.reply_review_status = "dismissed"
-            save_state(account, states, path=_STATE_PATH)
+            save_state(account, states, path=_current_state_path())
 
     return redirect(url_for("company_detail", domain=domain, account=account))
 
@@ -756,7 +838,7 @@ def send_sp_followup(domain: str):
 
     from letter_engine.sender import send_thread_reply
 
-    sp_states = load_state(account, path=_SUBPROCESSOR_STATE_PATH)
+    sp_states = load_state(account, path=_current_sp_state_path())
     state = sp_states.get(domain)
     if not state:
         flash("SP state not found.", "danger")
@@ -768,13 +850,14 @@ def send_sp_followup(domain: str):
         return redirect(url_for("company_detail", domain=domain, account=account))
 
     success, _msg_id, _thread_id = send_thread_reply(
-        thread_id or state.gmail_thread_id, to_addr, subject, reply_body, account
+        thread_id or state.gmail_thread_id, to_addr, subject, reply_body, account,
+        tokens_dir=_current_tokens_dir(),
     )
     if success:
         reply.reply_review_status = "sent"
         reply.sent_reply_body = reply_body
         reply.sent_reply_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-        save_state(account, sp_states, path=_SUBPROCESSOR_STATE_PATH)
+        save_state(account, sp_states, path=_current_sp_state_path())
         flash("Follow-up reply sent.", "success")
     else:
         flash("Failed to send follow-up reply. Check Gmail auth.", "danger")
@@ -787,13 +870,13 @@ def dismiss_sp_followup(domain: str):
     account = request.form.get("account", "")
     gmail_message_id = request.form.get("gmail_message_id", "")
 
-    sp_states = load_state(account, path=_SUBPROCESSOR_STATE_PATH)
+    sp_states = load_state(account, path=_current_sp_state_path())
     state = sp_states.get(domain)
     if state:
         reply = next((r for r in state.replies if r.gmail_message_id == gmail_message_id), None)
         if reply:
             reply.reply_review_status = "dismissed"
-            save_state(account, sp_states, path=_SUBPROCESSOR_STATE_PATH)
+            save_state(account, sp_states, path=_current_sp_state_path())
 
     return redirect(url_for("company_detail", domain=domain, account=account))
 
@@ -916,8 +999,8 @@ def cards_listing():
 
     if account:
         states = _load_all_states(account)
-        sp_states = load_state(account, path=_SUBPROCESSOR_STATE_PATH)
-        sp_sent_domains: set[str] = {r.get("domain", "") for r in get_log(path=_SUBPROCESSOR_REQUESTS_PATH)}
+        sp_states = load_state(account, path=_current_sp_state_path())
+        sp_sent_domains: set[str] = {r.get("domain", "") for r in get_log(path=_current_sp_requests_path())}
 
         for domain, state in states.items():
             status = compute_status(state)
@@ -1055,7 +1138,7 @@ def scan_folder(domain: str):
     )
 
     # Persist catalog to state
-    states = load_state(account, path=_STATE_PATH)
+    states = load_state(account, path=_current_state_path())
     state = states.get(domain)
     if state:
         target = next(
@@ -1064,7 +1147,7 @@ def scan_folder(domain: str):
         )
         if target:
             target.attachment_catalog = catalog.to_dict()
-            save_state(account, states, path=_STATE_PATH)
+            save_state(account, states, path=_current_state_path())
 
     return redirect(url_for("data_card", domain=domain, account=account))
 
@@ -1079,7 +1162,7 @@ def download_data(domain: str):
 
     from reply_monitor.link_downloader import download_data_link
 
-    states = load_state(account, path=_STATE_PATH)
+    states = load_state(account, path=_current_state_path())
     state = states.get(domain)
     if not state:
         return f"No data found for {domain}", 404
@@ -1098,7 +1181,7 @@ def download_data(domain: str):
 
     if result.ok:
         target_reply.attachment_catalog = result.catalog.to_dict()
-        save_state(account, states, path=_STATE_PATH)
+        save_state(account, states, path=_current_state_path())
         return redirect(url_for("data_card", domain=domain, account=account))
 
     if result.too_large:
@@ -1157,13 +1240,13 @@ def _reextract_missing_links(account: str) -> int:
     from reply_monitor.classifier import reextract_data_links
     from reply_monitor.fetcher import _extract_body
 
-    states = load_state(account, path=_STATE_PATH)
+    states = load_state(account, path=_current_state_path())
     needs_update = False
     for domain, state in states.items():
         for reply in state.replies:
             if "DATA_PROVIDED_LINK" in reply.tags and not reply.extracted.get("data_link"):
                 try:
-                    service, _email = get_gmail_service(email_hint=account)
+                    service, _email = get_gmail_service(email_hint=account, tokens_dir=_current_tokens_dir())
                     msg = service.users().messages().get(
                         userId="me",
                         id=reply.gmail_message_id,
@@ -1178,10 +1261,10 @@ def _reextract_missing_links(account: str) -> int:
                     print(f"[reextract] {domain}/{reply.gmail_message_id}: {exc}")
 
     if needs_update:
-        save_state(account, states, path=_STATE_PATH)
+        save_state(account, states, path=_current_state_path())
         # Reload updated state and trigger auto-download for any newly extracted URLs
         import os
-        states = load_state(account, path=_STATE_PATH)
+        states = load_state(account, path=_current_state_path())
         _auto_download_data_links(account, states, os.environ.get("ANTHROPIC_API_KEY"))
 
     return sum(
@@ -1208,9 +1291,9 @@ def _run_monitor_for_account(account: str):
         update_state,
     )
 
-    service, email = get_gmail_service(email_hint=account)
-    sent_log = get_log()
-    states = load_state(email, path=_STATE_PATH)
+    service, email = get_gmail_service(email_hint=account, tokens_dir=_current_tokens_dir())
+    sent_log = get_log(data_dir=_current_data_dir())
+    states = load_state(email, path=_current_state_path())
 
     api_key = None
     try:
@@ -1265,7 +1348,7 @@ def _run_monitor_for_account(account: str):
         if new_replies:
             states[domain] = update_state(state, new_replies)
 
-    save_state(email, states, path=_STATE_PATH)
+    save_state(email, states, path=_current_state_path())
 
     # Auto-download any DATA_PROVIDED_LINK replies that have a URL but no catalog yet
     _auto_download_data_links(email, states, api_key)
@@ -1292,7 +1375,7 @@ def _run_subprocessor_monitor_for_account(
         update_state,
     )
 
-    log = get_log(path=_SUBPROCESSOR_REQUESTS_PATH)
+    log = get_log(path=_current_sp_requests_path())
     if not log:
         return
 
@@ -1300,8 +1383,8 @@ def _run_subprocessor_monitor_for_account(
         service, email = _service, _email
     else:
         from auth.gmail_oauth import get_gmail_service
-        service, email = get_gmail_service(email_hint=account)
-    sp_states = load_state(email, path=_SUBPROCESSOR_STATE_PATH)
+        service, email = get_gmail_service(email_hint=account, tokens_dir=_current_tokens_dir())
+    sp_states = load_state(email, path=_current_sp_state_path())
 
     import os as _os
     api_key = _os.environ.get("ANTHROPIC_API_KEY")
@@ -1346,7 +1429,7 @@ def _run_subprocessor_monitor_for_account(
         if new_replies:
             sp_states[domain] = update_state(state, new_replies)
 
-    save_state(email, sp_states, path=_SUBPROCESSOR_STATE_PATH)
+    save_state(email, sp_states, path=_current_sp_state_path())
 
 
 def _auto_download_data_links(account: str, states: dict, api_key: str | None) -> None:
@@ -1377,7 +1460,7 @@ def _auto_download_data_links(account: str, states: dict, api_key: str | None) -
                     print(f"[auto-download] {domain}: exception — {exc}")
 
     if needs_save:
-        save_state(account, states, path=_STATE_PATH)
+        save_state(account, states, path=_current_state_path())
 
 
 
@@ -1464,9 +1547,9 @@ def transfers():
 
     # Load subprocessor request log for "already sent" badges and reply state for live status
     from letter_engine.tracker import get_log as _get_letter_log
-    _req_log = _get_letter_log(path=_SUBPROCESSOR_REQUESTS_PATH)
+    _req_log = _get_letter_log(path=_current_sp_requests_path())
     requested_domains: set[str] = {r.get("domain", "") for r in _req_log}
-    sp_states = load_state(account, path=_SUBPROCESSOR_STATE_PATH) if account else {}
+    sp_states = load_state(account, path=_current_sp_state_path()) if account else {}
 
     rows = []
     for domain in states:
@@ -1561,11 +1644,13 @@ def transfers_request_letter(domain: str):
         flash(f"No email contact found for {domain}.", "warning")
         return redirect(url_for("transfers", account=account))
 
-    success, msg_id, thread_id = send_letter(letter, account, record=False)
+    success, msg_id, thread_id = send_letter(
+        letter, account, record=False, tokens_dir=_current_tokens_dir(),
+    )
     if success:
         letter.gmail_message_id = msg_id
         letter.gmail_thread_id = thread_id
-        record_subprocessor_request(letter, domain)
+        record_subprocessor_request(letter, domain, data_dir=_current_data_dir())
         flash(f"Disclosure request sent to {letter.to_email}.", "success")
     else:
         flash(f"Failed to send disclosure request for {domain}.", "danger")
@@ -1610,7 +1695,7 @@ def api_body(domain: str, message_id: str):
     try:
         from auth.gmail_oauth import get_gmail_service
         from reply_monitor.fetcher import _extract_body
-        service, _email = get_gmail_service(email_hint=account)
+        service, _email = get_gmail_service(email_hint=account, tokens_dir=_current_tokens_dir())
         msg = service.users().messages().get(
             userId="me", id=message_id, format="full"
         ).execute()
@@ -1639,26 +1724,18 @@ from dashboard.scan_state import load_scan_state, save_scan_state, get_all_accou
 from dashboard.tasks import start_task, get_task, find_running_task, update_task_progress
 
 _CONFIDENCE_RANK = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
-_TOKENS_DIR = _USER_DATA / "tokens"
-
-
-def _safe_email_to_address(safe_key: str) -> str:
-    """Reverse the safe-key encoding back to an email address."""
-    if "_at_" in safe_key:
-        local, domain_part = safe_key.split("_at_", 1)
-        return f"{local}@{domain_part.replace('_', '.')}"
-    return safe_key
 
 
 def _get_all_accounts() -> list[str]:
     """Return all accounts found across reply_state.json, scan_state.json, and token files."""
     accounts: set[str] = set(_get_accounts())
-    for safe_key in _get_scan_accounts():
-        accounts.add(_safe_email_to_address(safe_key))
-    if _TOKENS_DIR.exists():
-        for p in _TOKENS_DIR.glob("*_readonly.json"):
+    for safe_key in _get_scan_accounts(path=_current_data_dir() / "scan_state.json"):
+        accounts.add(_safe_email_to_addr(safe_key))
+    tokens_dir = _current_tokens_dir()
+    if tokens_dir.exists():
+        for p in tokens_dir.glob("*_readonly.json"):
             safe_key = p.name.replace("_readonly.json", "")
-            accounts.add(_safe_email_to_address(safe_key))
+            accounts.add(_safe_email_to_addr(safe_key))
     return sorted(accounts)
 
 
@@ -1676,9 +1753,9 @@ def _load_all_states(account: str) -> dict:
     This is the single authoritative source of "all companies we have sent to",
     used by the dashboard, cards, and pipeline to ensure consistent counts.
     """
-    states = load_state(account, path=_STATE_PATH)
+    states = load_state(account, path=_current_state_path())
     try:
-        sent_log = get_log()
+        sent_log = get_log(data_dir=_current_data_dir())
         records_by_domain: dict[str, list[dict]] = {}
         for record in sent_log:
             d = domain_from_sent_record(record)
@@ -1707,7 +1784,7 @@ def _sync_scan_state_flags(account: str, state: dict) -> dict:
     sar_sent is True only when a NON-bounced email was sent (direct domain match or
     contact-email-domain match), excluding any address in failed_emails.
     """
-    sent_log = get_log()
+    sent_log = get_log(data_dir=_current_data_dir())
     companies_db = _load_companies_db()
 
     # Build most-recent sent record per domain
@@ -1719,7 +1796,7 @@ def _sync_scan_state_flags(account: str, state: dict) -> dict:
 
     # Load reply states to detect BOUNCED companies
     try:
-        reply_states = load_state(account)
+        reply_states = load_state(account, path=_current_state_path())
     except Exception:
         reply_states = {}
 
@@ -1808,13 +1885,13 @@ def _sync_scan_state_flags(account: str, state: dict) -> dict:
 def _token_exists(account: str, kind: str) -> bool:
     """Check whether an OAuth token file exists for this account."""
     from dashboard.scan_state import _safe_key as _sk
-    return (_TOKENS_DIR / f"{_sk(account)}_{kind}.json").exists()
+    return (_current_tokens_dir() / f"{_sk(account)}_{kind}.json").exists()
 
 
 def _send_token_valid(account: str) -> tuple[bool, str]:
     """Return (is_valid, error_message) for the send token."""
     from auth.gmail_oauth import check_send_token_valid
-    return check_send_token_valid(account, tokens_dir=_TOKENS_DIR)
+    return check_send_token_valid(account, tokens_dir=_current_tokens_dir())
 
 
 # ---------------------------------------------------------------------------
@@ -1834,7 +1911,7 @@ def _do_scan(task_id: str, service: Any, account: str, known_ids: set[str], max_
     new_emails = fetch_new_emails(service, known_ids, max_results=max_emails, progress_callback=_progress)
     new_services = extract_services(new_emails)
 
-    state = load_scan_state(account)
+    state = load_scan_state(account, data_dir=_current_data_dir())
     discovered = state.setdefault("discovered_companies", {})
 
     new_count = 0
@@ -1865,7 +1942,7 @@ def _do_scan(task_id: str, service: Any, account: str, known_ids: set[str], max_
     state["last_scan_at"] = datetime.now(timezone.utc).isoformat()
     if inbox_total > 0:
         state["inbox_total"] = inbox_total
-    save_scan_state(account, state)
+    save_scan_state(account, state, data_dir=_current_data_dir())
 
     return {"new_emails": len(new_emails), "new_companies": new_count, "total_discovered": len(discovered)}
 
@@ -1883,7 +1960,7 @@ def _do_resolve(task_id: str, account: str, unresolved: list[tuple[str, dict]], 
         exclude = set(data.get("failed_emails", []))
         record = resolver.resolve(domain, data["company_name_raw"], verbose=False, exclude_emails=exclude or None)
         # Reload before writing to avoid stale overwrites
-        state = load_scan_state(account)
+        state = load_scan_state(account, data_dir=_current_data_dir())
         if domain in state.get("discovered_companies", {}):
             if record:
                 state["discovered_companies"][domain]["contact_resolved"] = True
@@ -1891,7 +1968,7 @@ def _do_resolve(task_id: str, account: str, unresolved: list[tuple[str, dict]], 
             else:
                 # Mark as skipped so it isn't retried on the next resolve run
                 state["discovered_companies"][domain]["skipped"] = True
-        save_scan_state(account, state)
+        save_scan_state(account, state, data_dir=_current_data_dir())
 
     update_task_progress(task_id, len(unresolved), len(unresolved))
     return {"resolved": resolved_count, "attempted": len(unresolved)}
@@ -1915,12 +1992,14 @@ def _do_send(task_id: str, account: str, approved_domains: list[str]) -> dict:
         except Exception:
             continue
         letter = compose(record)
-        success, _msg_id, _thread_id = send_letter(letter, account)
+        success, _msg_id, _thread_id = send_letter(
+            letter, account, data_dir=_current_data_dir(), tokens_dir=_current_tokens_dir(),
+        )
         if success:
-            state = load_scan_state(account)
+            state = load_scan_state(account, data_dir=_current_data_dir())
             if domain in state.get("discovered_companies", {}):
                 state["discovered_companies"][domain]["sar_sent"] = True
-            save_scan_state(account, state)
+            save_scan_state(account, state, data_dir=_current_data_dir())
             sent_count += 1
 
     update_task_progress(task_id, len(approved_domains), len(approved_domains))
@@ -1981,7 +2060,6 @@ def _send_all_disclosure_requests(task_id: str, account: str) -> dict:
     from letter_engine.tracker import (
         get_log as _get_letter_log,
         record_subprocessor_request,
-        _SUBPROCESSOR_REQUESTS_PATH,
     )
 
     states = _load_all_states(account)
@@ -1994,7 +2072,7 @@ def _send_all_disclosure_requests(task_id: str, account: str) -> dict:
         companies_raw = {}
 
     # Build set of domains already requested
-    _req_log = _get_letter_log(path=_SUBPROCESSOR_REQUESTS_PATH)
+    _req_log = _get_letter_log(path=_current_sp_requests_path())
     already_requested: set[str] = {r.get("domain", "") for r in _req_log}
 
     sent = 0
@@ -2023,11 +2101,13 @@ def _send_all_disclosure_requests(task_id: str, account: str) -> dict:
             skipped += 1
             continue
 
-        success, msg_id, thread_id = send_letter(letter, account, record=False)
+        success, msg_id, thread_id = send_letter(
+            letter, account, record=False, tokens_dir=_current_tokens_dir(),
+        )
         if success:
             letter.gmail_message_id = msg_id
             letter.gmail_thread_id = thread_id
-            record_subprocessor_request(letter, domain)
+            record_subprocessor_request(letter, domain, data_dir=_current_data_dir())
             already_requested.add(domain)
             sent += 1
         else:
@@ -2057,7 +2137,7 @@ def pipeline():
     accounts = _get_all_accounts()
     account = request.args.get("account", accounts[0] if accounts else "")
 
-    state = load_scan_state(account)
+    state = load_scan_state(account, data_dir=_current_data_dir())
     state = _sync_scan_state_flags(account, state)
 
     discovered = state.get("discovered_companies", {})
@@ -2084,7 +2164,7 @@ def pipeline():
     # Count pending/overdue from reply_state for the Monitor card
     monitor_counts = {"PENDING": 0, "OVERDUE": 0}
     try:
-        reply_states = load_state(account)
+        reply_states = load_state(account, path=_current_state_path())
         for s in reply_states.values():
             st = compute_status(s)
             if st in monitor_counts:
@@ -2153,7 +2233,7 @@ def pipeline_add_account():
     # Trigger OAuth (will open browser if token missing)
     try:
         from auth.gmail_oauth import get_gmail_service
-        _service, authenticated_as = get_gmail_service(email_hint=new_account)
+        _service, authenticated_as = get_gmail_service(email_hint=new_account, tokens_dir=_current_tokens_dir())
     except Exception as exc:
         return f"OAuth failed: {exc}", 500
 
@@ -2178,12 +2258,12 @@ def pipeline_scan():
     # Build + validate the Gmail service synchronously here so auth errors surface
     # immediately as JSON (not as a silent hang in a background thread).
     try:
-        service, account = get_gmail_service(email_hint=account)
+        service, account = get_gmail_service(email_hint=account, tokens_dir=_current_tokens_dir())
     except Exception as exc:
         return jsonify({"error": f"Gmail auth failed: {exc}. Run `python run.py --dry-run` once to re-authenticate."}), 401
 
     max_emails = min(int(request.form.get("max_emails", 2000)), 10000)
-    state = load_scan_state(account)
+    state = load_scan_state(account, data_dir=_current_data_dir())
     known_ids = set(state.get("scanned_message_ids", []))
     task_id = start_task("scan", _do_scan, service, account, known_ids, max_emails)
     return jsonify({"task_id": task_id})
@@ -2198,9 +2278,9 @@ def pipeline_resolve():
     if existing:
         return jsonify({"task_id": existing["id"], "already_running": True})
 
-    state = load_scan_state(account)
+    state = load_scan_state(account, data_dir=_current_data_dir())
     state = _sync_scan_state_flags(account, state)
-    save_scan_state(account, state)  # persist cache-hit flags so they aren't re-attempted
+    save_scan_state(account, state, data_dir=_current_data_dir())  # persist cache-hit flags so they aren't re-attempted
     unresolved = [
         (domain, data)
         for domain, data in state.get("discovered_companies", {}).items()
@@ -2218,7 +2298,7 @@ def pipeline_review():
     accounts = _get_all_accounts()
     account = request.args.get("account", accounts[0] if accounts else "")
 
-    state = load_scan_state(account)
+    state = load_scan_state(account, data_dir=_current_data_dir())
     state = _sync_scan_state_flags(account, state)
     companies_db = _load_companies_db()
 
@@ -2296,7 +2376,7 @@ def pipeline_manual_contact():
     ContactResolver().save(domain, record)
 
     # Reset scan state: clear needs_human, mark resolved, ready for review
-    state = load_scan_state(account)
+    state = load_scan_state(account, data_dir=_current_data_dir())
     company_data = state.get("discovered_companies", {}).get(domain)
     if company_data is not None:
         company_data["needs_human"] = False
@@ -2304,7 +2384,7 @@ def pipeline_manual_contact():
         company_data["sar_sent"] = False
         company_data["approved"] = False
         company_data["skipped"] = False
-    save_scan_state(account, state)
+    save_scan_state(account, state, data_dir=_current_data_dir())
 
     return redirect(url_for("pipeline", account=account))
 
@@ -2315,12 +2395,12 @@ def pipeline_approve():
     account = data.get("account", "")
     approvals: dict = data.get("approvals", {})
 
-    state = load_scan_state(account)
+    state = load_scan_state(account, data_dir=_current_data_dir())
     for domain, approved in approvals.items():
         if domain in state.get("discovered_companies", {}):
             state["discovered_companies"][domain]["approved"] = bool(approved)
             state["discovered_companies"][domain]["skipped"] = not bool(approved)
-    save_scan_state(account, state)
+    save_scan_state(account, state, data_dir=_current_data_dir())
     return jsonify({"ok": True})
 
 
@@ -2333,11 +2413,11 @@ def pipeline_reauth_send():
     account = request.args.get("account", "")
 
     # Delete the stale token so get_gmail_send_service will trigger a fresh OAuth flow
-    token_path = _TOKENS_DIR / f"{_sk(account)}_send.json"
+    token_path = _current_tokens_dir() / f"{_sk(account)}_send.json"
     token_path.unlink(missing_ok=True)
 
     try:
-        get_gmail_send_service(account, tokens_dir=_TOKENS_DIR)
+        get_gmail_send_service(account, tokens_dir=_current_tokens_dir())
     except Exception as exc:
         return f"<p>Auth failed: {exc}</p><p><a href='/pipeline/review?account={account}'>Back</a></p>", 500
 
@@ -2357,7 +2437,7 @@ def pipeline_send():
     if existing:
         return jsonify({"task_id": existing["id"], "already_running": True})
 
-    state = load_scan_state(account)
+    state = load_scan_state(account, data_dir=_current_data_dir())
     state = _sync_scan_state_flags(account, state)
     approved_domains = [
         domain for domain, data in state.get("discovered_companies", {}).items()
@@ -2385,7 +2465,7 @@ def api_task(task_id: str):
 @app.route("/api/scan/status")
 def api_scan_status():
     account = request.args.get("account", "")
-    state = load_scan_state(account)
+    state = load_scan_state(account, data_dir=_current_data_dir())
     running = find_running_task("scan")
     total_scanned = len(state.get("scanned_message_ids", []))
     inbox_total = state.get("inbox_total", 0)
@@ -2399,6 +2479,164 @@ def api_scan_status():
         "inbox_complete": inbox_total > 0 and total_scanned >= inbox_total,
         "total_discovered": len(state.get("discovered_companies", {})),
     })
+
+
+# ---------------------------------------------------------------------------
+# Settings: export & delete account
+# ---------------------------------------------------------------------------
+
+import io
+import zipfile
+
+
+@app.route("/settings/export")
+def export_data():
+    """Download a zip of the user's data directory."""
+    data_dir = _current_data_dir()
+    if not data_dir.exists():
+        return "No data found.", 404
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file_path in data_dir.rglob("*"):
+            if file_path.is_file():
+                arcname = file_path.relative_to(data_dir)
+                zf.write(file_path, arcname)
+
+    buf.seek(0)
+    safe = _safe_email(g.user.email)
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=gdpr-agent-{safe}.zip"},
+    )
+
+
+@app.route("/settings/delete-account", methods=["POST"])
+def delete_account():
+    """Delete the current user's account and all their data."""
+    import shutil
+    from dashboard.user_model import delete_user
+
+    email = g.user.email
+    data_dir = _current_data_dir()
+
+    if data_dir.exists():
+        shutil.rmtree(data_dir)
+
+    delete_user(email, path=app.config.get("USERS_PATH", _USER_DATA / "users.json"))
+
+    from flask_login import logout_user
+    logout_user()
+
+    return redirect(url_for("auth.login"))
+
+
+# ---------------------------------------------------------------------------
+# Progressive scan with SSE
+# ---------------------------------------------------------------------------
+
+import threading
+from dashboard.sse import MessageAnnouncer, format_sse
+
+_scan_announcers: dict[str, MessageAnnouncer] = {}
+
+
+@app.route("/scan")
+def scan_page():
+    """Progressive scan page."""
+    mailbox = request.args.get("mailbox", "")
+    data_dir = _current_data_dir()
+    scan_state = {}
+    if mailbox:
+        scan_state = load_scan_state(mailbox, data_dir=data_dir)
+    return render_template("scan.html", mailbox=mailbox, scan_state=scan_state)
+
+
+@app.route("/scan/start", methods=["POST"])
+def scan_start():
+    """Start or resume a scan for the given mailbox."""
+    mailbox = request.form.get("mailbox", "")
+    batch_size = int(request.form.get("batch_size", 500))
+    user_email = g.user.email
+    data_dir = _current_data_dir()
+
+    ann = MessageAnnouncer()
+    _scan_announcers[user_email] = ann
+
+    def _run_scan():
+        from auth.gmail_oauth import get_gmail_service
+        from scanner.inbox_reader import fetch_emails
+        from scanner.service_extractor import extract_services
+
+        try:
+            tokens_dir = data_dir / "tokens"
+            service, email = get_gmail_service(
+                email_hint=mailbox, tokens_dir=tokens_dir
+            )
+
+            profile = service.users().getProfile(userId="me").execute()
+            total = profile.get("messagesTotal", 0)
+            ann.announce(format_sse(
+                f'{{"total_estimate": {total}}}', event="estimate"
+            ))
+
+            state = load_scan_state(mailbox, data_dir=data_dir)
+
+            emails = fetch_emails(service, max_results=batch_size)
+            services = extract_services(emails)
+
+            for svc in services:
+                domain = svc["domain"]
+                name = svc["company_name"]
+                confidence = svc["confidence"]
+                ann.announce(format_sse(
+                    f'{{"domain": "{domain}", "name": "{name}", "confidence": "{confidence}"}}',
+                    event="service",
+                ))
+
+            ann.announce(format_sse(
+                f'{{"scanned": {len(emails)}, "services": {len(services)}, "done": true}}',
+                event="progress",
+            ))
+
+            save_scan_state(mailbox, {
+                "emails_scanned": state.get("emails_scanned", 0) + len(emails),
+                "total_estimate": total,
+                "services_found": [s["domain"] for s in services],
+                "status": "paused",
+            }, data_dir=data_dir)
+
+        except Exception as e:
+            ann.announce(format_sse(f'{{"error": "{e!s}"}}', event="error"))
+
+    thread = threading.Thread(target=_run_scan, daemon=True)
+    thread.start()
+    return "", 204
+
+
+@app.route("/scan/stream")
+def scan_stream():
+    """SSE endpoint for scan progress."""
+    user_email = g.user.email
+    ann = _scan_announcers.get(user_email)
+    if not ann:
+        return "No active scan", 404
+
+    def stream():
+        q = ann.listen()
+        try:
+            while True:
+                msg = q.get(timeout=60)
+                yield msg
+        except Exception:
+            pass
+
+    return Response(
+        stream(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 if __name__ == "__main__":

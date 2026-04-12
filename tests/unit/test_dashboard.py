@@ -14,8 +14,15 @@ sys.path.insert(0, str(_ROOT))
 
 @pytest.fixture
 def client(tmp_path):
-    """Flask test client with isolated user_data paths."""
-    # Write minimal state file
+    """Flask test client with isolated user_data paths and authenticated user."""
+    from dashboard.user_model import User, save_user
+
+    # Create user directory structure
+    user_dir = tmp_path / "test_at_example_com"
+    user_dir.mkdir()
+    (user_dir / "tokens").mkdir()
+
+    # Write minimal state file in user's directory
     state_data = {
         "test_at_example_com": {
             "spotify.com": {
@@ -31,7 +38,7 @@ def client(tmp_path):
             }
         }
     }
-    state_path = tmp_path / "reply_state.json"
+    state_path = user_dir / "reply_state.json"
     state_path.write_text(json.dumps(state_data))
 
     cost_data = [
@@ -49,6 +56,10 @@ def client(tmp_path):
     cost_path = tmp_path / "cost_log.json"
     cost_path.write_text(json.dumps(cost_data))
 
+    # Create admin user
+    admin = User(email="test@example.com", name="Test", role="admin", data_root=tmp_path)
+    save_user(admin, path=tmp_path / "users.json")
+
     import dashboard.app as app_module
 
     app_module._STATE_PATH = state_path
@@ -57,7 +68,11 @@ def client(tmp_path):
     with patch("dashboard.app.get_log", return_value=[]):
         with patch("contact_resolver.cost_tracker._COST_LOG_PATH", cost_path):
             app_module.app.config["TESTING"] = True
+            app_module.app.config["USERS_PATH"] = tmp_path / "users.json"
+            app_module.app.config["USER_DATA_ROOT"] = tmp_path
             with app_module.app.test_client() as c:
+                with c.session_transaction() as sess:
+                    sess["_user_id"] = "test@example.com"
                 yield c
 
 

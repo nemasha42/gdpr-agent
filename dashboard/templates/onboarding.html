@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Welcome — GDPR Agent{% endblock %}
+{% block content %}
+<div class="container mt-5" style="max-width: 480px;">
+  <h2>Welcome to GDPR Agent</h2>
+  <p>You've been invited to use this tool. Let's get you set up.</p>
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+  <form method="POST" action="{{ url_for('auth.onboarding_submit') }}">
+    <div class="mb-3">
+      <label for="name" class="form-label">Your full name</label>
+      <input type="text" class="form-control" id="name" name="name" required
+             placeholder="Used in Subject Access Request letters">
+    </div>
+    <p class="text-muted small">Email: {{ email }}</p>
+    <button type="submit" class="btn btn-primary w-100">
+      Continue &amp; Connect Gmail
+    </button>
+  </form>
+</div>
+{% endblock %}
