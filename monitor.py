@@ -690,12 +690,12 @@ def _reprocess_existing(
     verbose: bool = False,
     dry_run: bool = False,
 ) -> int:
-    """Re-classify replies whose tags are a subset of {HUMAN_REVIEW, AUTO_ACKNOWLEDGE}.
+    """Re-classify replies whose tags are a subset of {HUMAN_REVIEW, AUTO_ACKNOWLEDGE, WRONG_CHANNEL}.
 
-    These are the two tags that improved regex patterns are most likely to supersede.
+    These are the tags that improved regex patterns are most likely to supersede.
     Returns the number of replies whose tags changed.
     """
-    _REPROCESS_TAGS = {"HUMAN_REVIEW", "AUTO_ACKNOWLEDGE"}
+    _REPROCESS_TAGS = {"HUMAN_REVIEW", "AUTO_ACKNOWLEDGE", "WRONG_CHANNEL"}
     changed = 0
 
     for domain, state in states.items():
@@ -720,6 +720,10 @@ def _reprocess_existing(
                     )
                 if not dry_run:
                     reply.tags = new_result.tags
+                    # Re-extract URL fields with current junk URL filter
+                    for url_key in ("data_link", "data_links", "portal_url"):
+                        if url_key in new_result.extracted:
+                            reply.extracted[url_key] = new_result.extracted[url_key]
                 changed += 1
 
     return changed
