@@ -10,9 +10,15 @@ Routes:
 from __future__ import annotations
 
 import html as _html
+import logging
 import re
 import sys
 import urllib.parse as _urlparse
+
+logging.basicConfig(
+    format="%(levelname)s [%(name)s] %(message)s",
+    level=logging.INFO,
+)
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1484,13 +1490,15 @@ def transfers():
                 sp_replies.append({
                     "received_at": r.received_at,
                     "tags": r.tags,
-                    "snippet": r.snippet,
+                    "snippet": _clean_snippet(r.snippet),
                     "gmail_message_id": r.gmail_message_id,
                 })
+        state_obj = states[domain]
         rows.append({
             "domain": domain,
             "company_name": company_name,
             "subprocessors": sp_record,
+            "confirmed_subprocessors": getattr(state_obj, "confirmed_subprocessors", []),
             "has_email": has_email,
             "request_sent": domain in requested_domains,
             "sp_status": sp_status,
@@ -1498,15 +1506,24 @@ def transfers():
         })
     rows.sort(key=lambda r: r["company_name"].lower())
 
+    unmapped_rows = [r for r in rows if not r.get("subprocessors") or r["subprocessors"].get("fetch_status") != "ok"]
+    mapped_rows = [r for r in rows if r.get("subprocessors") and r["subprocessors"].get("fetch_status") == "ok"]
+
+    from dashboard.services.graph_data import build_graph_data
+    graph_data = build_graph_data(rows, companies_raw=companies_raw)
+
     running_task = find_running_task("subprocessors")
     running_request_task = find_running_task("subprocessor_requests")
     return render_template(
         "transfers.html",
         rows=rows,
+        mapped_rows=mapped_rows,
+        unmapped_rows=unmapped_rows,
         account=account,
         accounts=accounts,
         running_task=running_task,
         running_request_task=running_request_task,
+        graph_json=graph_data,
     )
 
 
@@ -1521,7 +1538,17 @@ def transfers_fetch():
     if find_running_task("subprocessors"):
         return redirect(url_for("transfers", account=account))
 
-    task_id = start_task("subprocessors", _fetch_all_subprocessors, account)
+    single_domain = request.form.get("single_domain", "").strip()
+    retry_not_found = bool(request.form.get("retry_not_found"))
+    try:
+        depth = int(request.form.get("depth", 0))
+    except (TypeError, ValueError):
+        depth = 0
+    depth = max(0, min(depth, 3))
+    task_id = start_task(
+        "subprocessors", _fetch_all_subprocessors,
+        account, retry_not_found, depth, single_domain or None,
+    )
     return redirect(url_for("transfers", account=account))
 
 
@@ -1927,49 +1954,97 @@ def _do_send(task_id: str, account: str, approved_domains: list[str]) -> dict:
     return {"sent": sent_count, "attempted": len(approved_domains)}
 
 
-def _fetch_all_subprocessors(task_id: str, account: str) -> dict:
-    """Background task: fetch subprocessors for all SAR domains."""
+def _fetch_all_subprocessors(task_id: str, account: str, retry_not_found: bool = False, depth: int = 0, single_domain: str | None = None) -> dict:
+    """Background task: fetch subprocessors for SAR domains that need fetching.
+
+    Skip logic:
+      - ``fetch_status="ok"`` within 30-day TTL → always skip
+      - ``fetch_status="not_found"`` within TTL → skip unless *retry_not_found*
+      - ``fetch_status="error"`` → always retry
+      - No subprocessors record → always fetch
+
+    *depth* controls SP-of-SP layers (0 = SAR companies only, 1–3 = deeper).
+    """
     import json as _j
     import os
-    from contact_resolver.subprocessor_fetcher import fetch_subprocessors, is_stale
+    from contact_resolver.subprocessor_fetcher import fetch_subprocessors
     from contact_resolver.resolver import write_subprocessors
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
 
     states = _load_all_states(account)
-    domains = list(states.keys())
-
-    try:
-        raw = _j.loads(_COMPANIES_PATH.read_text())
-        companies_raw = raw.get("companies", raw)
-    except Exception:
-        companies_raw = {}
+    base_domains = [single_domain] if single_domain else list(states.keys())
 
     fetched = 0
     skipped = 0
-    fetched_domains: set[str] = set()
+    visited: set[str] = set()
 
-    for i, domain in enumerate(domains):
-        update_task_progress(task_id, i, len(domains))
-        company_raw = companies_raw.get(domain, {})
-        company_name = company_raw.get("company_name") or domain
+    current_layer_domains = base_domains
 
-        existing = company_raw.get("subprocessors")
-        if existing and existing.get("fetch_status") == "ok" and not is_stale_dict(existing):
-            skipped += 1
-            continue
+    for layer in range(depth + 1):
+        for i, domain in enumerate(current_layer_domains):
+            total_estimate = len(current_layer_domains)
+            update_task_progress(
+                task_id,
+                fetched + skipped,
+                fetched + skipped + (total_estimate - i),
+            )
 
-        if domain in fetched_domains:
-            skipped += 1
-            continue
-        fetched_domains.add(domain)
+            if domain in visited:
+                skipped += 1
+                continue
+            visited.add(domain)
 
-        record = fetch_subprocessors(company_name, domain, api_key=api_key)
-        write_subprocessors(domain, record)
-        fetched += 1
+            # Re-read companies.json each iteration (previous writes may have added data)
+            try:
+                raw = _j.loads(_COMPANIES_PATH.read_text())
+                company_raw = raw.get("companies", raw).get(domain, {})
+            except Exception:
+                company_raw = {}
 
-    update_task_progress(task_id, len(domains), len(domains))
-    return {"fetched": fetched, "skipped": skipped, "total": len(domains)}
+            company_name = company_raw.get("company_name") or domain
+
+            existing = company_raw.get("subprocessors")
+            if existing and not is_stale_dict(existing):
+                status = existing.get("fetch_status", "")
+                if status == "ok":
+                    skipped += 1
+                    continue
+                if status == "not_found" and not retry_not_found:
+                    skipped += 1
+                    continue
+
+            record = fetch_subprocessors(company_name, domain, api_key=api_key)
+            write_subprocessors(domain, record)
+            fetched += 1
+
+        if layer >= depth:
+            break
+
+        # Collect newly discovered SP domains for the next layer
+        try:
+            raw = _j.loads(_COMPANIES_PATH.read_text())
+            companies_raw = raw.get("companies", raw)
+        except Exception:
+            companies_raw = {}
+
+        next_layer: set[str] = set()
+        for d in current_layer_domains:
+            cr = companies_raw.get(d, {})
+            sp_rec = cr.get("subprocessors")
+            if sp_rec and sp_rec.get("fetch_status") == "ok":
+                for sp in sp_rec.get("subprocessors", []):
+                    sp_domain = sp.get("domain", "")
+                    if sp_domain and sp_domain not in visited:
+                        next_layer.add(sp_domain)
+
+        if not next_layer:
+            break
+
+        current_layer_domains = sorted(next_layer)
+
+    update_task_progress(task_id, fetched + skipped, fetched + skipped)
+    return {"fetched": fetched, "skipped": skipped, "total": fetched + skipped}
 
 
 def _send_all_disclosure_requests(task_id: str, account: str) -> dict:

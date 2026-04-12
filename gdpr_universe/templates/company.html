@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}{{ company.company_name or company.domain }} — GDPR Universe{% endblock %}
+
+{% block content %}
+<a href="/" class="btn btn-sm btn-outline-secondary mb-3">&larr; Back</a>
+
+{# ── Company header ── #}
+<div class="d-flex align-items-center mb-3">
+    <img src="https://www.google.com/s2/favicons?domain={{ company.domain }}&sz=32"
+         alt="" width="28" height="28" class="me-2 rounded">
+    <div>
+        <h4 class="mb-0">
+            {{ company.company_name or company.domain }}
+            <small class="text-muted fs-6 ms-1">{{ company.domain }}</small>
+        </h4>
+        <span class="text-muted small">
+            {% if company.hq_country_code %}{{ company.hq_country_code }}{% endif %}
+            {% if company.sector %}&middot; {{ company.sector }}{% endif %}
+        </span>
+    </div>
+    <div class="ms-auto d-flex align-items-center gap-2">
+        {% for idx in indices %}
+        <span class="badge bg-info">{{ idx.index_name }}{% if idx.ticker %} ({{ idx.ticker }}){% endif %}</span>
+        {% endfor %}
+        {% if latest_fetch %}
+        <span class="fetch-status fetch-status-{{ latest_fetch.fetch_status }}">{{ latest_fetch.fetch_status or 'pending' }}</span>
+        {% else %}
+        <span class="fetch-status fetch-status-pending">pending</span>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Two-column layout ── #}
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>Subprocessors</strong>
+                <span class="badge bg-secondary">{{ sps|length }}</span>
+            </div>
+            <div class="card-body p-0">
+                {% if sps %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Company</th>
+                                <th>Country</th>
+                                <th>Category</th>
+                                <th>Transfer Basis</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sp in sps %}
+                            <tr role="button" onclick="window.location='/company/{{ sp.domain }}'">
+                                <td>
+                                    <img src="https://www.google.com/s2/favicons?domain={{ sp.domain }}&sz=16"
+                                         alt="" width="16" height="16" class="me-1">
+                                    {{ sp.company_name }}
+                                </td>
+                                <td>{{ sp.hq_country_code }}</td>
+                                <td>{{ sp.service_category }}</td>
+                                <td>{{ sp.transfer_basis }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted p-3 mb-0">No subprocessors discovered yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="graph-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>Data Flow Graph (2 hops)</strong>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-sm btn-outline-light py-0 px-2" id="graph-zoom-in" style="font-size:0.7rem">+</button>
+                  <button class="btn btn-sm btn-outline-light py-0 px-2" id="graph-zoom-out" style="font-size:0.7rem">-</button>
+                  <button class="btn btn-sm btn-outline-light py-0 px-2" id="graph-reset" style="font-size:0.7rem">reset</button>
+                </div>
+            </div>
+            <div class="card-body p-0 position-relative" style="height:420px;overflow:hidden">
+                <svg id="universe-graph" width="100%" height="100%"></svg>
+                <div class="position-absolute bottom-0 start-0 m-2 bg-dark bg-opacity-75 rounded px-2 py-1" style="font-size:0.68rem;z-index:10">
+                  <div class="d-flex gap-2 flex-wrap align-items-center text-light">
+                    <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;border:2px solid #3fb950;vertical-align:middle"></span> adequate</span>
+                    <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;border:2px solid #d29922;vertical-align:middle"></span> safeguarded</span>
+                    <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;border:2px solid #f85149;vertical-align:middle"></span> risky</span>
+                    <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;border:2px solid #8b949e;vertical-align:middle"></span> unknown</span>
+                  </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script id="graph-data" type="application/json" data-mode="neighborhood" data-center="{{ company.domain }}">
+{{ graph_json | tojson }}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="{{ url_for('static', filename='js/universe-graph.js') }}"></script>
+{% endblock %}

@@ -28,6 +28,26 @@ python monitor.py [--account EMAIL] [--verbose]
 
 # Web dashboard (Flask, port 5001)
 python dashboard/app.py
+
+# --- GDPR Universe (subproject, port 5003) ---
+
+# Start the universe dashboard
+python -m gdpr_universe.app
+
+# Import seed companies from CSV
+python -m gdpr_universe.seed_importer --csv seeds.csv
+python -m gdpr_universe.seed_importer --list-indices
+
+# Run subprocessor crawl (wave 0 = seeds, wave 1 = discovered SPs)
+python -m gdpr_universe.crawl_scheduler --wave 0 --max-llm 500
+python -m gdpr_universe.crawl_scheduler --domain stripe.com
+
+# Database utilities
+python -m gdpr_universe.db --init
+python -m gdpr_universe.db --stats
+
+# Run universe tests only
+.venv/bin/pytest tests/unit/test_universe_*.py -v
 ```
 
 ## Architecture
@@ -107,6 +127,14 @@ Invariant: **SP can only escalate; `sp_sent=False` never downgrades.** `DATA_REC
 
 **Config** (`config/settings.py`): Pydantic `Settings` model loaded from `.env` at project root. Fields: `GOOGLE_CLIENT_ID/SECRET`, `ANTHROPIC_API_KEY`, `USER_FULL_NAME`, `USER_EMAIL`, `USER_ADDRESS_*`, `GDPR_FRAMEWORK`.
 
+## GDPR Universe (subproject)
+
+Standalone Flask app (`gdpr_universe/`, port 5003). Full docs in **`gdpr_universe/CLAUDE.md`**.
+
+Quick reference: `.venv/bin/python -m gdpr_universe.app` → http://localhost:5003
+
+Design spec: `docs/superpowers/specs/2026-04-05-gdpr-universe-design.md`
+
 ## Key constraints
 
 - `data/companies.json` stores public contact info only — committed to repo, never contains PII
@@ -142,6 +170,8 @@ Invariant: **SP can only escalate; `sp_sent=False` never downgrades.** `DATA_REC
 
 All tests in `tests/unit/` use dependency injection or `unittest.mock` — no real network, Gmail, or Anthropic calls. `ContactResolver` accepts injectable `http_get`, `llm_search`, and `privacy_scrape` callables. Mock Anthropic responses must set `response.usage.input_tokens` and `response.usage.output_tokens` as integers (not MagicMock auto-attributes) or cost recording will fail.
 
+**GDPR Universe tests:** See `gdpr_universe/CLAUDE.md`.
+
 ## Known Issues / Tech Debt
 
 Issues discovered in code review (2026-03-16). 18 issues fixed; open items below.
@@ -153,6 +183,9 @@ Issues discovered in code review (2026-03-16). 18 issues fixed; open items below
 | P2 | `reply_monitor/classifier.py` | `_is_data_url()` matches vendor/sub-processor list pages (e.g. `figma.com/sub-processors/`) as `DATA_PROVIDED_LINK` — path segments like `/sub-processors`, `/vendors`, `/privacy` should be excluded from the data-URL heuristic. Note: separate concern from snippet cleaning (`_clean_snippet` is display-only in `dashboard/app.py`) |
 | P3 | `dashboard/app.py` | Flask routes and template rendering have no test coverage — only pure helper functions (`_clean_snippet`, `_is_human_friendly`) are tested via `test_snippet_clean.py` |
 | — | Scaling | GitHub API rate limit (60/hour) will block 500+ company runs — add `GITHUB_TOKEN` to `.env` |
+| P3 | `gdpr_universe/routes/graph.py` | `sys.path.insert` used to import `jurisdiction.py` — should use proper package imports or move jurisdiction to a shared location |
+| P3 | `gdpr_universe/` | No Wikipedia table scraper yet — seed import only supports CSV files; `--index` flag documented but not implemented |
+| P3 | `gdpr_universe/` | `Subprocessor` Pydantic model lacks `service_category` field — adapter sets it on Company rows directly after `store_fetch_result`, but the field comes through as empty from the fetcher JSON parsing |
 
 <details><summary>Fixed issues (18 items — click to expand)</summary>
 

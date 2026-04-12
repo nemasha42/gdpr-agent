@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — GDPR Universe{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <!-- Left: Table (main content) -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>Seed Companies</strong>
+                <form class="d-flex gap-2 align-items-center" method="get" action="/">
+                    {% if filter_country or filter_sector %}
+                    <a href="/" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem">Clear</a>
+                    {% endif %}
+                    <select name="country" class="form-select form-select-sm filter-select" onchange="this.form.submit()">
+                        <option value="">All countries</option>
+                        {% for cc in available_countries %}
+                        <option value="{{ cc }}" {% if filter_country == cc %}selected{% endif %}>{{ cc }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="sector" class="form-select form-select-sm filter-select" onchange="this.form.submit()">
+                        <option value="">All sectors</option>
+                        {% for s in available_sectors %}
+                        <option value="{{ s }}" {% if filter_sector == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="text" class="search-input"
+                           name="search" placeholder="Search..."
+                           value="{{ search }}">
+                    <button type="submit" class="btn btn-sm btn-primary py-0 px-2">Go</button>
+                    {% if sort != 'company_name' or order != 'asc' %}
+                    <input type="hidden" name="sort" value="{{ sort }}">
+                    <input type="hidden" name="order" value="{{ order }}">
+                    {% endif %}
+                </form>
+            </div>
+            <div class="card-body p-0">
+                {% if companies %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                {% set base_qs = '' %}
+                                {% if search %}{% set base_qs = base_qs ~ '&search=' ~ search %}{% endif %}
+                                {% if filter_country %}{% set base_qs = base_qs ~ '&country=' ~ filter_country %}{% endif %}
+                                {% if filter_sector %}{% set base_qs = base_qs ~ '&sector=' ~ filter_sector %}{% endif %}
+                                {% for col_key, col_label in [('company_name','Name'),('hq_country_code','Country'),('sector','Sector'),('sp_count','SPs'),('fetch_status','Status')] %}
+                                <th>
+                                    <a href="?sort={{ col_key }}&order={{ 'desc' if sort == col_key and order == 'asc' else 'asc' }}{{ base_qs }}"
+                                       class="text-decoration-none text-muted sort-link{% if sort == col_key %} active-sort{% endif %}">
+                                        {{ col_label }}
+                                        {% if sort == col_key %}
+                                            {% if order == 'asc' %}&#9650;{% else %}&#9660;{% endif %}
+                                        {% endif %}
+                                    </a>
+                                </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in companies %}
+                            <tr class="clickable-row" data-domain="{{ c.domain }}" data-href="/company/{{ c.domain }}">
+                                <td>
+                                    <img src="https://www.google.com/s2/favicons?domain={{ c.domain }}&sz=16"
+                                         alt="" class="me-1" width="16" height="16">
+                                    {{ c.company_name }}
+                                    <a href="/company/{{ c.domain }}" class="row-nav-link ms-1" title="Open detail">&rarr;</a>
+                                </td>
+                                <td>{{ c.hq_country_code }}</td>
+                                <td>{{ c.sector }}</td>
+                                <td>{{ c.sp_count }}</td>
+                                <td><span class="fetch-status fetch-status-{{ c.fetch_status }}">{{ c.fetch_status }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    {% if search or filter_country or filter_sector %}No matching companies.{% else %}No seed companies yet.{% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: graph + top SPs -->
+    <div class="col-lg-5">
+        {# Graph — contained width, won't block page scroll #}
+        {% if graph_json.nodes %}
+        <div class="graph-card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Data Flow Graph</strong>
+            <div class="d-flex gap-1">
+              <button class="btn btn-sm btn-outline-light py-0 px-2" id="graph-zoom-in" style="font-size:0.7rem">+</button>
+              <button class="btn btn-sm btn-outline-light py-0 px-2" id="graph-zoom-out" style="font-size:0.7rem">-</button>
+              <button class="btn btn-sm btn-outline-light py-0 px-2" id="graph-reset" style="font-size:0.7rem">reset</button>
+            </div>
+          </div>
+          <div class="card-body p-0 position-relative" style="height:400px;overflow:hidden">
+            <svg id="universe-graph" width="100%" height="100%"></svg>
+            <div class="position-absolute bottom-0 start-0 m-2 bg-dark bg-opacity-75 rounded px-2 py-1" style="font-size:0.65rem;z-index:10">
+              <div class="d-flex gap-2 flex-wrap align-items-center text-light">
+                <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;border:2px solid #3fb950;vertical-align:middle"></span> adequate</span>
+                <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;border:2px solid #d29922;vertical-align:middle"></span> safeguarded</span>
+                <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;border:2px solid #f85149;vertical-align:middle"></span> risky</span>
+                <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;border:2px solid #8b949e;vertical-align:middle"></span> unknown</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Top Subprocessors -->
+        <div class="card">
+            <div class="card-header"><strong>Top Subprocessors</strong></div>
+            <div class="card-body p-0">
+                {% if top_sps %}
+                <div class="list-group list-group-flush">
+                    {% for sp in top_sps %}
+                    <a href="/contagion/{{ sp.domain }}"
+                       class="list-group-item list-group-item-action leaderboard-item d-flex justify-content-between align-items-center">
+                        <span class="text-truncate me-2">
+                            <img src="https://www.google.com/s2/favicons?domain={{ sp.domain }}&sz=16" alt="" width="14" height="14" class="me-1">
+                            {{ sp.company_name }}
+                        </span>
+                        <span class="badge bg-primary rounded-pill">{{ sp.count }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-3">No subprocessor data yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+<script id="graph-data" type="application/json" data-mode="full">
+{{ graph_json | tojson }}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="{{ url_for('static', filename='js/universe-graph.js') }}"></script>
+<script>
+(function() {
+  let selectedRow = null;
+
+  // Single click: highlight graph chain; click again: clear
+  document.querySelectorAll('.clickable-row').forEach(row => {
+    row.addEventListener('click', function(e) {
+      // If they clicked the nav arrow link, let it navigate
+      if (e.target.closest('.row-nav-link')) return;
+      e.preventDefault();
+
+      const domain = row.dataset.domain;
+      const graph = window._universeGraph;
+
+      if (selectedRow === row) {
+        // Deselect
+        row.classList.remove('row-highlighted');
+        selectedRow = null;
+        if (graph) graph.clearHighlight();
+        return;
+      }
+
+      // Clear previous
+      if (selectedRow) selectedRow.classList.remove('row-highlighted');
+
+      // Highlight this row
+      row.classList.add('row-highlighted');
+      selectedRow = row;
+
+      if (graph) graph.highlightDomain(domain);
+    });
+
+    // Double click: navigate to detail
+    row.addEventListener('dblclick', function() {
+      window.location.href = row.dataset.href;
+    });
+  });
+
+  // When filters change, highlight all visible companies in the graph
+  const countrySelect = document.querySelector('select[name="country"]');
+  const sectorSelect = document.querySelector('select[name="sector"]');
+
+  function highlightFiltered() {
+    const graph = window._universeGraph;
+    if (!graph) return;
+
+    const hasFilter = (countrySelect && countrySelect.value) || (sectorSelect && sectorSelect.value);
+    if (!hasFilter) {
+      graph.clearHighlight();
+      return;
+    }
+
+    // Collect all visible company domains from the table
+    const domains = [];
+    document.querySelectorAll('.clickable-row').forEach(row => {
+      domains.push(row.dataset.domain);
+    });
+    graph.highlightDomains(domains);
+  }
+
+  // Run on page load if filters are active
+  if ((countrySelect && countrySelect.value) || (sectorSelect && sectorSelect.value)) {
+    // Wait for graph to initialize
+    setTimeout(highlightFiltered, 800);
+  }
+
+  // Escape clears table highlight too
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && selectedRow) {
+      selectedRow.classList.remove('row-highlighted');
+      selectedRow = null;
+    }
+  });
+})();
+</script>
+{% endblock %}

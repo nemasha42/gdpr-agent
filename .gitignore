@@ -11,3 +11,5 @@ user_data/*
 !user_data/.gitkeep
 .claude/
 sample replies/
+.worktrees/
+.claude/worktrees/

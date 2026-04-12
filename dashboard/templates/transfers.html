@@ -15,7 +15,21 @@
           <span class="badge bg-warning text-dark">Fetching…</span>
           <div class="spinner-border spinner-border-sm text-warning" id="fetch-spinner"></div>
         {% else %}
-          <button type="submit" class="btn btn-sm btn-outline-primary">Fetch all subprocessors</button>
+          <button type="submit" class="btn btn-sm btn-outline-primary">Fetch new</button>
+          <div class="form-check form-check-inline ms-1 mb-0">
+            <input class="form-check-input" type="checkbox" name="retry_not_found" id="retryNotFound" value="1">
+            <label class="form-check-label small text-muted" for="retryNotFound">Retry not-found</label>
+          </div>
+          <div class="d-inline-flex align-items-center ms-1 gap-1">
+            <label class="form-label small text-muted mb-0" for="depth">Depth:</label>
+            <select name="depth" id="depth" class="form-select form-select-sm" style="width:55px"
+                    title="0 = SAR companies only, 1–3 = also fetch subprocessors of subprocessors (layers deep)">
+              <option value="0" selected>0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </div>
         {% endif %}
       </form>
       <form method="POST" action="/transfers/request-all" class="d-flex align-items-center gap-2">
@@ -68,6 +82,203 @@
   </div>
 </div>
 
+{# ── Infographics Summary Panel ─────────────────────────────────────────── #}
+{% if rows %}
+<div class="card mb-3" id="infographics-panel">
+  <div class="card-body py-2">
+    {# Always-visible stats row #}
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <div class="stat-badge bg-light rounded px-3 py-2 text-center" role="button" data-drilldown="companies" style="cursor:pointer">
+        <span class="fs-5 fw-bold text-primary">{{ graph_json.stats.total_companies }}</span>
+        <span class="text-muted small ms-1">companies</span>
+      </div>
+      <div class="stat-badge bg-light rounded px-3 py-2 text-center" role="button" data-drilldown="subprocessors" style="cursor:pointer">
+        <span class="fs-5 fw-bold text-primary">{{ graph_json.stats.total_subprocessors }}</span>
+        <span class="text-muted small ms-1">subprocessors</span>
+      </div>
+      <div class="stat-badge bg-light rounded px-3 py-2 text-center" role="button" data-drilldown="countries" style="cursor:pointer">
+        <span class="fs-5 fw-bold" style="color:#6f42c1">{{ graph_json.stats.countries_reached }}</span>
+        <span class="text-muted small ms-1">countries</span>
+      </div>
+      {% if graph_json.stats.non_adequate_count > 0 %}
+      <div class="stat-badge rounded px-3 py-2 text-center" role="button" data-drilldown="non_adequate" style="background:#fff3cd; cursor:pointer">
+        <span class="fs-5 fw-bold" style="color:#856404">{{ graph_json.stats.non_adequate_count }}</span>
+        <span class="small" style="color:#856404">non-adequate</span>
+      </div>
+      {% endif %}
+      {% if graph_json.stats.unknown_basis_count > 0 %}
+      <div class="stat-badge rounded px-3 py-2 text-center" role="button" data-drilldown="unknown_basis" style="background:#f8d7da; cursor:pointer">
+        <span class="fs-5 fw-bold" style="color:#842029">{{ graph_json.stats.unknown_basis_count }}</span>
+        <span class="small" style="color:#842029">unknown basis</span>
+      </div>
+      {% endif %}
+      {% if graph_json.stats.coverage_gaps > 0 %}
+      <div class="bg-light rounded px-3 py-2 text-center">
+        <span class="fs-5 fw-bold text-muted">{{ graph_json.stats.coverage_gaps }}</span>
+        <span class="text-muted small ms-1">not fetched</span>
+      </div>
+      {% endif %}
+      {% if graph_json.stats.stale_count is defined and graph_json.stats.stale_count > 0 %}
+      <div class="rounded px-3 py-2 text-center" style="background:#fff3cd">
+        <span class="fs-5 fw-bold" style="color:#856404">{{ graph_json.stats.stale_count }}</span>
+        <span class="small" style="color:#856404">stale</span>
+      </div>
+      {% endif %}
+      <div class="ms-auto d-flex gap-2 align-items-center">
+        <button class="btn btn-sm btn-link text-muted text-decoration-none p-0 d-none" id="drilldown-clear"
+                style="font-size:0.8rem" title="Clear all drill-down filters">clear filters</button>
+        <a href="#" class="small text-primary text-decoration-none" id="toggle-detail"
+           onclick="event.preventDefault(); document.getElementById('infographics-detail').classList.toggle('d-none'); this.textContent = this.textContent.trim() === 'Show detail' ? 'Hide detail' : 'Show detail';">Show detail</a>
+      </div>
+    </div>
+
+    {# Drill-down panel (populated by JS) #}
+    <div id="drilldown-panel" class="d-none mt-2">
+      <div class="border rounded p-2 bg-white">
+        <div class="d-flex flex-wrap gap-1" id="drilldown-items"></div>
+      </div>
+    </div>
+
+    {# Collapsible detail section #}
+    <div id="infographics-detail" class="d-none mt-3">
+      <div class="row g-3">
+        {# Coverage donut #}
+        <div class="col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="text-muted small text-uppercase mb-2" style="letter-spacing:0.05em">Coverage</div>
+            <div class="d-flex align-items-center gap-3">
+              <svg id="coverage-donut" width="80" height="80" viewBox="0 0 80 80"></svg>
+              <div class="small">
+                {% set cov = graph_json.stats.coverage_breakdown %}
+                {% for status in ['ok', 'not_found', 'error', 'pending'] %}
+                  {% if cov.get(status, 0) > 0 %}
+                  <div>
+                    <span class="fw-semibold">{{ cov[status] }}</span>
+                    <span class="text-muted">{{ status | replace('_', ' ') }}</span>
+                  </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# Transfer basis bar chart #}
+        <div class="col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="text-muted small text-uppercase mb-2" style="letter-spacing:0.05em">Transfer Basis</div>
+            {% set basis = graph_json.stats.transfer_basis_breakdown %}
+            {% set max_basis = basis.values() | max if basis else 1 %}
+            {% for key in ['SCCs', 'adequacy_decision', 'BCRs', 'consent', 'unknown', 'none'] %}
+              {% set count = basis.get(key, 0) %}
+              {% if count > 0 %}
+              <div class="mb-1 detail-filter-item" role="button" data-filter-type="basis" data-filter-value="{{ key }}" style="cursor:pointer">
+                <div class="d-flex justify-content-between" style="font-size:0.78rem">
+                  <span>{{ key }}</span>
+                  <span class="fw-semibold">{{ count }}</span>
+                </div>
+                <div class="progress" style="height:6px">
+                  <div class="progress-bar {% if key in ['unknown', 'none'] %}bg-danger{% else %}bg-success{% endif %}"
+                       style="width:{{ (count / max_basis * 100) | int }}%"></div>
+                </div>
+              </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+
+        {# Top data categories #}
+        <div class="col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="text-muted small text-uppercase mb-2" style="letter-spacing:0.05em">Top Data Categories</div>
+            <div class="d-flex flex-wrap gap-1">
+              {% for cat_name, cat_count in graph_json.stats.top_data_categories %}
+              <span class="data-category-chip detail-filter-item {% if 'advertising' in cat_name.lower() or 'marketing' in cat_name.lower() %}bg-warning text-dark{% endif %}"
+                    role="button" data-filter-type="category" data-filter-value="{{ cat_name }}" style="cursor:pointer">
+                {{ cat_name }} <b>{{ cat_count }}</b>
+              </span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Category filter chips ───────────────────────────────────────────────── #}
+{% if graph_json.stats.service_categories %}
+<div id="category-filter" class="mb-2 d-flex flex-wrap gap-1">
+  <button class="btn btn-sm btn-outline-secondary category-chip active" data-category="all">All</button>
+  {% for cat in graph_json.stats.service_categories %}
+  <button class="btn btn-sm btn-outline-secondary category-chip" data-category="{{ cat }}">
+    {{ graph_json.stats.service_category_labels[cat] }}
+  </button>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Graph Visualization ────────────────────────────────────────────────── #}
+{% if rows %}
+<div class="d-flex gap-3 mb-3" id="graph-layout" style="min-height:500px">
+  <div class="card flex-grow-1" id="graph-card" style="min-width:0">
+    <div class="card-body p-0 position-relative" style="height:500px;overflow:hidden">
+      <svg id="transfer-graph" width="100%" height="100%"></svg>
+      {# Legend — bottom-left #}
+      <div class="position-absolute bottom-0 start-0 m-2 bg-white bg-opacity-90 border rounded p-2" style="font-size:0.72rem;z-index:10">
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+          <span><span style="display:inline-block;width:14px;height:2px;background:#4f7df9;vertical-align:middle"></span> direct</span>
+          <span><span style="display:inline-block;width:14px;height:2px;background:#3fb950;vertical-align:middle"></span> confirmed</span>
+          <span><span style="display:inline-block;width:14px;height:0;border-top:1.5px dashed #8b949e;vertical-align:middle"></span> potential</span>
+          <span><span style="display:inline-block;width:14px;height:0;border-top:1px dotted #8b949e;opacity:0.5;vertical-align:middle"></span> deep</span>
+        </div>
+        <div class="d-flex gap-2 flex-wrap align-items-center mt-1">
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #198754;vertical-align:middle"></span> adequate</span>
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #ffc107;vertical-align:middle"></span> safeguarded</span>
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #dc3545;vertical-align:middle"></span> risky</span>
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid #adb5bd;vertical-align:middle"></span> unknown</span>
+        </div>
+      </div>
+      {# Controls — bottom-right #}
+      <div class="position-absolute bottom-0 end-0 m-2 d-flex gap-1" style="z-index:10">
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="graph-zoom-in" style="font-size:0.75rem">+</button>
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="graph-zoom-out" style="font-size:0.75rem">-</button>
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="graph-reset" style="font-size:0.75rem">reset</button>
+      </div>
+    </div>
+  </div>
+  {# ── Unmapped Panel ─────────────────────────────────────────────────── #}
+  {% if unmapped_rows %}
+  <div id="unmapped-panel" class="card" style="flex:0 0 28%;max-height:500px;overflow-y:auto">
+    <div class="card-body p-2">
+      <div class="alert alert-warning py-2 px-3 mb-2" style="font-size:0.8rem">
+        {{ unmapped_rows|length }} companies have no subprocessor data yet
+      </div>
+      <input type="text" id="unmapped-filter" class="form-control form-control-sm mb-2"
+             placeholder="Filter unmapped...">
+      <div id="unmapped-list">
+        {% for row in unmapped_rows %}
+        <div class="unmapped-card d-flex align-items-center justify-content-between p-2 mb-1 rounded border"
+             data-domain="{{ row.domain }}" data-name="{{ row.company_name|lower }}">
+          <div>
+            <div class="fw-medium" style="font-size:0.85rem">{{ row.company_name }}</div>
+            <div class="text-muted" style="font-size:0.75rem">{{ row.domain }}</div>
+          </div>
+          <form method="POST" action="/transfers/fetch" style="display:inline">
+            <input type="hidden" name="account" value="{{ account }}">
+            <input type="hidden" name="single_domain" value="{{ row.domain }}">
+            <button type="submit" class="btn btn-outline-primary btn-sm py-0" style="font-size:0.7rem">Fetch</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if not rows %}
   <div class="text-center text-muted py-5">
     <div class="fs-1">🗺️</div>
@@ -85,7 +296,7 @@
        data-company="{{ row.company_name }}"
        data-domain="{{ row.domain }}">
     <h2 class="accordion-header">
-      <button class="accordion-button collapsed py-2" type="button"
+      <div class="accordion-button collapsed py-2" role="button"
               data-bs-toggle="collapse"
               data-bs-target="#acc-{{ loop.index }}"
               aria-expanded="false">
@@ -130,7 +341,7 @@
             {% endif %}
           </div>
         </div>
-      </button>
+      </div>
     </h2>
     <div id="acc-{{ loop.index }}" class="accordion-collapse collapse">
       <div class="accordion-body p-0">
@@ -225,6 +436,10 @@
 {% endfor %}
 </div>
 {% endif %}
+
+<script id="graph-data" type="application/json">
+{{ graph_json | tojson }}
+</script>
 
 <script>
 // ---------------------------------------------------------------------------
@@ -346,5 +561,302 @@ document.addEventListener('click', async function(e) {
     .catch(() => setTimeout(poll, 3000));
 })();
 {% endif %}
+
+// ── Unmapped panel filter ──────────────────────────────────────────────
+document.getElementById('unmapped-filter')?.addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('.unmapped-card').forEach(card => {
+    const name = card.dataset.name || '';
+    const domain = card.dataset.domain || '';
+    card.style.display = (name.includes(q) || domain.includes(q)) ? '' : 'none';
+  });
+});
+
+// ── Category filter chips ──────────────────────────────────────────────
+document.querySelectorAll('.category-chip').forEach(chip => {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('.category-chip').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    const cat = this.dataset.category;
+    if (window._transferGraph) {
+      window._transferGraph.filterByCategory(cat === 'all' ? null : cat);
+    }
+  });
+});
+
+// ── Accordion → Graph integration ───────────────────────────────────────
+document.querySelectorAll('.company-accordion-item .accordion-header').forEach(header => {
+  header.addEventListener('click', function() {
+    const item = this.closest('.company-accordion-item');
+    const domain = item?.dataset.domain;
+    if (!domain || !window._transferGraph) return;
+    const tg = window._transferGraph;
+    // Clear previous accordion highlights
+    document.querySelectorAll('.company-accordion-item').forEach(el => {
+      el.style.borderLeft = '';
+    });
+    item.style.borderLeft = '4px solid #0d6efd';
+    tg.highlightCompany(domain);
+    tg.panToNode(domain);
+  });
+});
+
+// ── Filter → Graph dim integration ─────────────────────────────────────
+const origApplyFilters = applyFilters;
+applyFilters = function() {
+  origApplyFilters();
+  if (!window._transferGraph) return;
+  const tg = window._transferGraph;
+  const hiddenDomains = new Set();
+  document.querySelectorAll('.company-accordion-item').forEach(item => {
+    if (item.style.display === 'none') {
+      hiddenDomains.add(item.dataset.domain);
+    }
+  });
+  tg.node.style('opacity', d => {
+    if (d.type === 'company' && hiddenDomains.has(d.domain)) return 0.15;
+    return 1;
+  });
+};
+
+// ---------------------------------------------------------------------------
+// Stat badge drill-down & graph filtering
+// ---------------------------------------------------------------------------
+(function() {
+  const graphDataEl = document.getElementById('graph-data');
+  if (!graphDataEl) return;
+  const graphData = JSON.parse(graphDataEl.textContent);
+  const gNodes = graphData.nodes || [];
+  const gEdges = graphData.edges || [];
+
+  const panel = document.getElementById('drilldown-panel');
+  const itemsWrap = document.getElementById('drilldown-items');
+  const clearBtn = document.getElementById('drilldown-clear');
+  let activeDrilldown = null;       // which badge is open
+  const checkedItems = new Set();   // checked filter keys
+
+  // Country code → flag emoji
+  function ccToFlag(cc) {
+    if (!cc || cc.length !== 2) return '';
+    return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+  }
+
+  // Build drill-down item lists from graph data
+  function buildDrilldownData(type) {
+    const items = [];
+    if (type === 'companies') {
+      gNodes.filter(n => n.type === 'company').forEach(n => {
+        items.push({ key: 'company:' + n.domain, label: n.label || n.domain, sub: n.domain, count: n.subprocessor_count || 0 });
+      });
+      items.sort((a, b) => a.label.localeCompare(b.label));
+    } else if (type === 'subprocessors') {
+      gNodes.filter(n => n.type === 'subprocessor').forEach(n => {
+        const cc = n.country_code || '';
+        const flag = ccToFlag(cc);
+        items.push({ key: 'sp:' + n.domain, label: n.label || n.domain, sub: flag + ' ' + (n.country || cc || '?'), count: n.sharing_count || 0 });
+      });
+      items.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    } else if (type === 'countries') {
+      const countryMap = {};  // cc → {name, count, flag}
+      gNodes.filter(n => n.type === 'subprocessor' && n.country_code).forEach(n => {
+        const cc = n.country_code;
+        if (!countryMap[cc]) countryMap[cc] = { name: n.country || cc, count: 0, flag: ccToFlag(cc) };
+        countryMap[cc].count++;
+      });
+      Object.entries(countryMap).sort((a, b) => b[1].count - a[1].count).forEach(([cc, v]) => {
+        items.push({ key: 'cc:' + cc, label: v.flag + ' ' + v.name, sub: cc, count: v.count });
+      });
+    } else if (type === 'non_adequate') {
+      const countryMap = {};
+      gNodes.filter(n => n.type === 'subprocessor' && n.country_code).forEach(n => {
+        if (n.risk === 'adequate') return;
+        const cc = n.country_code;
+        if (!countryMap[cc]) countryMap[cc] = { name: n.country || cc, count: 0, flag: ccToFlag(cc), domains: [] };
+        countryMap[cc].count++;
+        countryMap[cc].domains.push(n.domain);
+      });
+      Object.entries(countryMap).sort((a, b) => b[1].count - a[1].count).forEach(([cc, v]) => {
+        items.push({ key: 'na:' + cc, label: v.flag + ' ' + v.name, sub: v.count + ' subprocessors', count: v.count });
+      });
+    } else if (type === 'unknown_basis') {
+      gNodes.filter(n => n.type === 'subprocessor' && (n.transfer_basis === 'unknown' || n.transfer_basis === 'none')).forEach(n => {
+        const flag = ccToFlag(n.country_code || '');
+        items.push({ key: 'ub:' + n.domain, label: n.label || n.domain, sub: flag + ' ' + (n.transfer_basis || ''), count: 0 });
+      });
+      items.sort((a, b) => a.label.localeCompare(b.label));
+    }
+    return items;
+  }
+
+  function renderPanel(type) {
+    const items = buildDrilldownData(type);
+    itemsWrap.innerHTML = '';
+    items.forEach(item => {
+      const chip = document.createElement('label');
+      chip.className = 'drilldown-chip d-inline-flex align-items-center gap-1 rounded px-2 py-1 small border bg-white';
+      chip.style.cssText = 'cursor:pointer; user-select:none; white-space:nowrap;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'form-check-input mt-0';
+      cb.style.cssText = 'width:14px; height:14px;';
+      cb.dataset.key = item.key;
+      if (checkedItems.has(item.key)) cb.checked = true;
+      cb.addEventListener('change', () => {
+        if (cb.checked) checkedItems.add(item.key);
+        else checkedItems.delete(item.key);
+        applyDrilldownFilter();
+      });
+      const text = document.createElement('span');
+      text.textContent = item.label;
+      chip.appendChild(cb);
+      chip.appendChild(text);
+      if (item.count > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'badge bg-secondary bg-opacity-25 text-dark';
+        badge.style.fontSize = '0.7rem';
+        badge.textContent = item.count;
+        chip.appendChild(badge);
+      }
+      itemsWrap.appendChild(chip);
+    });
+    panel.classList.remove('d-none');
+  }
+
+  // Collect node IDs matching the current checked set
+  function matchingNodeIds() {
+    if (checkedItems.size === 0) return null;
+    const ids = new Set();
+    checkedItems.forEach(key => {
+      const [prefix, value] = [key.split(':')[0], key.substring(key.indexOf(':') + 1)];
+      if (prefix === 'company') {
+        ids.add('company:' + value);
+      } else if (prefix === 'sp') {
+        ids.add('sp:' + value);
+        // also try company: for cross-linked nodes
+        ids.add('company:' + value);
+      } else if (prefix === 'cc' || prefix === 'na') {
+        // country code — match all SP nodes in that country
+        gNodes.forEach(n => {
+          if (n.country_code === value) ids.add(n.id);
+        });
+      } else if (prefix === 'ub') {
+        ids.add('sp:' + value);
+        ids.add('company:' + value);
+      } else if (prefix === 'basis') {
+        gNodes.forEach(n => {
+          if (n.type === 'subprocessor' && n.transfer_basis === value) ids.add(n.id);
+        });
+      } else if (prefix === 'cat') {
+        // data category — find edges with that category, include both endpoints
+        gEdges.forEach(e => {
+          const cats = e.data_categories || [];
+          if (cats.some(c => c.toLowerCase() === value.toLowerCase())) {
+            const src = typeof e.source === 'object' ? e.source.id : e.source;
+            const tgt = typeof e.target === 'object' ? e.target.id : e.target;
+            ids.add(src);
+            ids.add(tgt);
+          }
+        });
+      }
+    });
+    // Always include "user" node and walk parent edges for selected nodes
+    ids.add('user');
+    // Walk up from selected SP/company nodes to include connecting companies + user edges
+    const expanded = new Set(ids);
+    ids.forEach(id => {
+      gEdges.forEach(e => {
+        const src = typeof e.source === 'object' ? e.source.id : e.source;
+        const tgt = typeof e.target === 'object' ? e.target.id : e.target;
+        if (tgt === id) expanded.add(src);
+        if (src === id) expanded.add(tgt);
+      });
+    });
+    return expanded;
+  }
+
+  function applyDrilldownFilter() {
+    const tg = window._transferGraph;
+    if (!tg) return;
+    const matched = matchingNodeIds();
+    if (!matched) {
+      tg.clearHighlight();
+      clearBtn.classList.add('d-none');
+      // Remove active state from detail filter items
+      document.querySelectorAll('.detail-filter-item.active-filter').forEach(el => el.classList.remove('active-filter'));
+      return;
+    }
+    clearBtn.classList.remove('d-none');
+    tg.node.style('opacity', d => matched.has(d.id) ? 1 : 0.08);
+    tg.link.style('opacity', d => {
+      const src = typeof d.source === 'object' ? d.source.id : d.source;
+      const tgt = typeof d.target === 'object' ? d.target.id : d.target;
+      return (matched.has(src) && matched.has(tgt)) ? 1 : 0.04;
+    }).attr('filter', d => {
+      const src = typeof d.source === 'object' ? d.source.id : d.source;
+      const tgt = typeof d.target === 'object' ? d.target.id : d.target;
+      return (matched.has(src) && matched.has(tgt)) ? 'url(#glow)' : null;
+    });
+  }
+
+  // Badge click handlers
+  document.querySelectorAll('.stat-badge[data-drilldown]').forEach(badge => {
+    badge.addEventListener('click', () => {
+      const type = badge.dataset.drilldown;
+      // Toggle off if clicking same badge
+      if (activeDrilldown === type) {
+        panel.classList.add('d-none');
+        activeDrilldown = null;
+        checkedItems.clear();
+        applyDrilldownFilter();
+        document.querySelectorAll('.stat-badge').forEach(b => b.style.outline = '');
+        return;
+      }
+      activeDrilldown = type;
+      checkedItems.clear();
+      document.querySelectorAll('.stat-badge').forEach(b => b.style.outline = '');
+      badge.style.outline = '2px solid #0d6efd';
+      renderPanel(type);
+      applyDrilldownFilter();
+    });
+  });
+
+  // Clear filters button
+  clearBtn.addEventListener('click', () => {
+    checkedItems.clear();
+    activeDrilldown = null;
+    panel.classList.add('d-none');
+    document.querySelectorAll('.stat-badge').forEach(b => b.style.outline = '');
+    document.querySelectorAll('.detail-filter-item.active-filter').forEach(el => el.classList.remove('active-filter'));
+    applyDrilldownFilter();
+  });
+
+  // Detail section: transfer basis bars + data category chips as filters
+  document.querySelectorAll('.detail-filter-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const ftype = el.dataset.filterType;
+      const fvalue = el.dataset.filterValue;
+      const key = (ftype === 'basis' ? 'basis:' : 'cat:') + fvalue;
+      if (checkedItems.has(key)) {
+        checkedItems.delete(key);
+        el.classList.remove('active-filter');
+      } else {
+        checkedItems.add(key);
+        el.classList.add('active-filter');
+      }
+      // Close badge panel if open (these are a different filter source)
+      if (activeDrilldown) {
+        panel.classList.add('d-none');
+        activeDrilldown = null;
+        document.querySelectorAll('.stat-badge').forEach(b => b.style.outline = '');
+      }
+      applyDrilldownFilter();
+    });
+  });
+})();
 </script>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="{{ url_for('static', filename='js/transfer-graph.js') }}"></script>
 {% endblock %}

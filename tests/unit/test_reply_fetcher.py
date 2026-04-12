@@ -127,6 +127,49 @@ class TestFetchByThread:
         results = fetch_replies_for_sar(service, sent_record, user_email="trader@gmail.com")
         assert results == []
 
+    def test_thread_retries_on_transient_error_then_succeeds(self):
+        """Transient 429/500 errors are retried up to 3 times."""
+        sent_record = {"gmail_thread_id": "thread001", "to_email": "p@example.com", "sent_at": "2026-03-16T00:00:00"}
+        reply_msg = _make_gmail_msg(msg_id="reply001", from_addr="privacy@example.com")
+        outgoing = _make_gmail_msg(msg_id="sent001", from_addr="me@gmail.com")
+
+        transient_exc = Exception("Rate limit")
+        transient_exc.resp = MagicMock()
+        transient_exc.resp.status = 429
+
+        service = MagicMock()
+        # First call raises 429, second succeeds
+        service.users().threads().get().execute.side_effect = [
+            transient_exc,
+            {"messages": [outgoing, reply_msg]},
+        ]
+        service.users().messages().list().execute.return_value = {"messages": []}
+
+        with patch("reply_monitor.fetcher.time.sleep"):  # skip actual sleep
+            results = fetch_replies_for_sar(service, sent_record, user_email="me@gmail.com")
+
+        assert len(results) == 1
+        assert results[0]["id"] == "reply001"
+        # Verify it was called twice (retry)
+        assert service.users().threads().get().execute.call_count == 2
+
+    def test_thread_permanent_error_no_retry(self):
+        """Non-retryable errors (e.g. 404) fail immediately without retry."""
+        sent_record = {"gmail_thread_id": "thread001", "to_email": "p@example.com", "sent_at": "2026-03-16T00:00:00"}
+
+        perm_exc = Exception("Not found")
+        perm_exc.resp = MagicMock()
+        perm_exc.resp.status = 404
+
+        service = MagicMock()
+        service.users().threads().get().execute.side_effect = perm_exc
+        service.users().messages().list().execute.return_value = {"messages": []}
+
+        results = fetch_replies_for_sar(service, sent_record)
+        assert results == []
+        # Should NOT retry — only 1 call
+        assert service.users().threads().get().execute.call_count == 1
+
 
 # ---------------------------------------------------------------------------
 # Search fallback tests
