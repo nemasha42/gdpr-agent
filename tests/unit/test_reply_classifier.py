@@ -199,6 +199,7 @@ class TestWrongChannel:
             snippet="Your request has been resolved. Download your data: https://example.com/export/download?token=abc123",
         ))
         assert "DATA_PROVIDED_LINK" in result.tags
+        assert "WRONG_CHANNEL" not in result.tags
 
 
 # ---------------------------------------------------------------------------
