@@ -66,7 +66,8 @@ All successful lookups are written back to `data/companies.json`. `cost_tracker.
 - `form_filler.py` — Playwright automation: fills textbox/combobox/checkbox fields, detects CAPTCHA (reCAPTCHA, hCaptcha, Cloudflare), clicks submit. Injects stealth JavaScript to bypass automation detection.
 - `captcha_relay.py` — bridges CAPTCHA challenges to the dashboard for manual solving. Saves screenshot + challenge JSON to `user_data/captcha_pending/{domain}.png|.json`. Polls for user solution with 5-minute timeout (2-second intervals).
 - `otp_handler.py` — handles email verification steps during portal submission. `wait_for_otp()` polls Gmail for verification emails from platform-specific senders. `extract_otp_from_message()` extracts confirmation URLs (preferred) or 6-digit codes. 2-minute timeout.
-- `platform_hints.py` — detects portal platform: `onetrust`, `trustarc`, `salesforce`, `login_required` (Google, Apple, Meta, Amazon, Facebook, Twitter/X), `unknown`. `otp_sender_hints()` returns expected verification email senders per platform.
+- `portal_navigator.py` — multi-step portal navigation. `navigate_to_form(page, platform, api_key=)` uses platform-specific hint patterns (free, fast) then LLM-guided fallback (Claude Haiku, max 3 steps). Called by `submitter.py` when landing page has no form fields. Hint patterns in `_NAVIGATION_HINTS` dict, extensible per platform. `page_has_form(page)` helper checks for input/textarea/select elements.
+- `platform_hints.py` — detects portal platform: `onetrust`, `trustarc`, `ketch`, `salesforce`, `login_required` (Google, Apple, Meta, Amazon, Facebook, Twitter/X), `unknown`. `detect_platform(url, html="")` checks URL patterns first, then HTML signatures for branded domains (e.g. zendesk.es → ketch via `_KETCH_HTML_SIGNATURES`). `otp_sender_hints()` returns expected verification email senders per platform.
 
 **Stage 4 — Monitor** (`reply_monitor/`): After letters are sent, `monitor.py` polls Gmail for replies and updates `user_data/reply_state.json`. Key modules:
 - `fetcher.py` — fetches new messages in each SAR's Gmail thread. Skips only the first message (the original sent letter); subsequent outgoing messages (user's manual Gmail replies) are returned with `from_self=True`. `monitor.py` converts `from_self` messages into `ReplyRecord` with `tags=["YOUR_REPLY"]` without LLM classification. `YOUR_REPLY` is excluded from status computation in `state_manager.py` and from company reply counts on dashboard cards — it is display-only.
@@ -178,7 +179,7 @@ Issues discovered in code review (2026-03-16). 22 issues fixed; open items below
 | P3 | `dashboard/app.py` | Flask routes and template rendering have no test coverage — only pure helper functions (`_clean_snippet`, `_is_human_friendly`) are tested via `test_snippet_clean.py` |
 | — | Scaling | GitHub API rate limit (60/hour) will block 500+ company runs — add `GITHUB_TOKEN` to `.env` |
 
-<details><summary>Fixed issues (18 items — click to expand)</summary>
+<details><summary>Fixed issues (22 items — click to expand)</summary>
 
 | Priority | File | Issue |
 |----------|------|-------|
@@ -207,6 +208,10 @@ Issues discovered in code review (2026-03-16). 22 issues fixed; open items below
 | P2 | `reply_monitor/classifier.py` | Zendesk ticket/survey/help center URLs extracted as data_link/portal_url — `_RE_JUNK_URL` + `_is_junk_url()` filter added to all extraction passes |
 | P2 | `reply_monitor/classifier.py` | `_is_data_url()` false positives on vendor/sub-processor pages — covered by `_RE_JUNK_URL` filter |
 | P2 | `reply_monitor/classifier.py` | WRONG_CHANNEL draft tone argued GDPR violations — closure-aware prompt now says "follow portal first" |
+| P1 | `portal_submitter/submitter.py` | No multi-step navigation — Ketch portals (zendesk.es) failed with `no_form_fields_detected`. Added `portal_navigator.py` with hybrid hint + LLM navigation |
+| P1 | `portal_submitter/platform_hints.py` | Ketch platform not detected — added URL rules + HTML signature fallback via `detect_platform(url, html="")` |
+| P2 | `reply_monitor/classifier.py` | Junk URL filter missed bare `/requests/`, `/support/tickets/`, `/help/` paths — expanded `_RE_JUNK_URL` |
+| P2 | `monitor.py` | `--reprocess` didn't re-extract URLs — stale `portal_url`/`data_link` persisted after classifier updates. Now re-extracts URL fields during reprocess |
 
 </details>
 
