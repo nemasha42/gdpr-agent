@@ -318,5 +318,21 @@
     },
     "flags": {"portal_only": true, "email_accepted": false, "auto_send_possible": false},
     "request_notes": {"special_instructions": "Use the Adobe Privacy Rights portal to submit your SAR.", "identity_verification_required": true, "known_response_time_days": 30}
+  },
+  "zendesk.com": {
+    "company_name": "Zendesk",
+    "legal_entity_name": "Zendesk, Inc.",
+    "source": "dataowners_override",
+    "source_confidence": "high",
+    "last_verified": "2026-04-13",
+    "contact": {
+      "dpo_email": "euprivacy@zendesk.com",
+      "privacy_email": "euprivacy@zendesk.com",
+      "gdpr_portal_url": "https://zendesk.es/",
+      "postal_address": {"line1": "989 Market Street", "city": "San Francisco", "postcode": "CA 94103", "country": "United States"},
+      "preferred_method": "portal"
+    },
+    "flags": {"portal_only": false, "email_accepted": true, "auto_send_possible": false},
+    "request_notes": {"special_instructions": "Ketch-powered DSAR portal at zendesk.es. Multi-step navigation required.", "identity_verification_required": true, "known_response_time_days": 30}
   }
 }
