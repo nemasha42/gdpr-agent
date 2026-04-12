@@ -26,7 +26,9 @@ from reply_monitor.attachment_handler import handle_attachment
 from reply_monitor.classifier import classify, generate_reply_draft, _ACTION_DRAFT_TAGS
 from reply_monitor.fetcher import fetch_replies_for_sar
 from reply_monitor.models import CompanyState, ReplyRecord
+from reply_monitor.url_verifier import verify_if_needed, CLASSIFICATION
 from reply_monitor.state_manager import (
+    _ACTION_TAGS,
     _SUBPROCESSOR_STATE_PATH,
     compute_status,
     days_remaining,
@@ -64,6 +66,7 @@ _TAG_ABBR: dict[str, str] = {
     "IN_PROGRESS":           "IN_PROG",
     "DATA_PROVIDED_LINK":    "DATA_LINK",
     "DATA_PROVIDED_ATTACHMENT": "DATA_ATT",
+    "DATA_PROVIDED_INLINE":  "DATA_INL",
     "DATA_PROVIDED_PORTAL":  "DATA_PORT",
     "REQUEST_DENIED":        "DENIED",
     "NO_DATA_HELD":          "NO_DATA",
@@ -174,6 +177,32 @@ def main() -> None:
                         catalog_dict = cat.to_dict()
                         break
 
+            # Inline data: build schema from email body text
+            if "DATA_PROVIDED_INLINE" in result.tags and not catalog_dict and api_key:
+                body = msg.get("body", "")
+                if body:
+                    from reply_monitor.schema_builder import build_schema_from_body
+                    try:
+                        schema_result = build_schema_from_body(body, api_key, company_name=state.company_name)
+                        if schema_result:
+                            from reply_monitor.models import AttachmentCatalog
+                            cat = AttachmentCatalog(
+                                path="",
+                                size_bytes=len(body.encode("utf-8")),
+                                file_type="email_body",
+                                files=[],
+                                categories=[c["name"] for c in schema_result.get("categories", [])],
+                                schema=schema_result.get("categories", []),
+                                services=schema_result.get("services", []),
+                                export_meta=schema_result.get("export_meta", {}),
+                            )
+                            catalog_dict = cat.to_dict()
+                            if args.verbose:
+                                print(f"  [{state.company_name}] inline data schema: "
+                                      f"{len(cat.schema)} categories, {sum(len(c.get('fields', [])) for c in cat.schema)} fields")
+                    except Exception as exc:
+                        print(f"[monitor] inline schema failed for {domain}: {exc}")
+
             draft = ""
             review_status = ""
             if any(t in _ACTION_DRAFT_TAGS for t in result.tags):
@@ -201,12 +230,52 @@ def main() -> None:
             )
             new_replies.append(reply)
 
+            # --- Portal verification for WRONG_CHANNEL replies ---
+            _VERIFY_TAGS = {"WRONG_CHANNEL", "CONFIRMATION_REQUIRED", "DATA_PROVIDED_PORTAL"}
+            if set(reply.tags) & _VERIFY_TAGS:
+                portal_url = reply.extracted.get("portal_url", "")
+                if portal_url:
+                    try:
+                        verification = verify_if_needed(portal_url, existing=reply.portal_verification)
+                        reply.portal_verification = verification
+
+                        if args.verbose:
+                            print(f"  [{state.company_name}] portal verified: {verification['classification']}")
+
+                        # Auto-submit if it's a real GDPR portal
+                        if verification["classification"] == CLASSIFICATION.GDPR_PORTAL:
+                            _try_portal_submit(
+                                domain=domain,
+                                portal_url=portal_url,
+                                state=state,
+                                reply=reply,
+                                scan_email=email,
+                                verbose=args.verbose,
+                                data_dir=data_dir,
+                            )
+                    except Exception as exc:
+                        if args.verbose:
+                            print(f"  [{state.company_name}] portal verification failed: {exc}")
+
             if args.verbose:
                 print(f"  [{state.company_name}] {result.tags} — {msg['snippet'][:60]}")
 
         new_counts[domain] = len(new_replies)
         if new_replies:
             states[domain] = update_state(state, new_replies)
+
+            # Auto-dismiss stale drafts when a YOUR_REPLY arrives — the user
+            # already responded via Gmail, so pending drafts are obsolete.
+            has_your_reply = any("YOUR_REPLY" in r.tags for r in new_replies)
+            if has_your_reply:
+                for r in states[domain].replies:
+                    if (
+                        r.reply_review_status == "pending"
+                        and bool(set(r.tags) & _ACTION_TAGS)
+                    ):
+                        r.reply_review_status = "dismissed"
+                        if args.verbose:
+                            print(f"  [{state.company_name}] auto-dismissed stale draft on {r.gmail_message_id[:8]}")
 
     save_state(email, states, data_dir=data_dir)
 
@@ -307,6 +376,18 @@ def _monitor_subprocessor_requests(service, email: str, account: str, *, data_di
                 ))
                 continue
             result = classify(msg, api_key=api_key)
+
+            draft = ""
+            review_status = ""
+            if any(t in _ACTION_DRAFT_TAGS for t in result.tags):
+                draft = generate_reply_draft(
+                    msg.get("body", msg["snippet"]),
+                    result.tags,
+                    state.company_name,
+                    api_key=api_key,
+                )
+                review_status = "pending" if draft else ""
+
             new_replies.append(ReplyRecord(
                 gmail_message_id=msg["id"],
                 received_at=msg["received_at"],
@@ -318,11 +399,23 @@ def _monitor_subprocessor_requests(service, email: str, account: str, *, data_di
                 llm_used=result.llm_used,
                 has_attachment=msg["has_attachment"],
                 attachment_catalog=None,
+                suggested_reply=draft,
+                reply_review_status=review_status,
             ))
 
         total_new += len(new_replies)
         if new_replies:
             sp_states[domain] = update_state(state, new_replies)
+
+            # Auto-dismiss stale drafts when user replied via Gmail
+            has_your_reply = any("YOUR_REPLY" in r.tags for r in new_replies)
+            if has_your_reply:
+                for r in sp_states[domain].replies:
+                    if (
+                        r.reply_review_status == "pending"
+                        and bool(set(r.tags) & _ACTION_TAGS)
+                    ):
+                        r.reply_review_status = "dismissed"
 
     save_state(account, sp_states, path=data_dir / "subprocessor_reply_state.json")
     return total_new
@@ -461,6 +554,68 @@ def _auto_download_data_links(
 
     if needs_save:
         _save(account, states, data_dir=data_dir)
+
+
+def _try_portal_submit(
+    *,
+    domain: str,
+    portal_url: str,
+    state: CompanyState,
+    reply: ReplyRecord,
+    scan_email: str,
+    verbose: bool = False,
+    data_dir: Path | None = None,
+) -> None:
+    """Attempt to auto-submit SAR via portal when WRONG_CHANNEL reply points to a GDPR portal."""
+    try:
+        from letter_engine.composer import compose
+        from letter_engine.models import SARLetter
+        from contact_resolver.models import CompanyRecord
+        from portal_submitter.submitter import submit_portal
+
+        # Load company record if available
+        import json
+        companies_path = Path(__file__).parent / "data" / "companies.json"
+        record = None
+        if companies_path.exists():
+            companies = json.loads(companies_path.read_text())
+            if domain in companies:
+                record = CompanyRecord.from_dict(companies[domain])
+
+        if record:
+            # Update the record to use portal method
+            record.contact.preferred_method = "portal"
+            record.contact.gdpr_portal_url = portal_url
+            letter = compose(record)
+        else:
+            # Fallback: build minimal letter from state
+            from config.settings import settings
+            letter = SARLetter(
+                to_email=state.to_email,
+                subject=f"Subject Access Request — {settings.USER_FULL_NAME}",
+                body="",
+                company_name=state.company_name,
+                portal_url=portal_url,
+            )
+
+        result = submit_portal(letter, scan_email)
+
+        if result.success:
+            print(f"  [auto-portal] ✓ {state.company_name}: submitted via {portal_url[:50]}")
+            if result.confirmation_ref:
+                print(f"  [auto-portal]   confirmation: {result.confirmation_ref}")
+            # Dismiss the WRONG_CHANNEL draft — auto-handled
+            reply.reply_review_status = "dismissed"
+            reply.suggested_reply = ""
+        elif result.needs_manual:
+            if verbose:
+                print(f"  [auto-portal] {state.company_name}: needs manual submission ({result.error or 'login required'})")
+        else:
+            if verbose:
+                print(f"  [auto-portal] ✗ {state.company_name}: {result.error or 'unknown error'}")
+    except Exception as exc:
+        if verbose:
+            print(f"  [auto-portal] ✗ {state.company_name}: {exc}")
 
 
 # ---------------------------------------------------------------------------
