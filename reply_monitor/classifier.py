@@ -395,6 +395,23 @@ def _is_data_url(url: str) -> bool:
     return bool(_RE_DATA_URL.search(url))
 
 
+# URLs that should never be extracted as data_link or portal_url
+_RE_JUNK_URL = re.compile(
+    r"/hc/[a-z-]+/requests/\d+"          # Zendesk help center ticket pages
+    r"|/hc/[a-z-]+/survey_responses/"     # Zendesk/CSAT surveys
+    r"|/hc/[a-z-]+/articles/"             # Help center knowledge base articles
+    r"|/satisfaction/"                      # CSAT survey endpoints
+    r"|/feedback/"                          # Feedback forms
+    r"|/survey[_-]?responses?/",           # Generic survey response URLs
+    re.I,
+)
+
+
+def _is_junk_url(url: str) -> bool:
+    """Return True if a URL is a known non-data, non-portal page."""
+    return bool(_RE_JUNK_URL.search(url))
+
+
 def classify(
     message: dict,
     *,
@@ -561,7 +578,7 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
     # that concatenates back-to-back Zendesk entries.
     for m in _RE_ZENDESK_ATTACHMENT_A.finditer(full_text):
         url = _clean_url(m.group(1))
-        if url and url not in data_links:
+        if url and url not in data_links and not _is_junk_url(url):
             data_links.append(url)
 
     if not data_links:
@@ -569,7 +586,7 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
         # Excludes /attachments/token/ — handled above via Pass A.
         for m in _RE_DOWNLOAD_URL.finditer(full_text):
             url = _clean_url(m.group(0))
-            if url and url not in data_links:
+            if url and url not in data_links and not _is_junk_url(url):
                 data_links.append(url)
 
     if not data_links:
@@ -577,7 +594,7 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
         # Used when the expanded block isn't present.
         for m in _RE_ZENDESK_ATTACHMENT_B.finditer(full_text):
             url = _clean_url(m.group(1))
-            if url and url not in data_links:
+            if url and url not in data_links and not _is_junk_url(url):
                 data_links.append(url)
 
     if not data_links:
@@ -585,7 +602,7 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
         m = _RE_EXPORT_CONTEXT_URL.search(full_text)
         if m:
             url = _clean_url(m.group(1) or m.group(2) or "")
-            if url:
+            if url and not _is_junk_url(url):
                 data_links.append(url)
 
     data_link = data_links[0] if data_links else ""
@@ -601,6 +618,8 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
         url_match = re.search(r"https?://[^\s\u201c\u201d\"'<>]+", portal_context.group(0))
         if url_match:
             portal_url = _clean_url(url_match.group(0))
+            if _is_junk_url(portal_url):
+                portal_url = ""
 
     return {
         "reference_number": reference_number,

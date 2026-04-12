@@ -508,3 +508,78 @@ class TestLLMFallback:
             mock_llm.assert_not_called()
         assert "IDENTITY_REQUIRED" in result.tags
         assert result.llm_used is False
+
+
+# ---------------------------------------------------------------------------
+# Junk URL filtering tests
+# ---------------------------------------------------------------------------
+
+class TestJunkURLFiltering:
+    def test_zendesk_ticket_page_not_data_link(self):
+        """Zendesk /hc/*/requests/NNN is a ticket page, not a data download."""
+        result = classify({
+            "from": "privacy@society.zendesk.com",
+            "subject": "[Employee Help Center] Re: SAR",
+            "snippet": "Visit https://society.zendesk.com/hc/en-us/requests/649929 for details",
+            "body": "",
+            "has_attachment": False,
+        })
+        assert result.extracted["data_link"] == ""
+        assert result.extracted["data_links"] == []
+
+    def test_zendesk_survey_url_not_data_link(self):
+        """Zendesk survey_responses URL should not be extracted as data_link."""
+        result = classify({
+            "from": "privacy@society.zendesk.com",
+            "subject": "Request #649929: How would you rate the support?",
+            "snippet": "Please let us know https://society.zendesk.com/hc/en-us/survey_responses/01KM?access_token=abc",
+            "body": "",
+            "has_attachment": False,
+        })
+        assert result.extracted["data_link"] == ""
+        assert result.extracted["data_links"] == []
+
+    def test_zendesk_ticket_page_not_portal_url(self):
+        """Zendesk ticket page should not be extracted as portal_url either."""
+        result = classify({
+            "from": "privacy@society.zendesk.com",
+            "subject": "Re: SAR",
+            "snippet": "Your request has been updated. https://society.zendesk.com/hc/en-us/requests/649929",
+            "body": "Please submit via our portal at https://society.zendesk.com/hc/en-us/requests/649929",
+            "has_attachment": False,
+        })
+        assert result.extracted["portal_url"] == ""
+
+    def test_help_center_article_not_data_link(self):
+        """Help center articles are not data downloads."""
+        result = classify({
+            "from": "support@example.com",
+            "subject": "Re: Data Request",
+            "snippet": "See https://help.example.com/hc/en-us/articles/123456 for instructions on downloading your data",
+            "body": "",
+            "has_attachment": False,
+        })
+        assert result.extracted["data_link"] == ""
+
+    def test_real_data_link_still_extracted(self):
+        """Legitimate data download URLs must still work."""
+        url = "https://example.com/export/download?token=abc123"
+        result = classify({
+            "from": "privacy@example.com",
+            "subject": "Your data export is ready",
+            "snippet": f"Download here: {url}",
+            "body": "",
+            "has_attachment": False,
+        })
+        assert result.extracted["data_link"] == url
+
+    def test_feedback_url_not_data_link(self):
+        """Feedback/rating URLs should not be extracted."""
+        result = classify({
+            "from": "support@example.com",
+            "subject": "How was your experience?",
+            "snippet": "Rate us at https://example.com/feedback/rate?session=abc123",
+            "body": "",
+            "has_attachment": False,
+        })
+        assert result.extracted["data_link"] == ""
