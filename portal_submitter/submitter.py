@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date
 from pathlib import Path
 from typing import Any, Callable
@@ -14,6 +15,8 @@ from portal_submitter.form_analyzer import analyze_form, build_user_data
 from portal_submitter.form_filler import STEALTH_SCRIPT, fill_and_submit
 from portal_submitter.models import PortalResult
 from portal_submitter.platform_hints import detect_platform, otp_sender_hints
+from portal_submitter.portal_navigator import navigate_to_form, page_has_form
+from reply_monitor.classifier import _is_junk_url
 
 _SCREENSHOT_DIR = Path(__file__).parent.parent / "user_data" / "portal_screenshots"
 
@@ -42,6 +45,13 @@ def submit_portal(
     """
     if not letter.portal_url:
         return PortalResult(error="no_portal_url", portal_status="failed")
+
+    if _is_junk_url(letter.portal_url):
+        return PortalResult(
+            error="junk_portal_url",
+            needs_manual=True,
+            portal_status="failed",
+        )
 
     # Check platform
     platform = detect_platform(letter.portal_url)
@@ -129,6 +139,28 @@ def _browser_submit(
         try:
             # Navigate to portal
             page.goto(letter.portal_url, wait_until="networkidle", timeout=30_000)
+
+            # Re-detect platform with HTML (for branded domains like zendesk.es → ketch)
+            try:
+                html_content = page.content()
+                detected = detect_platform(letter.portal_url, html=html_content)
+                if detected != "unknown":
+                    platform = detected
+            except Exception:
+                pass
+
+            # Check if landing page has form fields; if not, navigate multi-step
+            if not page_has_form(page):
+                api_key = os.environ.get("ANTHROPIC_API_KEY")
+                if not navigate_to_form(page, platform, api_key=api_key):
+                    screenshot_path = _take_screenshot(page, letter.company_name)
+                    browser.close()
+                    return PortalResult(
+                        error="form_not_found_after_navigation",
+                        needs_manual=True,
+                        screenshot_path=screenshot_path,
+                        portal_status="failed",
+                    )
 
             # Analyze form
             mapping = analyze_form(page, llm_call=llm_call, cached_mapping=cached_mapping)

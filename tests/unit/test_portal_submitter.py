@@ -415,8 +415,9 @@ class TestSubmitPortal:
         assert result.success is False
         assert result.error == "login_required"
 
+    @patch("portal_submitter.submitter.page_has_form", return_value=True)
     @patch("portal_submitter.submitter.settings")
-    def test_successful_submission(self, mock_settings):
+    def test_successful_submission(self, mock_settings, mock_page_has_form):
         mock_settings.user_full_name = "Jane Doe"
         mock_settings.user_email = "jane@test.com"
         mock_settings.user_address_country = "United Kingdom"
@@ -474,6 +475,51 @@ class TestSubmitPortal:
         result = submit_portal(letter, scan_email="user@gmail.com")
         assert result.success is False
         assert result.error == "no_portal_url"
+
+
+class TestJunkUrlGuard:
+    def test_junk_url_returns_failed(self):
+        """Portal URL that matches junk filter fails immediately without browser."""
+        letter = MagicMock()
+        letter.portal_url = "https://society.zendesk.com/hc/en-us/requests/649929"
+        letter.company_name = "Zendesk"
+        result = submit_portal(letter, "test@example.com")
+        assert result.portal_status == "failed"
+        assert "junk" in result.error.lower()
+        assert result.needs_manual is True
+
+
+class TestNavigatorIntegration:
+    def test_no_form_triggers_navigator(self):
+        """When landing page has no form, submitter calls navigate_to_form."""
+        letter = MagicMock()
+        letter.portal_url = "https://zendesk.es/"
+        letter.company_name = "Zendesk"
+
+        mock_page = MagicMock()
+        mock_page.locator.return_value.count.return_value = 0
+        mock_page.content.return_value = "<html></html>"
+
+        mock_pw = MagicMock()
+        mock_browser = MagicMock()
+        mock_pw.__enter__ = MagicMock(return_value=mock_pw)
+        mock_pw.__exit__ = MagicMock(return_value=False)
+        mock_pw.chromium.launch.return_value = mock_browser
+        mock_context = MagicMock()
+        mock_browser.new_context.return_value = mock_context
+        mock_context.new_page.return_value = mock_page
+
+        with patch("portal_submitter.submitter.detect_platform", return_value="ketch"):
+            with patch("portal_submitter.submitter.navigate_to_form", return_value=False) as mock_nav:
+                with patch("portal_submitter.submitter.page_has_form", return_value=False):
+                    result = submit_portal(
+                        letter, "test@example.com",
+                        browser_launcher=lambda: mock_pw,
+                    )
+
+        mock_nav.assert_called_once()
+        assert result.needs_manual is True
+        assert "form_not_found" in result.error
 
 
 class TestPortalTracking:
