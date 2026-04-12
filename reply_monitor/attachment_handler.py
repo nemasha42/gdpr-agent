@@ -86,7 +86,7 @@ def handle_attachment(
 
     if ext == "zip":
         files, categories = _catalog_zip(data, filename)
-    elif ext == "json":
+    elif ext in ("json", "js"):
         files, categories = _catalog_json(data, filename, len(data))
     elif ext == "csv":
         files, categories = _catalog_csv(data, filename, len(data))
@@ -131,9 +131,15 @@ def _catalog_zip(data: bytes, outer_filename: str) -> tuple[list[FileEntry], lis
 
 def _catalog_json(data: bytes, filename: str, size: int) -> tuple[list[FileEntry], list[str]]:
     """Use top-level JSON keys as data category hints."""
+    import re
     categories: list[str] = []
     try:
-        parsed = json.loads(data.decode("utf-8", errors="replace"))
+        text = data.decode("utf-8", errors="replace")
+        # Unwrap Twitter JS wrapper if present
+        m = re.match(r"^window\.YTD\.\w+\.part\d+\s*=\s*", text)
+        if m:
+            text = text[m.end():]
+        parsed = json.loads(text)
         if isinstance(parsed, dict):
             for key in parsed.keys():
                 categories.extend(_guess_categories_from_filename(key))

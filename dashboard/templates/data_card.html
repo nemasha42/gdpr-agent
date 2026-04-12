@@ -252,6 +252,29 @@
               <span class="text-xs text-neutral-400 font-mono">
                 {{ cat.fields | length }} field{{ 's' if cat.fields | length != 1 else '' }}
               </span>
+              <!-- Record count -->
+              {% if cat.record_count is defined and cat.record_count %}
+              <span class="text-xs px-1.5 py-0.5 bg-neutral-100 text-neutral-500 rounded font-mono">
+                {{ "{:,}".format(cat.record_count) }} record{{ 's' if cat.record_count != 1 else '' }}
+              </span>
+              {% endif %}
+              <!-- Structure type -->
+              {% if cat.structure_type is defined and cat.structure_type == "array" %}
+              <span class="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-mono">list</span>
+              {% endif %}
+              <!-- Provenance badge -->
+              {% if cat.provenance is defined and cat.provenance %}
+                {% set prov = cat.provenance %}
+                {% if prov == "provided" %}
+                  <span class="text-xs px-1.5 py-0.5 bg-green-50 text-green-700 rounded" title="You directly provided this data">provided</span>
+                {% elif prov == "observed" %}
+                  <span class="text-xs px-1.5 py-0.5 bg-yellow-50 text-yellow-700 rounded" title="Collected through your usage">observed</span>
+                {% elif prov == "derived" %}
+                  <span class="text-xs px-1.5 py-0.5 bg-orange-50 text-orange-700 rounded" title="Calculated from other data">derived</span>
+                {% elif prov == "inferred" %}
+                  <span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded" title="Predicted or profiled about you">inferred</span>
+                {% endif %}
+              {% endif %}
               <!-- Category description, visible only on very wide screens -->
               {% if cat.description %}
               <span class="text-xs text-neutral-500 ml-2 hidden xl:inline flex-1 truncate">{{ cat.description }}</span>
@@ -301,6 +324,23 @@
                   <span class="text-xs px-1 py-0.5 bg-indigo-100 text-indigo-700 rounded font-mono">url</span>
                 {% else %}
                   <span class="text-xs font-mono text-gray-600">{{ f.type or '?' }}</span>
+                {% endif %}
+
+                <!-- Sensitivity flag (Article 9 special category) -->
+                {% if f.sensitive is defined and f.sensitive %}
+                <span class="text-xs px-1 py-0.5 bg-red-100 text-red-700 rounded font-mono" title="Article 9 special category data">sensitive</span>
+                {% endif %}
+
+                <!-- Field provenance (shown only if different from category default) -->
+                {% if f.provenance is defined and f.provenance and (cat.provenance is not defined or f.provenance != cat.provenance) %}
+                  {% set fp = f.provenance %}
+                  {% if fp == "inferred" %}
+                    <span class="text-xs px-1 py-0.5 bg-red-50 text-red-600 rounded" title="Inferred/profiled">inferred</span>
+                  {% elif fp == "derived" %}
+                    <span class="text-xs px-1 py-0.5 bg-orange-50 text-orange-600 rounded" title="Derived from other data">derived</span>
+                  {% elif fp == "observed" %}
+                    <span class="text-xs px-1 py-0.5 bg-yellow-50 text-yellow-600 rounded" title="Observed through usage">observed</span>
+                  {% endif %}
                 {% endif %}
 
                 <!-- Example value pill -->
@@ -529,6 +569,27 @@
         <div>
           <span class="font-semibold text-neutral-900">Typical Delivery Time:</span>
           <span class="text-neutral-700 ml-2">{{ catalog.export_meta.timeline }}</span>
+        </div>
+        {% endif %}
+
+        {% if catalog.export_meta and catalog.export_meta.get("structure") %}
+        <div>
+          <span class="font-semibold text-neutral-900">Structure:</span>
+          <span class="text-neutral-700 ml-2">{{ catalog.export_meta.structure }}</span>
+        </div>
+        {% endif %}
+
+        {% if catalog.export_meta and catalog.export_meta.get("formats_found") %}
+        <div>
+          <span class="font-semibold text-neutral-900">File Formats:</span>
+          <span class="text-neutral-700 ml-2">{{ catalog.export_meta.formats_found | join(", ") | upper }}</span>
+        </div>
+        {% endif %}
+
+        {% if catalog.export_meta and catalog.export_meta.get("total_records_estimate") %}
+        <div>
+          <span class="font-semibold text-neutral-900">Total Records:</span>
+          <span class="text-neutral-700 ml-2">~{{ "{:,}".format(catalog.export_meta.total_records_estimate) }}</span>
         </div>
         {% endif %}
 

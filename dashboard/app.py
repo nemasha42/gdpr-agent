@@ -999,7 +999,7 @@ def scan_folder(domain: str):
     candidates = sorted(
         [
             f for f in received_dir.iterdir()
-            if f.is_file() and f.suffix.lower().lstrip(".") in ("zip", "json", "csv")
+            if f.is_file() and f.suffix.lower().lstrip(".") in ("zip", "json", "csv", "js")
         ],
         key=lambda f: f.stat().st_mtime,
         reverse=True,
@@ -1016,7 +1016,7 @@ def scan_folder(domain: str):
 
     if ext == "zip":
         files, categories = _catalog_zip(data, file_path.name)
-    elif ext == "json":
+    elif ext in ("json", "js"):
         files, categories = _catalog_json(data, file_path.name, len(data))
     elif ext == "csv":
         files, categories = _catalog_csv(data, file_path.name, len(data))

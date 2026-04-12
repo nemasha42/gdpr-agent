@@ -1,146 +1,94 @@
 """LLM-powered schema analysis for GDPR data exports.
 
-Analyzes the contents of a data export ZIP (or JSON/CSV) and uses Claude
-to infer a structured schema in dataowners.org card format:
+Uses a two-layer approach:
+  1. Pure-Python preprocessor extracts structural metadata (folder tree,
+     CSV headers, JSON key paths, record counts, Twitter JS unwrapping).
+  2. Enriched LLM prompt receives pre-extracted metadata and focuses on
+     understanding the data, not parsing it.
 
-  {
-    "categories": [
-      {
-        "name": "Category Name",
-        "description": "What personal data this category contains",
-        "fields": [
-          {"name": "...", "type": "string|number|boolean|date|array|object",
-           "example": "...", "description": "Short description of what this field means to the user"}
-        ]
-      }
-    ],
-    "services": [
-      {"name": "Job Search Platform", "description": "Search and apply for jobs by title, location, and company"}
-    ],
-    "export_meta": {
-      "format": "ZIP",
-      "delivery": "Download link sent via email",
-      "timeline": "Provided within 30 days"
-    }
-  }
+Output follows the dataowners.org card format with enhancements:
+  - structure_type: "object" | "array" per category
+  - record_count: number of records per category
+  - provenance: "provided" | "observed" | "derived" | "inferred" per category and field
+  - sensitive: boolean per field (Article 9 special category data)
 """
 
 from __future__ import annotations
 
-import io
 import json
-import zipfile
 from pathlib import Path
 
-_MAX_SAMPLE_BYTES = 3000   # per file, sent to LLM
-_MAX_FILES = 25            # cap number of files sampled
+from reply_monitor.preprocessor import PreprocessResult, build_context_summary, preprocess
+
+_MAX_CONTEXT_BYTES = 60_000
 
 
 def build_schema(file_path: Path, api_key: str, company_name: str = "") -> dict:
     """Analyze a data export file and return an LLM-inferred schema.
 
     Args:
-        file_path:    Path to the downloaded file (ZIP, JSON, CSV)
+        file_path:    Path to the downloaded file (ZIP, JSON, CSV, JS)
         api_key:      Anthropic API key
         company_name: Company name for cost tracking (falls back to file stem)
 
     Returns:
-        Dict with keys: categories (list), services (list), export_meta (dict).
+        Dict with keys: categories, services, export_meta.
         Returns empty dict on failure or missing api_key.
     """
     if not api_key:
         return {}
 
-    ext = file_path.suffix.lstrip(".").lower()
+    pp = preprocess(file_path)
 
-    if ext == "zip":
-        samples = _sample_zip(file_path)
-    elif ext in ("json", "csv", "txt", "tsv"):
-        content = _read_sample(file_path, _MAX_SAMPLE_BYTES)
-        samples = [{"filename": file_path.name, "content": content}] if content else []
-    else:
+    if not pp.file_samples:
         return {}
 
-    if not samples:
-        return {}
-
-    return _call_llm(samples, api_key, company_name=company_name or file_path.stem)
+    return _call_llm(pp, api_key, company_name=company_name or file_path.stem)
 
 
-# ---------------------------------------------------------------------------
-# Sampling helpers
-# ---------------------------------------------------------------------------
-
-
-def _sample_zip(file_path: Path) -> list[dict]:
-    """Open ZIP and sample readable text content from each data file."""
-    samples: list[dict] = []
-    try:
-        with zipfile.ZipFile(file_path) as zf:
-            entries = [e for e in zf.infolist() if not e.is_dir()]
-            for info in entries[:_MAX_FILES]:
-                ext = Path(info.filename).suffix.lstrip(".").lower()
-                if ext not in ("json", "csv", "txt", "tsv", "xml"):
-                    continue
-                try:
-                    raw = zf.read(info.filename)
-                    content = raw[:_MAX_SAMPLE_BYTES].decode("utf-8", errors="replace")
-                    if content.strip():
-                        samples.append({"filename": info.filename, "content": content})
-                except Exception:
-                    continue
-    except Exception:
-        pass
-    return samples
-
-
-def _read_sample(file_path: Path, max_bytes: int) -> str:
-    try:
-        raw = file_path.read_bytes()
-        return raw[:max_bytes].decode("utf-8", errors="replace")
-    except Exception:
-        return ""
-
-
-# ---------------------------------------------------------------------------
-# LLM call
-# ---------------------------------------------------------------------------
-
-
-def _call_llm(samples: list[dict], api_key: str, *, company_name: str = "") -> dict:
-    """Send file samples to Claude and parse the returned schema JSON."""
+def _call_llm(pp: PreprocessResult, api_key: str, *, company_name: str = "") -> dict:
+    """Send preprocessed context + file samples to Claude and parse the returned schema."""
     try:
         import anthropic
     except ImportError:
         return {}
 
-    # Cap per-file excerpt so total context stays under 60 KB
-    max_per_file = min(2000, 60_000 // max(len(samples), 1))
+    context_summary = build_context_summary(pp)
+
+    max_per_file = min(2000, _MAX_CONTEXT_BYTES // max(len(pp.file_samples), 1))
     file_blocks = "\n".join(
         f"=== {s['filename']} ===\n{s['content'][:max_per_file]}"
-        for s in samples
+        for s in pp.file_samples
     )
 
     prompt = f"""You are analyzing a GDPR Subject Access Request (SAR) data export.
-The files below are samples from the export package.
 
+STRUCTURAL CONTEXT (pre-extracted, accurate):
+{context_summary}
+
+FILE SAMPLES (first ~2000 chars per file):
 {file_blocks}
 
-Produce a structured data schema that describes the personal data held.
+Produce a structured data schema describing the personal data held.
 Return a JSON object — no markdown, no explanation, only valid JSON.
 
 Schema format:
 {{
   "categories": [
     {{
-      "name": "Human-readable category name (e.g. Profile, Job Applications, Reviews)",
+      "name": "Human-readable category name (e.g. Profile, Streaming History, Search Queries)",
       "description": "One sentence: what personal data this category contains",
+      "structure_type": "object | array",
+      "record_count": 0,
+      "provenance": "provided | observed | derived | inferred",
       "fields": [
         {{
           "name": "field_name_from_data",
-          "type": "string | number | boolean | date | array | object",
-          "example": "actual example value from the file",
-          "description": "Short description of what this field means to the user"
+          "type": "string | string/date | string/date-time | string/email | integer | number | boolean | array | object",
+          "example": "actual example value from the file samples",
+          "description": "Short description of what this field means to the user",
+          "sensitive": false,
+          "provenance": "provided | observed | derived | inferred"
         }}
       ]
     }}
@@ -153,8 +101,12 @@ Schema format:
   ],
   "export_meta": {{
     "format": "ZIP | JSON | CSV | etc.",
-    "delivery": "How the data was delivered (e.g. Download link sent via email)",
-    "timeline": "How long it took or the statutory period (e.g. Provided within 30 days)"
+    "formats_found": ["json", "csv"],
+    "delivery": "How the data was delivered (e.g. Download link, Email attachment)",
+    "timeline": "How long it took or the statutory period (e.g. Provided within 30 days)",
+    "structure": "One sentence: how files are organized (e.g. Organized by service in folders)",
+    "total_files": {pp.total_files},
+    "total_records_estimate": {pp.total_records_estimate}
   }}
 }}
 
@@ -163,8 +115,17 @@ Rules:
 - One category per logical data group (not one per file)
 - Include only the 5-8 most important / personal fields per category
 - Use real values from the samples as examples
+- structure_type: "array" for lists of records (streaming history, search queries), "object" for single records (profile, settings)
+- record_count: use the pre-extracted counts from STRUCTURAL CONTEXT; 0 if unknown
+- provenance per category and field:
+  - "provided" = user directly supplied this (name, email, address, preferences)
+  - "observed" = collected through usage (streaming history, search queries, login times, IP addresses)
+  - "derived" = calculated from other data (total spend, account age, usage statistics)
+  - "inferred" = predicted/profiled (interest categories, recommendations, ad targeting segments)
+- sensitive: true for Article 9 special category data (health, biometric, genetic, racial/ethnic, political, religious, trade union, sexual orientation) and criminal data; false otherwise
+- types: use "string/date" for dates, "string/date-time" for timestamps, "string/email" for emails, "integer" for whole numbers
 - services: list the distinct products/features the company's export reveals
-- export_meta: infer format from file extension; delivery and timeline from context
+- export_meta: use pre-extracted file counts and record estimates; infer format, delivery, timeline from context
 - Return ONLY the JSON object"""
 
     try:
@@ -175,7 +136,6 @@ Rules:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = msg.content[0].text.strip()
-        # Strip markdown code fence if model adds one
         if raw.startswith("```"):
             parts = raw.split("```")
             raw = parts[1] if len(parts) > 1 else raw
@@ -185,16 +145,33 @@ Rules:
         if isinstance(result, list):
             result = {"categories": result, "services": [], "export_meta": {}}
         if isinstance(result, dict):
-            from contact_resolver import cost_tracker
-            cost_tracker.record_llm_call(
-                company_name=company_name,
-                input_tokens=msg.usage.input_tokens,
-                output_tokens=msg.usage.output_tokens,
-                model="claude-haiku-4-5-20251001",
-                found=bool(result),
-                source="schema_builder",
-                purpose="Received data schema analysis",
-            )
+            # Ensure new fields have defaults for any the LLM missed
+            for cat in result.get("categories", []):
+                cat.setdefault("structure_type", "object")
+                cat.setdefault("record_count", 0)
+                cat.setdefault("provenance", "provided")
+                for field in cat.get("fields", []):
+                    field.setdefault("sensitive", False)
+                    field.setdefault("provenance", cat.get("provenance", "provided"))
+
+            meta = result.setdefault("export_meta", {})
+            meta.setdefault("formats_found", pp.formats_found)
+            meta.setdefault("total_files", pp.total_files)
+            meta.setdefault("total_records_estimate", pp.total_records_estimate)
+
+            try:
+                from contact_resolver import cost_tracker
+                cost_tracker.record_llm_call(
+                    company_name=company_name,
+                    input_tokens=msg.usage.input_tokens,
+                    output_tokens=msg.usage.output_tokens,
+                    model="claude-haiku-4-5-20251001",
+                    found=bool(result),
+                    source="schema_builder",
+                    purpose="Received data schema analysis",
+                )
+            except Exception:
+                pass  # cost tracking failure should not lose the schema result
             return result
     except Exception as exc:
         print(f"[schema_builder] LLM call failed: {exc}")
