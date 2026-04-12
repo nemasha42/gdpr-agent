@@ -13,6 +13,15 @@ _LOGIN_REQUIRED_DOMAINS: set[str] = {
 _PLATFORM_RULES: list[tuple[str, re.Pattern]] = [
     ("onetrust", re.compile(r"onetrust\.com|privacyportal", re.I)),
     ("trustarc", re.compile(r"trustarc\.com|submit-irm", re.I)),
+    ("ketch", re.compile(r"ketch\.com|\.ketch\.", re.I)),
+]
+
+# HTML signatures that identify Ketch portals on branded domains
+_KETCH_HTML_SIGNATURES = [
+    "ketch-tag",
+    "ketch.js",
+    "window.semaphore",
+    "cdn.ketch.com",
 ]
 
 # OTP sender email patterns per platform
@@ -20,13 +29,18 @@ _OTP_SENDERS: dict[str, list[str]] = {
     "onetrust": ["noreply@onetrust.com", "privacyportal"],
     "trustarc": ["privacy@trustarc.com", "noreply@trustarc.com"],
     "salesforce": ["noreply@salesforce.com"],
+    "ketch": ["noreply@ketch.com"],
 }
 
 
-def detect_platform(url: str) -> str:
+def detect_platform(url: str, html: str = "") -> str:
     """Classify a portal URL into a known platform or 'unknown'.
 
-    Returns one of: "onetrust", "trustarc", "salesforce", "login_required", "unknown".
+    Returns one of: "onetrust", "trustarc", "salesforce", "ketch", "login_required", "unknown".
+
+    The optional ``html`` parameter accepts page source. When a URL matches no
+    known pattern, HTML-based signature matching is attempted (e.g. to detect
+    Ketch on branded domains that don't contain "ketch" in the URL).
     """
     if not url:
         return "unknown"
@@ -56,6 +70,13 @@ def detect_platform(url: str) -> str:
         path = ""
     if re.match(r"^/s/", path):
         return "salesforce"
+
+    # HTML-based detection for branded domains (e.g. zendesk.es for Ketch)
+    if html:
+        lower_html = html.lower()
+        for sig in _KETCH_HTML_SIGNATURES:
+            if sig.lower() in lower_html:
+                return "ketch"
 
     return "unknown"
 

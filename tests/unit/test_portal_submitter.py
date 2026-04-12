@@ -78,6 +78,28 @@ class TestPlatformDetection:
     def test_empty_url(self):
         assert detect_platform("") == "unknown"
 
+    def test_ketch_by_domain(self):
+        assert detect_platform("https://privacy.ketch.com/portal/abc") == "ketch"
+
+    def test_ketch_subdomain(self):
+        assert detect_platform("https://zendesk.ketch.com/") == "ketch"
+
+    def test_ketch_branded_domain_with_html(self):
+        html = '<script src="https://cdn.ketch.com/ketch-tag.js"></script>'
+        assert detect_platform("https://zendesk.es/", html=html) == "ketch"
+
+    def test_ketch_html_window_semaphore(self):
+        html = '<script>window.semaphore = window.semaphore || [];</script>'
+        assert detect_platform("https://company.com/privacy", html=html) == "ketch"
+
+    def test_non_ketch_html_returns_unknown(self):
+        html = '<html><body>Regular page</body></html>'
+        assert detect_platform("https://example.com/privacy", html=html) == "unknown"
+
+    def test_ketch_otp_hints(self):
+        hints = otp_sender_hints("ketch")
+        assert "noreply@ketch.com" in hints
+
 
 class TestOTPSenderHints:
     def test_onetrust_hints(self):
