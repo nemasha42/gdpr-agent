@@ -29,7 +29,7 @@ python monitor.py [--account EMAIL] [--verbose]
 # Web dashboard (Flask, port 5001)
 python dashboard/app.py
 
-# --- GDPR Universe (subproject, port 5002) ---
+# --- GDPR Universe (subproject, port 5003) ---
 
 # Start the universe dashboard
 python -m gdpr_universe.app
@@ -129,30 +129,11 @@ Invariant: **SP can only escalate; `sp_sent=False` never downgrades.** `DATA_REC
 
 ## GDPR Universe (subproject)
 
-Standalone Flask app (`gdpr_universe/`, port 5002) that maps the subprocessor dependency graph for ~1,000 EU+UK listed companies from stock indices (FTSE 350, EURO STOXX 600, etc.).
+Standalone Flask app (`gdpr_universe/`, port 5003). Full docs in **`gdpr_universe/CLAUDE.md`**.
 
-**Architecture:** SQLite database (`gdpr_universe/data/universe.db`, gitignored) with explicit `edges` table enabling recursive CTE graph queries. Five tables: `companies`, `index_constituents`, `edges`, `fetch_log`, `analytics_cache`. All entities (seed companies + discovered SPs) live in `companies`; `is_seed` distinguishes them. One edge per parent→child relationship; purposes/data_categories stored as JSON arrays.
+Quick reference: `.venv/bin/python -m gdpr_universe.app` → http://localhost:5003
 
-**Shared modules** (imported, not copied — improvements benefit both projects):
-- `contact_resolver.subprocessor_fetcher` — SP discovery pipeline
-- `contact_resolver.service_categorizer` — domain classification
-- `dashboard.services.jurisdiction` — risk assessment, country inference
-
-**Adapter layer** (`gdpr_universe/adapters.py`): converts `SubprocessorRecord` → SQLite rows. `store_fetch_result(engine, domain, record)` upserts Company + Edge rows and writes FetchLog.
-
-**Graph queries** (`gdpr_universe/graph_queries.py`): `blast_radius()`, `sharing_counts()`, `concentration_risk()`, `neighborhood()`, `risky_chains()`, `chain_depth_distribution()` — all recursive CTEs on the edges table.
-
-**Seed importer** (`gdpr_universe/seed_importer.py`): CSV → `companies` + `index_constituents` tables. Falls back to `data/domain_map.json` (~40 top EU/UK companies) when CSV lacks domain column.
-
-**Crawl scheduler** (`gdpr_universe/crawl_scheduler.py`): Wave-based fetching. Wave 0 = seed companies, Wave 1+ = discovered SPs. Skip logic: fresh "ok" → skip, "not_found" → skip, "error" → always retry. Resumable via `fetch_log`.
-
-**Dashboard views:** `/` (company table + stats + SP leaderboard), `/company/<domain>` (detail + D3 neighborhood graph), `/contagion/<domain>` (blast radius trace), `/analytics` (6 insight panels), `/api/graph` (D3 JSON API), `/crawl` (trigger + status).
-
-**Key constraints:**
-- Zero changes to parent project code — shared modules imported read-only
-- `gdpr_universe/data/universe.db` is gitignored (covered by existing `*.db` rule)
-- `sys.path.insert` used in routes to import from `dashboard.services.jurisdiction` — fragile but functional
-- Design spec: `docs/superpowers/specs/2026-04-05-gdpr-universe-design.md`
+Design spec: `docs/superpowers/specs/2026-04-05-gdpr-universe-design.md`
 
 ## Key constraints
 
@@ -189,7 +170,7 @@ Standalone Flask app (`gdpr_universe/`, port 5002) that maps the subprocessor de
 
 All tests in `tests/unit/` use dependency injection or `unittest.mock` — no real network, Gmail, or Anthropic calls. `ContactResolver` accepts injectable `http_get`, `llm_search`, and `privacy_scrape` callables. Mock Anthropic responses must set `response.usage.input_tokens` and `response.usage.output_tokens` as integers (not MagicMock auto-attributes) or cost recording will fail.
 
-**GDPR Universe tests** (`tests/unit/test_universe_*.py`): 36 tests covering DB schema, adapters, graph queries, seed importer, crawl scheduler, and integration (all routes render). Use `tmp_path` for isolated SQLite DBs. Crawl scheduler tests mock `_do_fetch` to avoid real network calls. Integration tests use `create_app(db_path)` with test client.
+**GDPR Universe tests:** See `gdpr_universe/CLAUDE.md`.
 
 ## Known Issues / Tech Debt
 

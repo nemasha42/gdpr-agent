@@ -7,10 +7,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+logging.basicConfig(
+    format="%(levelname)s [%(name)s] %(message)s",
+    level=logging.INFO,
+)
 
 # Load .env so ANTHROPIC_API_KEY is available for LLM classification fallback
 try:

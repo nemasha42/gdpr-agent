@@ -3,91 +3,62 @@
 {% block title %}Blast Radius: {{ company.company_name or domain }} — GDPR Universe{% endblock %}
 
 {% block content %}
-<a href="/" class="btn btn-sm btn-outline-secondary mb-3">&larr; Back to Dashboard</a>
+<a href="/" class="btn btn-sm btn-outline-secondary mb-3">&larr; Back</a>
 
-{# ── Header ── #}
-<div class="d-flex align-items-center mb-4">
+<div class="d-flex align-items-center mb-3">
     <img src="https://www.google.com/s2/favicons?domain={{ domain }}&sz=32"
-         alt="" width="32" height="32" class="me-3 rounded">
+         alt="" width="28" height="28" class="me-2 rounded">
     <div>
-        <h3 class="mb-0">Blast Radius: {{ company.company_name or domain }}</h3>
+        <h4 class="mb-0">Blast Radius: {{ company.company_name or domain }}</h4>
         <span class="text-muted small">If <strong>{{ domain }}</strong> is compromised, who is affected?</span>
     </div>
 </div>
 
-{# ── Stats row ── #}
-<div class="row mb-4">
-    <div class="col-md-3 mb-2">
-        <div class="card bg-dark border-secondary text-center">
-            <div class="card-body py-3">
-                <div class="fs-2 fw-bold text-info">{{ total_affected }}</div>
-                <div class="text-muted small">Total Affected</div>
-            </div>
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-value text-primary">{{ total_affected }}</div>
+            <div class="stat-label">Total Affected</div>
         </div>
     </div>
-    <div class="col-md-3 mb-2">
-        <div class="card bg-dark border-secondary text-center">
-            <div class="card-body py-3">
-                <div class="fs-2 fw-bold text-warning">{{ seed_count }}</div>
-                <div class="text-muted small">Seed Companies</div>
-            </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" style="color:#e67e22">{{ seed_count }}</div>
+            <div class="stat-label">Seed Companies</div>
         </div>
     </div>
-    <div class="col-md-3 mb-2">
-        <div class="card bg-dark border-secondary text-center">
-            <div class="card-body py-3">
-                <div class="fs-2 fw-bold text-success">{{ country_count }}</div>
-                <div class="text-muted small">Countries</div>
-            </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-value text-success">{{ country_count }}</div>
+            <div class="stat-label">Countries</div>
         </div>
     </div>
-    <div class="col-md-3 mb-2">
-        <div class="card bg-dark border-secondary text-center">
-            <div class="card-body py-3">
-                <div class="fs-2 fw-bold text-secondary">{{ max_hops }}</div>
-                <div class="text-muted small">Max Hops Traced</div>
-            </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-value text-muted">{{ max_hops }}</div>
+            <div class="stat-label">Max Hops</div>
         </div>
     </div>
 </div>
 
-{# ── Two-column layout ── #}
-<div class="row">
-    {# Left: Affected entities table #}
-    <div class="col-lg-8 mb-4">
-        <div class="card bg-dark border-secondary">
-            <div class="card-header border-secondary">
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <strong>Affected Entities</strong>
-                <span class="badge bg-secondary ms-2">{{ entities|length }}</span>
+                <span class="badge bg-secondary">{{ entities|length }}</span>
             </div>
             <div class="card-body p-0">
                 {% if entities %}
                 <div class="table-responsive">
-                    <table class="table table-dark table-hover table-sm mb-0">
-                        <thead>
-                            <tr>
-                                <th>Company</th>
-                                <th>Country</th>
-                                <th>Type</th>
-                                <th>Hops</th>
-                            </tr>
-                        </thead>
+                    <table class="table table-hover table-sm mb-0">
+                        <thead><tr><th>Company</th><th>Country</th><th>Type</th><th>Hops</th></tr></thead>
                         <tbody>
                             {% for e in entities %}
                             <tr role="button" onclick="window.location='/company/{{ e.domain }}'">
-                                <td>
-                                    <img src="https://www.google.com/s2/favicons?domain={{ e.domain }}&sz=16"
-                                         alt="" width="16" height="16" class="me-1">
-                                    {{ e.company_name or e.domain }}
-                                </td>
+                                <td><img src="https://www.google.com/s2/favicons?domain={{ e.domain }}&sz=16" alt="" width="16" height="16" class="me-1"> {{ e.company_name or e.domain }}</td>
                                 <td>{{ e.hq_country_code or "—" }}</td>
-                                <td>
-                                    {% if e.is_seed %}
-                                    <span class="badge bg-primary">Seed</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">SP</span>
-                                    {% endif %}
-                                </td>
+                                <td>{% if e.is_seed %}<span class="badge bg-primary">Seed</span>{% else %}<span class="badge bg-secondary">SP</span>{% endif %}</td>
                                 <td>{{ e.hops }}</td>
                             </tr>
                             {% endfor %}
@@ -95,30 +66,27 @@
                     </table>
                 </div>
                 {% else %}
-                <p class="text-muted p-3 mb-0">No affected entities found within {{ max_hops }} hops.</p>
+                <p class="text-muted p-3 mb-0">No affected entities within {{ max_hops }} hops.</p>
                 {% endif %}
             </div>
         </div>
     </div>
 
-    {# Right: Country leaderboard #}
-    <div class="col-lg-4 mb-4">
-        <div class="card bg-dark border-secondary">
-            <div class="card-header border-secondary">
-                <strong>Affected by Country</strong>
-            </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header"><strong>Affected by Country</strong></div>
             <div class="card-body p-0">
                 {% if top_countries %}
                 <ul class="list-group list-group-flush">
                     {% for cc, count in top_countries %}
-                    <li class="list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary">
-                        <span>{{ cc }}</span>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ cc }}
                         <span class="badge bg-info rounded-pill">{{ count }}</span>
                     </li>
                     {% endfor %}
                 </ul>
                 {% else %}
-                <p class="text-muted p-3 mb-0">No country data available.</p>
+                <p class="text-muted p-3 mb-0">No country data.</p>
                 {% endif %}
             </div>
         </div>

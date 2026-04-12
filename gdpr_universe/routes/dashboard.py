@@ -39,16 +39,21 @@ def _get_stats(engine: Engine) -> dict:
             )
         ).scalar() or 0
 
-        # Coverage: seeds with at least one fetch_status='ok' / total seeds
-        seeds_fetched = session.execute(
+        # Coverage: seeds that have at least one outgoing edge (SP discovered)
+        seeds_with_sps = session.execute(
             text(
-                "SELECT COUNT(DISTINCT fl.domain) FROM fetch_log fl "
-                "JOIN companies c ON fl.domain = c.domain "
-                "WHERE c.is_seed = 1 AND fl.fetch_status = 'ok'"
+                "SELECT COUNT(DISTINCT e.parent_domain) FROM edges e "
+                "JOIN companies c ON e.parent_domain = c.domain "
+                "WHERE c.is_seed = 1"
             )
         ).scalar() or 0
 
-    coverage_pct = round(seeds_fetched / total_companies * 100, 1) if total_companies else 0.0
+        # Max depth in the graph
+        max_depth = session.execute(
+            text("SELECT MAX(depth) FROM edges")
+        ).scalar() or 0
+
+    coverage_pct = round(seeds_with_sps / total_companies * 100, 1) if total_companies else 0.0
 
     return {
         "total_companies": total_companies,
@@ -56,11 +61,18 @@ def _get_stats(engine: Engine) -> dict:
         "total_edges": total_edges,
         "countries_reached": countries_reached,
         "coverage_pct": coverage_pct,
+        "max_depth": max_depth,
     }
 
 
 def _get_company_rows(
-    engine: Engine, *, search: str = "", sort: str = "company_name", order: str = "asc"
+    engine: Engine,
+    *,
+    search: str = "",
+    sort: str = "company_name",
+    order: str = "asc",
+    country: str = "",
+    sector: str = "",
 ) -> list[dict]:
     """Return seed companies with SP count and latest fetch status."""
     allowed_sorts = {
@@ -72,6 +84,20 @@ def _get_company_rows(
     }
     sort_col = allowed_sorts.get(sort, "c.company_name")
     order_dir = "DESC" if order == "desc" else "ASC"
+
+    where_clauses = ["c.is_seed = 1"]
+    params: dict = {}
+    if search:
+        where_clauses.append("(c.company_name LIKE :search OR c.domain LIKE :search)")
+        params["search"] = f"%{search}%"
+    if country:
+        where_clauses.append("c.hq_country_code = :country")
+        params["country"] = country
+    if sector:
+        where_clauses.append("c.sector = :sector")
+        params["sector"] = sector
+
+    where = " AND ".join(where_clauses)
 
     sql = text(
         f"SELECT c.domain, c.company_name, c.hq_country_code, c.sector, "
@@ -86,14 +112,9 @@ def _get_company_rows(
         f"    SELECT domain, fetch_status FROM fetch_log "
         f"    WHERE id IN (SELECT MAX(id) FROM fetch_log GROUP BY domain)"
         f") fl ON fl.domain = c.domain "
-        f"WHERE c.is_seed = 1 "
-        f"{'AND (c.company_name LIKE :search OR c.domain LIKE :search) ' if search else ''}"
+        f"WHERE {where} "
         f"ORDER BY {sort_col} {order_dir}"
     )
-
-    params = {}
-    if search:
-        params["search"] = f"%{search}%"
 
     with get_session(engine) as session:
         rows = session.execute(sql, params).fetchall()
@@ -111,6 +132,32 @@ def _get_company_rows(
     ]
 
 
+def _get_filter_options(engine: Engine) -> tuple[list[str], list[str]]:
+    """Return sorted lists of distinct countries and sectors for filter dropdowns."""
+    with get_session(engine) as session:
+        countries = [
+            r[0]
+            for r in session.execute(
+                text(
+                    "SELECT DISTINCT hq_country_code FROM companies "
+                    "WHERE is_seed = 1 AND hq_country_code IS NOT NULL AND hq_country_code != '' "
+                    "ORDER BY hq_country_code"
+                )
+            ).fetchall()
+        ]
+        sectors = [
+            r[0]
+            for r in session.execute(
+                text(
+                    "SELECT DISTINCT sector FROM companies "
+                    "WHERE is_seed = 1 AND sector IS NOT NULL AND sector != '' "
+                    "ORDER BY sector"
+                )
+            ).fetchall()
+        ]
+    return countries, sectors
+
+
 @bp.route("/")
 def index():
     """Main dashboard page."""
@@ -120,8 +167,14 @@ def index():
     search = request.args.get("search", "").strip()
     sort = request.args.get("sort", "company_name")
     order = request.args.get("order", "asc")
+    filter_country = request.args.get("country", "").strip()
+    filter_sector = request.args.get("sector", "").strip()
 
-    companies = _get_company_rows(engine, search=search, sort=sort, order=order)
+    companies = _get_company_rows(
+        engine, search=search, sort=sort, order=order,
+        country=filter_country, sector=filter_sector,
+    )
+    available_countries, available_sectors = _get_filter_options(engine)
     graph_data = build_full_graph(engine)
 
     # Top 20 subprocessors by sharing count
@@ -150,5 +203,9 @@ def index():
         search=search,
         sort=sort,
         order=order,
+        filter_country=filter_country,
+        filter_sector=filter_sector,
+        available_countries=available_countries,
+        available_sectors=available_sectors,
         graph_json=graph_data,
     )

@@ -10,9 +10,15 @@ Routes:
 from __future__ import annotations
 
 import html as _html
+import logging
 import re
 import sys
 import urllib.parse as _urlparse
+
+logging.basicConfig(
+    format="%(levelname)s [%(name)s] %(message)s",
+    level=logging.INFO,
+)
 from datetime import datetime, timezone
 from pathlib import Path
 

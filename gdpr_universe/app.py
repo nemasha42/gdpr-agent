@@ -58,4 +58,4 @@ def create_app(db_path: str | None = None) -> Flask:
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(host="127.0.0.1", port=5002, debug=True, threaded=True)
+    app.run(host="127.0.0.1", port=5003, debug=True, threaded=True)

@@ -14,8 +14,16 @@ Strategy:
 
 from __future__ import annotations
 
+import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# Transient HTTP error codes worth retrying
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503}
+_MAX_RETRIES = 3
 
 
 # ---------------------------------------------------------------------------
@@ -77,13 +85,27 @@ def _fetch_by_thread(
     existing_ids: set[str],
     verbose: bool = False,
 ) -> list[dict]:
-    try:
-        thread = service.users().threads().get(
-            userId="me",
-            id=thread_id,
-            format="full",
-        ).execute()
-    except Exception:
+    thread = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            thread = service.users().threads().get(
+                userId="me",
+                id=thread_id,
+                format="full",
+            ).execute()
+            break
+        except Exception as exc:
+            status = getattr(exc, "status_code", None) or getattr(getattr(exc, "resp", None), "status", None)
+            if status in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
+                wait = 2 ** attempt
+                logger.warning("Gmail thread fetch failed (thread=%s, status=%s, attempt=%d/%d), retrying in %ds",
+                               thread_id, status, attempt + 1, _MAX_RETRIES, wait)
+                time.sleep(wait)
+            else:
+                logger.error("Gmail thread fetch failed permanently (thread=%s): %s", thread_id, exc)
+                return []
+
+    if thread is None:
         return []
 
     results = []
@@ -150,13 +172,23 @@ def _fetch_by_search(
             if ref["id"] in seen_ids:
                 continue
             seen_ids.add(ref["id"])
-            try:
-                msg = service.users().messages().get(
-                    userId="me",
-                    id=ref["id"],
-                    format="full",
-                ).execute()
-            except Exception:
+            msg = None
+            for attempt in range(_MAX_RETRIES):
+                try:
+                    msg = service.users().messages().get(
+                        userId="me",
+                        id=ref["id"],
+                        format="full",
+                    ).execute()
+                    break
+                except Exception as exc:
+                    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "resp", None), "status", None)
+                    if status in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
+                        time.sleep(2 ** attempt)
+                    else:
+                        logger.error("Gmail message fetch failed (msg=%s): %s", ref["id"], exc)
+                        break
+            if msg is None:
                 continue
             from_header = _get_header(msg, "From")
             if user_email and user_email.lower() in from_header.lower():
@@ -176,9 +208,19 @@ def _paginated_search(service: Any, query: str, max_results: int = 200) -> list[
         kwargs: dict = {"userId": "me", "q": query, "maxResults": min(100, max_results - len(refs))}
         if page_token:
             kwargs["pageToken"] = page_token
-        try:
-            resp = service.users().messages().list(**kwargs).execute()
-        except Exception:
+        resp = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                resp = service.users().messages().list(**kwargs).execute()
+                break
+            except Exception as exc:
+                status = getattr(exc, "status_code", None) or getattr(getattr(exc, "resp", None), "status", None)
+                if status in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
+                    time.sleep(2 ** attempt)
+                else:
+                    logger.error("Gmail search failed (query=%s): %s", query, exc)
+                    break
+        if resp is None:
             break
         refs.extend(resp.get("messages", []))
         page_token = resp.get("nextPageToken")

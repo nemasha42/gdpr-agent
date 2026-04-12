@@ -42,6 +42,11 @@
   const g = svg.append('g');
   const zoom = d3.zoom()
     .scaleExtent([0.3, 4])
+    .filter(event => {
+      // Disable wheel zoom so page scroll works — only zoom via buttons or pinch
+      if (event.type === 'wheel') return false;
+      return !event.button;
+    })
     .on('zoom', (event) => g.attr('transform', event.transform));
   svg.call(zoom);
 
@@ -372,17 +377,23 @@
       _adjReverse[tgt].add(src);
     });
 
-    function _collectChain(startId) {
+    // Walk downstream only (parent → all SPs recursively)
+    function _collectDownstream(startId) {
       const visited = new Set();
-      // Walk down
-      const downQueue = [startId];
-      while (downQueue.length) {
-        const cur = downQueue.shift();
+      const queue = [startId];
+      while (queue.length) {
+        const cur = queue.shift();
         if (visited.has(cur)) continue;
         visited.add(cur);
         const children = _adjForward[cur];
-        if (children) children.forEach(c => { if (!visited.has(c)) downQueue.push(c); });
+        if (children) children.forEach(c => { if (!visited.has(c)) queue.push(c); });
       }
+      return visited;
+    }
+
+    // Walk both directions (full chain)
+    function _collectChain(startId) {
+      const visited = _collectDownstream(startId);
       // Walk up
       const upQueue = [startId];
       while (upQueue.length) {
@@ -402,8 +413,8 @@
         const tgt = typeof e.target === 'object' ? e.target.id : e.target;
         if (chainNodes.has(src) && chainNodes.has(tgt)) chainEdges.add(e);
       });
-      node.style('opacity', d => chainNodes.has(d.id) ? 1 : 0.1);
-      link.style('opacity', d => chainEdges.has(d) ? 1 : 0.05)
+      node.style('opacity', d => chainNodes.has(d.id) ? 1 : 0.08);
+      link.style('opacity', d => chainEdges.has(d) ? 1 : 0.03)
           .attr('filter', d => chainEdges.has(d) ? 'url(#glow)' : null);
     }
 
@@ -413,13 +424,36 @@
       activeHighlight = null;
     }
 
+    // Highlight a single node + its full downstream SP chain
+    function highlightDomain(domain) {
+      const n = nodes.find(n => n.domain === domain);
+      if (!n) return;
+      if (activeHighlight === n.id) { clearHighlight(); return; }
+      _applyHighlight(_collectDownstream(n.id));
+      activeHighlight = n.id;
+    }
+
+    // Highlight multiple domains + union of all their downstream chains
+    function highlightDomains(domains) {
+      const allNodes = new Set();
+      domains.forEach(domain => {
+        const n = nodes.find(n => n.domain === domain);
+        if (n) {
+          _collectDownstream(n.id).forEach(id => allNodes.add(id));
+        }
+      });
+      if (allNodes.size === 0) { clearHighlight(); return; }
+      _applyHighlight(allNodes);
+      activeHighlight = '__multi__';
+    }
+
     node.on('click', function(event, d) {
       event.stopPropagation();
       if (activeHighlight === d.id) {
         clearHighlight();
         return;
       }
-      _applyHighlight(_collectChain(d.id));
+      _applyHighlight(_collectDownstream(d.id));
       activeHighlight = d.id;
     });
 
@@ -436,7 +470,7 @@
     // Expose for external integration
     window._universeGraph = {
       svg, g, node, link, nodes, edges, simulation, zoom, tooltip, riskColor,
-      clearHighlight,
+      clearHighlight, highlightDomain, highlightDomains,
     };
   }
 
