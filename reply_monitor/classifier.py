@@ -412,7 +412,10 @@ _RE_JUNK_URL = re.compile(
     r"|/hc/[a-z-]+/articles/"             # Help center knowledge base articles
     r"|/satisfaction/"                      # CSAT survey endpoints
     r"|/feedback/"                          # Feedback forms
-    r"|/survey[_-]?responses?/",           # Generic survey response URLs
+    r"|/survey[_-]?responses?/"            # Generic survey response URLs
+    r"|/requests/\d+"                      # Bare support ticket paths
+    r"|/support/tickets/"                  # Generic support ticket paths
+    r"|/help/",                            # Help center root pages
     re.I,
 )
 

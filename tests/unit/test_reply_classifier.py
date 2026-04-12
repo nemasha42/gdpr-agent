@@ -584,6 +584,26 @@ class TestJunkURLFiltering:
         })
         assert result.extracted["data_link"] == ""
 
+    def test_bare_request_path_is_junk(self):
+        from reply_monitor.classifier import _is_junk_url
+        assert _is_junk_url("https://company.zendesk.com/requests/12345") is True
+
+    def test_support_tickets_is_junk(self):
+        from reply_monitor.classifier import _is_junk_url
+        assert _is_junk_url("https://support.example.com/support/tickets/789") is True
+
+    def test_help_root_is_junk(self):
+        from reply_monitor.classifier import _is_junk_url
+        assert _is_junk_url("https://example.com/help/privacy") is True
+
+    def test_real_portal_not_junk(self):
+        from reply_monitor.classifier import _is_junk_url
+        assert _is_junk_url("https://zendesk.es/") is False
+
+    def test_data_export_not_junk(self):
+        from reply_monitor.classifier import _is_junk_url
+        assert _is_junk_url("https://example.com/data-export/download?token=abc") is False
+
 
 # ---------------------------------------------------------------------------
 # Draft tone tests
