@@ -10,12 +10,21 @@ _TRACKER_PATH = Path(__file__).parent.parent / "user_data" / "sent_letters.json"
 _SUBPROCESSOR_REQUESTS_PATH = Path(__file__).parent.parent / "user_data" / "subprocessor_requests.json"
 
 
-def record_sent(letter: SARLetter, *, path: Path | None = None, data_dir: Path | None = None) -> None:
+def record_sent(
+    letter: SARLetter,
+    *,
+    path: Path | None = None,
+    data_dir: Path | None = None,
+    portal_status: str = "",
+    portal_confirmation_ref: str = "",
+    portal_screenshot: str = "",
+) -> None:
+
     """Append a sent letter entry to the tracker file."""
     if path is None:
         path = (data_dir / "sent_letters.json") if data_dir else _TRACKER_PATH
     log = get_log(path=path)
-    log.append({
+    entry = {
         "sent_at": datetime.now().isoformat(timespec="seconds"),
         "company_name": letter.company_name,
         "method": letter.method,
@@ -23,7 +32,15 @@ def record_sent(letter: SARLetter, *, path: Path | None = None, data_dir: Path |
         "subject": letter.subject,
         "gmail_message_id": letter.gmail_message_id,
         "gmail_thread_id": letter.gmail_thread_id,
-    })
+    }
+    # Portal-specific fields (only set for method="portal")
+    if letter.method == "portal":
+        entry["portal_url"] = letter.portal_url
+        entry["portal_status"] = portal_status
+        entry["portal_confirmation_ref"] = portal_confirmation_ref
+        if portal_screenshot:
+            entry["portal_screenshot"] = portal_screenshot
+    log.append(entry)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(log, indent=2))
 

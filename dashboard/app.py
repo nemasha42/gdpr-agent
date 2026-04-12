@@ -1713,6 +1713,128 @@ def api_body(domain: str, message_id: str):
 
 
 # ===========================================================================
+# Portal submission routes
+# ===========================================================================
+
+import threading as _threading
+
+_portal_tasks: dict[str, dict] = {}  # domain -> {"status": ..., "result": ...}
+
+
+@app.route("/portal/submit/<domain>", methods=["POST"])
+def portal_submit(domain: str):
+    """Start a portal submission as a background task."""
+    account = request.args.get("account", "")
+
+    if domain in _portal_tasks and _portal_tasks[domain].get("status") == "running":
+        return jsonify({"error": "submission already in progress"}), 409
+
+    # Find the letter for this domain
+    from contact_resolver.resolver import ContactResolver
+    from letter_engine.composer import compose
+
+    resolver = ContactResolver()
+    record = resolver.resolve(domain, domain, verbose=False)
+    if not record or record.contact.preferred_method != "portal":
+        return jsonify({"error": "not a portal company"}), 400
+
+    letter = compose(record)
+
+    _portal_tasks[domain] = {"status": "running", "result": None}
+
+    def _run():
+        try:
+            from portal_submitter import submit_portal
+            result = submit_portal(letter, scan_email=account)
+            _portal_tasks[domain] = {"status": "done", "result": result}
+
+            # Record to tracker
+            if result.success or result.needs_manual:
+                from letter_engine import tracker
+                tracker.record_sent(
+                    letter,
+                    portal_status=result.portal_status,
+                    portal_confirmation_ref=result.confirmation_ref,
+                    portal_screenshot=result.screenshot_path,
+                )
+        except Exception as exc:
+            _portal_tasks[domain] = {"status": "error", "result": str(exc)}
+
+    _threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started"})
+
+
+@app.route("/portal/status/<domain>")
+def portal_status(domain: str):
+    """Poll portal submission progress."""
+    task = _portal_tasks.get(domain)
+    if not task:
+        return jsonify({"status": "not_found"})
+
+    if task["status"] == "running":
+        return jsonify({"status": "running"})
+
+    result = task["result"]
+    if isinstance(result, str):
+        return jsonify({"status": "error", "error": result})
+
+    return jsonify({
+        "status": "done",
+        "success": result.success,
+        "needs_manual": result.needs_manual,
+        "portal_status": result.portal_status,
+        "confirmation_ref": result.confirmation_ref,
+        "error": result.error,
+    })
+
+
+@app.route("/captcha/<domain>")
+def captcha_show(domain: str):
+    """Show a pending CAPTCHA for the user to solve."""
+    captcha_dir = Path(__file__).parent.parent / "user_data" / "captcha_pending"
+    screenshot = captcha_dir / f"{domain}.png"
+    challenge_file = captcha_dir / f"{domain}.json"
+
+    if not screenshot.exists() or not challenge_file.exists():
+        flash("No pending CAPTCHA for this domain.", "warning")
+        return redirect(url_for("index"))
+
+    import base64
+    img_b64 = base64.b64encode(screenshot.read_bytes()).decode()
+    challenge = json.loads(challenge_file.read_text())
+
+    return render_template(
+        "captcha.html",
+        domain=domain,
+        captcha_image=img_b64,
+        portal_url=challenge.get("portal_url", ""),
+    )
+
+
+@app.route("/captcha/<domain>", methods=["POST"])
+def captcha_solve(domain: str):
+    """Submit a CAPTCHA solution."""
+    solution = request.form.get("solution", "").strip()
+    if not solution:
+        flash("Please enter the CAPTCHA solution.", "warning")
+        return redirect(url_for("captcha_show", domain=domain))
+
+    captcha_dir = Path(__file__).parent.parent / "user_data" / "captcha_pending"
+    challenge_file = captcha_dir / f"{domain}.json"
+
+    if challenge_file.exists():
+        data = json.loads(challenge_file.read_text())
+        data["status"] = "solved"
+        data["solution"] = solution
+        challenge_file.write_text(json.dumps(data, indent=2))
+        flash("CAPTCHA solution submitted. Portal submission continuing...", "success")
+    else:
+        flash("CAPTCHA challenge not found or already expired.", "warning")
+
+    return redirect(url_for("index"))
+
+
+# ===========================================================================
 # Pipeline routes
 # ===========================================================================
 

@@ -87,10 +87,61 @@ def send_letter(
             tracker.record_sent(letter, data_dir=data_dir)
         return bool(msg_id), msg_id, thread_id
 
-    # portal / postal — record as sent; user handles submission manually
+    if letter.method == "portal":
+        return _dispatch_portal(letter, scan_email, record=record)
+
+    # postal — record as sent; user handles submission manually
     if record:
         tracker.record_sent(letter, data_dir=data_dir)
     return True, "", ""
+
+
+def _dispatch_portal(
+    letter: SARLetter,
+    scan_email: str,
+    *,
+    record: bool = True,
+) -> tuple[bool, str, str]:
+    """Attempt automated portal submission, fall back to manual instructions."""
+    try:
+        from portal_submitter import submit_portal
+        result = submit_portal(letter, scan_email)
+
+        if result.needs_manual:
+            print(f"\n[PORTAL] {letter.company_name}: manual submission required ({result.error})")
+            print(f"  URL: {letter.portal_url}")
+            print(f"  Copy the letter body above to paste into the portal form.")
+            if record:
+                tracker.record_sent(letter, portal_status="manual")
+            return True, "", ""
+
+        if result.success:
+            print(f"\n[PORTAL] {letter.company_name}: submitted successfully")
+            if result.confirmation_ref:
+                print(f"  Confirmation: {result.confirmation_ref}")
+            if record:
+                tracker.record_sent(
+                    letter,
+                    portal_status=result.portal_status,
+                    portal_confirmation_ref=result.confirmation_ref,
+                    portal_screenshot=result.screenshot_path,
+                )
+            return True, "", ""
+
+        # Submission failed — fall back to manual
+        print(f"\n[PORTAL] {letter.company_name}: automation failed ({result.error})")
+        print(f"  Please submit manually at: {letter.portal_url}")
+        if record:
+            tracker.record_sent(letter, portal_status="failed")
+        return True, "", ""
+
+    except ImportError:
+        # portal_submitter not available — fall back to manual
+        print(f"\nPlease submit your SAR manually at:\n  {letter.portal_url}")
+        print("\nCopy the letter body above to paste into the portal form.")
+        if record:
+            tracker.record_sent(letter, portal_status="manual")
+        return True, "", ""
 
 
 def _print_preview(letter: SARLetter) -> None:

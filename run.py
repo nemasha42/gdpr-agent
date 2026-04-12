@@ -114,6 +114,14 @@ def main() -> None:
         return
 
     # ── Step 5: Preview and send ─────────────────────────────────────────────
+    if args.portal_only:
+        letters = [l for l in letters if l.method == "portal"]
+        if not letters:
+            print("No portal companies found.")
+            cost_tracker.print_cost_summary()
+            return
+        print(f"Portal-only mode: {len(letters)} letter(s).\n")
+
     sent = skipped = 0
     for letter in letters:
         result = preview_and_send(letter, dry_run=args.dry_run, scan_email=email,
@@ -148,6 +156,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-llm-calls", type=int, default=None, metavar="N",
         help="Cap LLM API calls this run (0 = block all LLM, omit for unlimited)",
+    )
+    parser.add_argument(
+        "--portal-only", action="store_true",
+        help="Only process portal-method companies",
     )
     return parser.parse_args()
 

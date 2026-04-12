@@ -57,6 +57,19 @@ class SubprocessorRecord(BaseModel):
     error_message: str = ""
 
 
+class PortalFormField(BaseModel):
+    name: str          # AXTree element name, e.g. "First Name"
+    value_key: str     # key into user_data dict, e.g. "first_name"
+    role: str          # AXTree role: "textbox", "combobox", "checkbox"
+
+
+class PortalFieldMapping(BaseModel):
+    cached_at: str = ""
+    platform: str = ""  # "onetrust", "trustarc", "salesforce", "unknown"
+    fields: list[PortalFormField] = Field(default_factory=list)
+    submit_button: str = ""
+
+
 class CompanyRecord(BaseModel):
     company_name: str
     legal_entity_name: str = ""
@@ -67,6 +80,7 @@ class CompanyRecord(BaseModel):
     flags: Flags = Field(default_factory=Flags)
     request_notes: RequestNotes = Field(default_factory=RequestNotes)
     subprocessors: SubprocessorRecord | None = None
+    portal_field_mapping: PortalFieldMapping | None = None
 
 
 class DBMeta(BaseModel):
