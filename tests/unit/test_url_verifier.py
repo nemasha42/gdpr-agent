@@ -96,6 +96,47 @@ class TestVerifyGDPRPortal:
         assert result["classification"] == CLASSIFICATION.GDPR_PORTAL
 
 
+class TestVerifyKetchPortal:
+    def test_ketch_html_signature_classified_as_portal(self):
+        """Page with Ketch JS signature is a GDPR portal even without visible form."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.url = "https://zendesk.es/"
+        mock_resp.text = (
+            '<html><head><script src="https://cdn.ketch.com/ketch-tag.js"></script></head>'
+            '<body><h1>Privacy Center</h1></body></html>'
+        )
+        mock_resp.headers = {"content-type": "text/html"}
+        with patch("reply_monitor.url_verifier.requests.get", return_value=mock_resp):
+            result = verify("https://zendesk.es/")
+        assert result["classification"] == CLASSIFICATION.GDPR_PORTAL
+
+    def test_ketch_window_semaphore_signature(self):
+        """window.semaphore is a Ketch indicator."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.url = "https://privacy.company.com/"
+        mock_resp.text = (
+            '<html><body><script>window.semaphore = window.semaphore || [];</script>'
+            '<div>Privacy Center</div></body></html>'
+        )
+        mock_resp.headers = {"content-type": "text/html"}
+        with patch("reply_monitor.url_verifier.requests.get", return_value=mock_resp):
+            result = verify("https://privacy.company.com/")
+        assert result["classification"] == CLASSIFICATION.GDPR_PORTAL
+
+    def test_non_ketch_page_without_form_stays_unknown(self):
+        """A page without Ketch signatures and no form remains unknown."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.url = "https://example.com/privacy"
+        mock_resp.text = '<html><body><p>Our privacy policy</p></body></html>'
+        mock_resp.headers = {"content-type": "text/html"}
+        with patch("reply_monitor.url_verifier.requests.get", return_value=mock_resp):
+            result = verify("https://example.com/privacy")
+        assert result["classification"] == CLASSIFICATION.UNKNOWN
+
+
 class TestVerifyIfNeeded:
     def test_already_verified_within_ttl(self):
         """If existing verification is fresh, return it without re-checking."""

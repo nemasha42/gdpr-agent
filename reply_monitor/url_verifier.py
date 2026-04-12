@@ -83,8 +83,10 @@ def verify(url: str) -> dict:
     if platform == "login_required":
         return _result(url, CLASSIFICATION.LOGIN_REQUIRED, now)
 
-    # Fast path: known platform portals (OneTrust, TrustArc)
+    # Fast path: known platform portals (OneTrust, TrustArc, Ketch)
     if platform in ("onetrust", "trustarc"):
+        return _result(url, CLASSIFICATION.GDPR_PORTAL, now)
+    if platform == "ketch":
         return _result(url, CLASSIFICATION.GDPR_PORTAL, now)
 
     # URL path heuristics (before HTTP fetch)
@@ -123,6 +125,11 @@ def verify(url: str) -> dict:
     final_path = urlparse(resp.url).path or ""
     if _RE_HELP_CENTER.search(final_path):
         return _result(url, CLASSIFICATION.HELP_CENTER, now, page_title=title)
+
+    # Check for Ketch platform via HTML signatures (form is behind navigation steps)
+    html_platform = detect_platform(url, html=html)
+    if html_platform == "ketch":
+        return _result(url, CLASSIFICATION.GDPR_PORTAL, now, page_title=title)
 
     # Check for GDPR portal: needs form elements + submit button
     has_form = bool(_RE_FORM_ELEMENT.search(html))
