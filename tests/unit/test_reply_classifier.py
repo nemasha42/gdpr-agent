@@ -583,3 +583,68 @@ class TestJunkURLFiltering:
             "has_attachment": False,
         })
         assert result.extracted["data_link"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Draft tone tests
+# ---------------------------------------------------------------------------
+
+class TestDraftTone:
+    def test_closure_draft_mentions_follow_instructions(self):
+        """When reply has closure language, the draft prompt should instruct to follow portal."""
+        from reply_monitor.classifier import generate_reply_draft
+        from unittest.mock import patch, MagicMock
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="I will follow the portal instructions.")]
+        mock_response.usage.input_tokens = 100
+        mock_response.usage.output_tokens = 30
+
+        with patch("reply_monitor.classifier.anthropic") as mock_anthropic:
+            mock_client = MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+            mock_client.messages.create.return_value = mock_response
+
+            with patch("reply_monitor.classifier.cost_tracker"):
+                result = generate_reply_draft(
+                    "Your ticket is set to Solved. Visit our portal for details.",
+                    ["WRONG_CHANNEL"],
+                    "Zendesk",
+                    api_key="sk-test",
+                )
+
+            # Verify the prompt sent to LLM contains the follow-instructions guidance
+            call_args = mock_client.messages.create.call_args
+            prompt_text = call_args[1]["messages"][0]["content"]
+            assert "follow" in prompt_text.lower() or "portal" in prompt_text.lower()
+            # When closure language is detected, the prompt must NOT instruct to argue violations
+            # (it's OK to say "do NOT argue" — guard against "argue about GDPR violations" as imperative)
+            assert "argue" not in prompt_text.lower() or "do not argue" in prompt_text.lower()
+
+    def test_standard_redirect_draft_no_closure_context(self):
+        """Standard WRONG_CHANNEL (no closure language) uses normal prompt."""
+        from reply_monitor.classifier import generate_reply_draft
+        from unittest.mock import patch, MagicMock
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="Please clarify the appropriate channel.")]
+        mock_response.usage.input_tokens = 100
+        mock_response.usage.output_tokens = 30
+
+        with patch("reply_monitor.classifier.anthropic") as mock_anthropic:
+            mock_client = MagicMock()
+            mock_anthropic.Anthropic.return_value = mock_client
+            mock_client.messages.create.return_value = mock_response
+
+            with patch("reply_monitor.classifier.cost_tracker"):
+                result = generate_reply_draft(
+                    "This address is no longer monitored. Use our support form.",
+                    ["WRONG_CHANNEL"],
+                    "Example Corp",
+                    api_key="sk-test",
+                )
+
+            call_args = mock_client.messages.create.call_args
+            prompt_text = call_args[1]["messages"][0]["content"]
+            # Should NOT contain the closure-specific guidance about following portal
+            assert "closed" not in prompt_text.lower() or "follow their portal" not in prompt_text.lower()

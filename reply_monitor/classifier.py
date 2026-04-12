@@ -12,6 +12,16 @@ import json
 import re
 from typing import Any
 
+try:
+    import anthropic
+except ImportError:
+    anthropic = None  # type: ignore[assignment]
+
+try:
+    from contact_resolver import cost_tracker
+except ImportError:
+    cost_tracker = None  # type: ignore[assignment]
+
 from reply_monitor.models import ClassificationResult
 
 # ---------------------------------------------------------------------------
@@ -686,15 +696,32 @@ def generate_reply_draft(
     if not action_tags:
         return ""
     try:
-        import anthropic
-        from contact_resolver import cost_tracker
-
         issues = "; ".join(_ACTION_DRAFT_TAG_LABELS.get(t, t) for t in action_tags)
+
+        # Detect closure language for tone adjustment
+        _closure_re = re.compile(
+            r"(ticket|request|case|issue).{0,20}(solved|resolved|closed|marked as)",
+            re.I,
+        )
+        is_closure = bool(_closure_re.search(reply_body))
+
+        if is_closure:
+            tone_guidance = (
+                "\nIMPORTANT TONE: The company appears to have closed/resolved this request. "
+                "They may have provided a portal or instructions to follow. "
+                "The reply should acknowledge receipt, confirm you will follow their portal or instructions, "
+                "and note that if the portal does not fulfil the SAR you will follow up again. "
+                "Do NOT argue about GDPR violations — try the provided path first.\n"
+            )
+        else:
+            tone_guidance = ""
+
         prompt = (
             "You are helping a data subject follow up on a GDPR Subject Access Request.\n"
             "The company has replied but the response is unclear or requires action.\n\n"
             f"Company: {company_name}\n"
             f"Detected issue(s): {issues}\n"
+            f"{tone_guidance}"
             f"Their reply:\n{reply_body[:3000]}\n\n"
             "Write a concise professional follow-up email body (3-5 sentences, no salutation, no sign-off).\n"
             "The reply should acknowledge their message and ask for the specific clarification needed.\n"
