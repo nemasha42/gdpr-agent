@@ -20,6 +20,7 @@ REPLY_TAGS = [
     "IN_PROGRESS",
     "DATA_PROVIDED_LINK",
     "DATA_PROVIDED_ATTACHMENT",
+    "DATA_PROVIDED_INLINE",
     "DATA_PROVIDED_PORTAL",
     "REQUEST_DENIED",
     "NO_DATA_HELD",
@@ -139,6 +140,7 @@ class ReplyRecord:
     reply_review_status: str = ""   # "" | "pending" | "sent" | "dismissed"
     sent_reply_body: str = ""       # actual text user sent (may differ from suggested_reply if edited)
     sent_reply_at: str = ""         # ISO timestamp of when user sent it
+    portal_verification: dict | None = None  # {url, classification, checked_at, error, page_title}
 
     def to_dict(self) -> dict:
         return {
@@ -156,6 +158,7 @@ class ReplyRecord:
             "reply_review_status": self.reply_review_status,
             "sent_reply_body": self.sent_reply_body,
             "sent_reply_at": self.sent_reply_at,
+            "portal_verification": self.portal_verification,
         }
 
     @classmethod
@@ -175,6 +178,7 @@ class ReplyRecord:
             reply_review_status=d.get("reply_review_status", ""),
             sent_reply_body=d.get("sent_reply_body", ""),
             sent_reply_at=d.get("sent_reply_at", ""),
+            portal_verification=d.get("portal_verification"),
         )
 
 

@@ -198,6 +198,62 @@ class TestStatusPriority:
         keys = [status_sort_key(s) for s in ["PENDING", "ACKNOWLEDGED", "COMPLETED", "OVERDUE"]]
         assert keys == sorted(keys)  # ascending by urgency in sort_key
 
+    def test_terminal_overrides_unresolved_action(self):
+        """FULFILLED_DELETION (terminal) should override unresolved HUMAN_REVIEW (action)."""
+        state = _make_state(replies=[
+            _make_reply(["HUMAN_REVIEW"], msg_id="msg001"),
+            _make_reply(["FULFILLED_DELETION"], msg_id="msg002"),
+        ])
+        assert compute_status(state) == "COMPLETED"
+
+    def test_terminal_overrides_unresolved_wrong_channel(self):
+        """DATA_PROVIDED_LINK (terminal) should override unresolved WRONG_CHANNEL."""
+        state = _make_state(replies=[
+            _make_reply(["WRONG_CHANNEL"], msg_id="msg001"),
+            _make_reply(["DATA_PROVIDED_LINK"], msg_id="msg002"),
+        ])
+        assert compute_status(state) == "COMPLETED"
+
+    def test_your_reply_resolves_action_required(self):
+        """YOUR_REPLY after action-required reply should resolve to USER_REPLIED."""
+        state = _make_state(replies=[
+            _make_reply(["IDENTITY_REQUIRED"], msg_id="msg001",
+                        received_at="2026-03-20T10:00:00Z"),
+            _make_reply(["YOUR_REPLY"], msg_id="msg002",
+                        received_at="2026-03-21T10:00:00Z"),
+        ])
+        assert compute_status(state) == "USER_REPLIED"
+
+    def test_your_reply_before_action_does_not_resolve(self):
+        """YOUR_REPLY before an action-required reply should not resolve it."""
+        state = _make_state(replies=[
+            _make_reply(["YOUR_REPLY"], msg_id="msg001",
+                        received_at="2026-03-19T10:00:00Z"),
+            _make_reply(["IDENTITY_REQUIRED"], msg_id="msg002",
+                        received_at="2026-03-20T10:00:00Z"),
+        ])
+        assert compute_status(state) == "ACTION_REQUIRED"
+
+    def test_dismissed_draft_resolves_action(self):
+        """Dismissed drafts should resolve the action (user decided not to respond)."""
+        state = _make_state(replies=[
+            _make_reply(["WRONG_CHANNEL"], reply_review_status="dismissed"),
+        ])
+        assert compute_status(state) == "USER_REPLIED"
+
+    def test_mixed_sent_and_dismissed_resolves(self):
+        """Mix of sent and dismissed action replies should resolve to USER_REPLIED."""
+        state = _make_state(replies=[
+            _make_reply(["WRONG_CHANNEL"], msg_id="msg001", reply_review_status="sent"),
+            _make_reply(["IDENTITY_REQUIRED"], msg_id="msg002", reply_review_status="dismissed"),
+        ])
+        assert compute_status(state) == "USER_REPLIED"
+
+    def test_completed_data_provided_inline(self):
+        """DATA_PROVIDED_INLINE should trigger COMPLETED status."""
+        state = _make_state(replies=[_make_reply(["DATA_PROVIDED_INLINE"])])
+        assert compute_status(state) == "COMPLETED"
+
 
 # ---------------------------------------------------------------------------
 # Bounce superseded / exhausted tests
@@ -401,3 +457,54 @@ class TestDomainFromSentRecord:
     def test_empty_record(self):
         domain = domain_from_sent_record({})
         assert domain  # any non-empty fallback
+
+
+# ---------------------------------------------------------------------------
+# portal_verification field tests
+# ---------------------------------------------------------------------------
+
+
+class TestPortalVerificationField:
+    def test_reply_record_round_trip_with_portal_verification(self):
+        """portal_verification field survives to_dict/from_dict cycle."""
+        record = ReplyRecord(
+            gmail_message_id="abc123",
+            received_at="2026-04-13T10:00:00Z",
+            from_addr="privacy@example.com",
+            subject="Re: SAR",
+            snippet="Use our portal",
+            tags=["WRONG_CHANNEL"],
+            extracted={"portal_url": "https://example.com/privacy"},
+            llm_used=False,
+            has_attachment=False,
+            attachment_catalog=None,
+            portal_verification={
+                "url": "https://example.com/privacy",
+                "classification": "gdpr_portal",
+                "checked_at": "2026-04-13T10:05:00Z",
+                "error": None,
+                "page_title": "Privacy Request Form",
+            },
+        )
+        d = record.to_dict()
+        assert d["portal_verification"]["classification"] == "gdpr_portal"
+
+        restored = ReplyRecord.from_dict(d)
+        assert restored.portal_verification["classification"] == "gdpr_portal"
+        assert restored.portal_verification["url"] == "https://example.com/privacy"
+
+    def test_reply_record_round_trip_without_portal_verification(self):
+        """Backward compat: old records without portal_verification still load."""
+        d = {
+            "gmail_message_id": "xyz",
+            "received_at": "2026-04-13T10:00:00Z",
+            "from": "test@example.com",
+            "subject": "Re: SAR",
+            "snippet": "Hello",
+            "tags": ["AUTO_ACKNOWLEDGE"],
+            "extracted": {},
+            "llm_used": False,
+            "has_attachment": False,
+        }
+        record = ReplyRecord.from_dict(d)
+        assert record.portal_verification is None
