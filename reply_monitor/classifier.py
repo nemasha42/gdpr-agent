@@ -106,7 +106,15 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
             r"|not able to process.{0,60}(request|this).{0,60}(over chat|chat|this (channel|address|inbox))"
             r"|unable to process.{0,60}(request|this).{0,60}(over chat|chat|this (channel|address|inbox))"
             r"|this type of request.{0,60}(over chat|chat|email|this channel)"
-            r"|pursue this (further|request).{0,40}(through|via)",
+            r"|pursue this (further|request).{0,40}(through|via)"
+            # Premature ticket closure — company resolved/closed ticket without providing data
+            r"|ticket.{0,20}(set to |is )?(solved|resolved|closed)"
+            r"|request.{0,20}(has been |been )?(closed|resolved|marked as (solved|resolved))"
+            r"|case.{0,20}(has been |been )?(closed|resolved)"
+            r"|marked as (solved|resolved|closed)",
+            re.I)),
+        ("subject", re.compile(
+            r"set to Solved|marked as (solved|resolved|closed)",
             re.I)),
     ]),
     ("REQUEST_ACCEPTED", [
@@ -266,6 +274,25 @@ _RE_BODY_WRONG_CHANNEL = re.compile(
     r"|available to you through.{0,80}(tools|services)"
     r"|sign in to your.{0,40}account.{0,200}(access|manage|view).{0,50}(data|information)"
     r"|information.{0,30}(may be|is) already available",
+    re.I | re.S,
+)
+
+# Body-level DATA_PROVIDED_INLINE detection: catches replies where personal data is
+# listed directly in the email body (no attachment, no download link). Common in
+# smaller companies or manual DPO responses. Requires both a SAR reference phrase
+# AND structured data indicators (bullet points, labelled fields).
+_RE_BODY_INLINE_DATA = re.compile(
+    r"(?:"
+    r"(?:identified|found|hold|process|retain).{0,80}(?:following|personal data|your data)"
+    r"|(?:following personal data|following information).{0,40}(?:within|in) our"
+    r"|(?:personal data|information).{0,40}(?:we (?:hold|process|identified|found))"
+    r"|(?:data subject access|subject access request|article 15).{0,200}(?:identified|following|personal data)"
+    r")"
+    r".{0,2000}"  # allow gap between header and data
+    r"(?:"
+    r"[-•]\s+\w.{5,}"  # bullet-pointed data items
+    r"|\w[\w\s]{2,30}:\s+\S"  # "Field Name: value" patterns
+    r")",
     re.I | re.S,
 )
 
@@ -430,6 +457,18 @@ def classify(
         # Self-service deflection (e.g. Google "available through our online tools")
         if "WRONG_CHANNEL" not in tags and _RE_BODY_WRONG_CHANNEL.search(body):
             tags.append("WRONG_CHANNEL")
+        # Inline data provision — personal data listed directly in the email body.
+        # Fires when there are no real data delivery tags. DATA_PROVIDED_ATTACHMENT
+        # from inline CID images (company logos) is replaced by DATA_PROVIDED_INLINE
+        # since the actual data is in the body, not the image attachments.
+        _has_link_or_portal = any(
+            t in ("DATA_PROVIDED_LINK", "DATA_PROVIDED_PORTAL") for t in tags
+        )
+        if not _has_link_or_portal and _RE_BODY_INLINE_DATA.search(body):
+            if "DATA_PROVIDED_ATTACHMENT" in tags:
+                # CID images triggered DATA_PROVIDED_ATTACHMENT — replace it
+                tags = [t for t in tags if t != "DATA_PROVIDED_ATTACHMENT"]
+            tags.append("DATA_PROVIDED_INLINE")
 
     # --- Link-first promotion ---
     # If URL extraction found a data link but the regex pass didn't fire DATA_PROVIDED_LINK,
@@ -444,6 +483,15 @@ def classify(
         and not _is_bounce
     ):
         tags.append("DATA_PROVIDED_LINK")
+
+    # --- Post-pass guard: closure + data delivery ---
+    # If WRONG_CHANNEL was triggered by a closure pattern ("solved", "resolved", "closed")
+    # and a terminal data tag is also present, remove WRONG_CHANNEL — the company actually
+    # delivered data alongside closing the ticket.
+    _TERMINAL_DATA_TAGS = {"DATA_PROVIDED_LINK", "DATA_PROVIDED_ATTACHMENT",
+                           "DATA_PROVIDED_INLINE", "DATA_PROVIDED_PORTAL", "FULFILLED_DELETION"}
+    if "WRONG_CHANNEL" in tags and (set(tags) & _TERMINAL_DATA_TAGS):
+        tags = [t for t in tags if t != "WRONG_CHANNEL"]
 
     # --- Pass 2: LLM fallback ---
     llm_used = False

@@ -173,6 +173,33 @@ class TestWrongChannel:
         )))
         assert "WRONG_CHANNEL" in result.tags
 
+    def test_zendesk_ticket_set_to_solved(self):
+        """Zendesk 'ticket is set to Solved' without data → WRONG_CHANNEL."""
+        result = classify(msg(
+            subject="[Employee Help Center] Re: Subject Access Request",
+            snippet="Please be sure to REPLY-ALL. Request (649929) has been updated and the ticket is set to Solved.",
+        ))
+        assert "WRONG_CHANNEL" in result.tags
+
+    def test_request_marked_as_resolved(self):
+        result = classify(msg(snippet="Your request has been marked as resolved. If you need further help, contact us."))
+        assert "WRONG_CHANNEL" in result.tags
+
+    def test_case_closed(self):
+        result = classify(msg(snippet="Your case has been closed. Thank you for contacting support."))
+        assert "WRONG_CHANNEL" in result.tags
+
+    def test_ticket_solved_subject(self):
+        result = classify(msg(subject="Request #649929 set to Solved"))
+        assert "WRONG_CHANNEL" in result.tags
+
+    def test_solved_with_data_link_not_wrong_channel(self):
+        """If the message also has a real data link, WRONG_CHANNEL should be suppressed."""
+        result = classify(msg(
+            snippet="Your request has been resolved. Download your data: https://example.com/export/download?token=abc123",
+        ))
+        assert "DATA_PROVIDED_LINK" in result.tags
+
 
 # ---------------------------------------------------------------------------
 # Request accepted tests
