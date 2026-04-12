@@ -120,7 +120,7 @@
    followup_url     — POST url for sending reply
    dismiss_url      — POST url for dismissing draft
    ════════════════════════════════════════════════════════════════ #}
-{% macro stream_panel(stream_label, stream_id, stream_status, s_colour, sent_date, sent_to, deadline_str, thread_events, followup_url, dismiss_url) %}
+{% macro stream_panel(stream_label, stream_id, stream_status, s_colour, sent_date, sent_to, deadline_str, thread_events, followup_url, dismiss_url, compose_url="") %}
 
 {# Derive the "why" one-liner from the thread #}
 {% set company_msgs = thread_events | selectattr('type', 'equalto', 'reply') | selectattr('non_gdpr', 'equalto', false) | list %}
@@ -140,7 +140,7 @@
   {% set why = "Company requires you to confirm the request" %}
 {% elif 'MORE_INFO_REQUIRED' in last_company.tags %}
   {% set why = "Company has asked for more information" %}
-{% elif 'DATA_PROVIDED_LINK' in last_company.tags or 'DATA_PROVIDED_ATTACHMENT' in last_company.tags or 'DATA_PROVIDED_PORTAL' in last_company.tags %}
+{% elif 'DATA_PROVIDED_LINK' in last_company.tags or 'DATA_PROVIDED_ATTACHMENT' in last_company.tags or 'DATA_PROVIDED_INLINE' in last_company.tags or 'DATA_PROVIDED_PORTAL' in last_company.tags %}
   {% set why = "Data export received" %}
 {% elif 'FULFILLED_DELETION' in last_company.tags %}
   {% set why = "Deletion confirmed" %}
@@ -271,7 +271,26 @@
             {% if has_confirm_tag and ex.confirmation_url %}<span>&#x1F517; <a href="{{ ex.confirmation_url }}" target="_blank">Confirm request</a></span>{% endif %}
             {% if has_data_tag and ex.data_link %}<span>&#x2B07;&#xFE0F; <a href="{{ ex.data_link }}" target="_blank">Download data</a></span>{% endif %}
             {% if has_data_tag %}<a href="/data/{{ domain }}?account={{ account }}" class="btn btn-sm btn-outline-success py-0 px-2" style="font-size:0.78rem">&#x1F4C2; View received data</a>{% endif %}
-            {% if has_portal_tag and ex.portal_url %}<span>&#x1F4BB; <a href="{{ ex.portal_url }}" target="_blank">Privacy portal</a></span>{% endif %}
+            {% if has_portal_tag and ex.portal_url %}
+              <span>&#x1F4BB; <a href="{{ ex.portal_url }}" target="_blank">Privacy portal</a>
+              {% if ev.portal_verification %}
+                {% set pv = ev.portal_verification %}
+                {% if pv.classification == 'gdpr_portal' %}
+                  <span class="badge bg-success" style="font-size:0.65rem">Verified portal</span>
+                {% elif pv.classification == 'help_center' %}
+                  <span class="badge bg-warning text-dark" style="font-size:0.65rem">Help center page</span>
+                {% elif pv.classification == 'login_required' %}
+                  <span class="badge bg-warning text-dark" style="font-size:0.65rem">Login required</span>
+                {% elif pv.classification == 'dead_link' %}
+                  <span class="badge bg-danger" style="font-size:0.65rem">Dead link</span>
+                {% elif pv.classification == 'survey' %}
+                  <span class="badge bg-secondary" style="font-size:0.65rem">Survey page</span>
+                {% else %}
+                  <span class="badge bg-secondary" style="font-size:0.65rem">Unverified</span>
+                {% endif %}
+              {% endif %}
+              </span>
+            {% endif %}
             {% if ex.deadline_extension_days %}<span>&#x23F1; Extended {{ ex.deadline_extension_days }} days</span>{% endif %}
           </div>
         {% endif %}
@@ -319,6 +338,27 @@
     {% endfor %}
     {% endif %}
 
+    {# ── Compose reply (always available when thread is open) ── #}
+    {% if compose_url %}
+    <div class="compose-panel mt-3 p-3" style="background:#f8f9fa;border-top:2px solid #dee2e6">
+      <details>
+        <summary class="fw-semibold small mb-0" style="cursor:pointer">&#x2709; Compose follow-up</summary>
+        <form method="POST" action="{{ compose_url }}" class="mt-2">
+          <input type="hidden" name="account" value="{{ account }}">
+          <input type="hidden" name="to_addr" value="{{ sent_to }}">
+          <input type="hidden" name="subject" value="{{ thread_events[0].subject if thread_events else '' }}">
+          {% if stream_id == 'sp' and thread_events %}
+            <input type="hidden" name="thread_id" value="{{ thread_events[0].get('thread_id', '') if thread_events[0].get is defined else '' }}">
+          {% endif %}
+          <div class="small text-muted mb-1">To: {{ sent_to }}</div>
+          <textarea name="reply_body" class="form-control form-control-sm mb-2"
+                    rows="5" placeholder="Write your reply…" style="font-size:0.85rem"></textarea>
+          <button type="submit" class="btn btn-sm btn-primary">Send reply</button>
+        </form>
+      </details>
+    </div>
+    {% endif %}
+
   </div>{# /thread-body #}
 </div>{# /stream-panel #}
 {% endmacro %}
@@ -334,7 +374,8 @@
   state.deadline,
   sar_thread,
   "/company/" ~ domain ~ "/send-followup",
-  "/company/" ~ domain ~ "/dismiss-followup"
+  "/company/" ~ domain ~ "/dismiss-followup",
+  "/company/" ~ domain ~ "/compose-reply"
 ) }}
 
 {# ── Render SP panel (if applicable) ── #}
@@ -349,7 +390,8 @@
   "",
   sp_thread,
   "/company/" ~ domain ~ "/send-sp-followup",
-  "/company/" ~ domain ~ "/dismiss-sp-followup"
+  "/company/" ~ domain ~ "/dismiss-sp-followup",
+  "/company/" ~ domain ~ "/compose-sp-reply"
 ) }}
 {% endif %}
 
