@@ -711,11 +711,18 @@ def _reprocess_existing(
                 "has_attachment": reply.has_attachment,
             }
             new_result = classify(msg, api_key=api_key)
-            if new_result.tags != old_tags:
+            tags_changed = new_result.tags != old_tags
+            # Also check if URL fields changed (stale junk URLs need cleanup)
+            urls_changed = any(
+                reply.extracted.get(k) != new_result.extracted.get(k)
+                for k in ("data_link", "data_links", "portal_url")
+            )
+            if tags_changed or urls_changed:
                 if verbose or dry_run:
+                    detail = f"{old_tags} → {new_result.tags}" if tags_changed else f"{old_tags} (URLs cleaned)"
                     print(
                         f"  [reprocess] {state.company_name} ({domain}): "
-                        f"{old_tags} → {new_result.tags}"
+                        f"{detail}"
                         f"{'  [dry-run]' if dry_run else ''}"
                     )
                 if not dry_run:

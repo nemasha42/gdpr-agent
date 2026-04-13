@@ -42,6 +42,16 @@ _RE_SURVEY = re.compile(
     re.I,
 )
 
+# URL path patterns for known DSAR portal pages
+_RE_DSAR_PORTAL_PATH = re.compile(
+    r"/data[-_]?subject[-_]?request"
+    r"|/dsar"
+    r"|/privacy[-_]?request"
+    r"|/gdpr[-_]?request"
+    r"|/subject[-_]?access[-_]?request",
+    re.I,
+)
+
 # HTML content signals
 _RE_SURVEY_CONTENT = re.compile(
     r"rate.{0,30}(support|service|experience)"
@@ -95,6 +105,8 @@ def verify(url: str) -> dict:
         return _result(url, CLASSIFICATION.SURVEY, now)
     if _RE_HELP_CENTER.search(path):
         return _result(url, CLASSIFICATION.HELP_CENTER, now)
+    if _RE_DSAR_PORTAL_PATH.search(path):
+        return _result(url, CLASSIFICATION.GDPR_PORTAL, now)
 
     # HTTP fetch
     try:

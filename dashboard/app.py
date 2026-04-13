@@ -10,11 +10,15 @@ Routes:
 from __future__ import annotations
 
 import html as _html
+import os
 import re
 import sys
 import urllib.parse as _urlparse
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Allow OAuth over HTTP for local development (localhost)
+os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
 
 # Ensure project root is on path when run directly
 _PROJECT_ROOT = Path(__file__).parent.parent
@@ -216,6 +220,7 @@ _TAG_COLOUR = {
     "IN_PROGRESS":           "info",
     "DATA_PROVIDED_LINK":    "success",
     "DATA_PROVIDED_ATTACHMENT": "success",
+    "DATA_PROVIDED_INLINE":  "success",
     "DATA_PROVIDED_PORTAL":  "success",
     "REQUEST_DENIED":        "danger",
     "NO_DATA_HELD":          "secondary",
@@ -230,6 +235,7 @@ _DISPLAY_NAMES: dict[str, str] = {
     "AUTO_ACKNOWLEDGE":      "Acknowledged",
     "DATA_PROVIDED_LINK":    "Data Provided",
     "DATA_PROVIDED_ATTACHMENT": "Data Provided",
+    "DATA_PROVIDED_INLINE":  "Data Provided",
     "DATA_PROVIDED_PORTAL":  "Data Provided",
     "WRONG_CHANNEL":         "Wrong Channel",
     "HUMAN_REVIEW":          "Needs Review",
@@ -256,8 +262,9 @@ _DISPLAY_NAMES: dict[str, str] = {
 # tags are hidden from the card display (but kept in per-reply detail view).
 
 _TIER_TERMINAL: frozenset[str] = frozenset({
-    "DATA_PROVIDED_LINK", "DATA_PROVIDED_ATTACHMENT", "DATA_PROVIDED_PORTAL",
-    "REQUEST_DENIED", "NO_DATA_HELD", "NOT_GDPR_APPLICABLE", "FULFILLED_DELETION",
+    "DATA_PROVIDED_LINK", "DATA_PROVIDED_ATTACHMENT", "DATA_PROVIDED_INLINE",
+    "DATA_PROVIDED_PORTAL", "REQUEST_DENIED", "NO_DATA_HELD",
+    "NOT_GDPR_APPLICABLE", "FULFILLED_DELETION",
 })
 _TIER_ACTION: frozenset[str] = frozenset({
     "WRONG_CHANNEL", "IDENTITY_REQUIRED", "CONFIRMATION_REQUIRED",
@@ -422,6 +429,9 @@ def _build_card(domain: str, state, status: str) -> dict:
                 hint = _ACTION_HINTS[tag]
                 if tag == "WRONG_CHANNEL":
                     action_hint_url = r.extracted.get("portal_url") or r.extracted.get("confirmation_url", "")
+                    if not action_hint_url:
+                        record = _lookup_company(domain)
+                        action_hint_url = record.get("gdpr_portal_url", "")
                 action_hint = hint
                 break
         if action_hint:
@@ -451,6 +461,9 @@ def _build_card(domain: str, state, status: str) -> dict:
                 break
             if "DATA_PROVIDED_ATTACHMENT" in r_tags:
                 action_hint = "Data ready — open folder in user_data/received/"
+                break
+            if "DATA_PROVIDED_INLINE" in r_tags:
+                action_hint = "Data provided directly in email reply"
                 break
 
     has_data = status == "COMPLETED" and any(
@@ -881,6 +894,111 @@ def dismiss_sp_followup(domain: str):
     return redirect(url_for("company_detail", domain=domain, account=account))
 
 
+@app.route("/company/<domain>/compose-reply", methods=["POST"])
+def compose_reply(domain: str):
+    """Send a free-form reply in the SAR thread (no auto-generated draft needed)."""
+    account = request.form.get("account", "")
+    reply_body = request.form.get("reply_body", "").strip()
+    to_addr = request.form.get("to_addr", "")
+    subject = request.form.get("subject", "")
+
+    if not reply_body:
+        flash("Reply body cannot be empty.", "warning")
+        return redirect(url_for("company_detail", domain=domain, account=account))
+
+    from letter_engine.sender import send_thread_reply
+
+    states = load_state(account, path=_current_state_path())
+    state = states.get(domain)
+    if not state:
+        flash("Company not found.", "danger")
+        return redirect(url_for("company_detail", domain=domain, account=account))
+
+    success, _msg_id, _thread_id = send_thread_reply(
+        state.gmail_thread_id, to_addr, subject, reply_body, account,
+        tokens_dir=_current_tokens_dir(),
+    )
+    if success:
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        # Mark any pending action drafts as resolved — user chose to compose instead
+        for r in state.replies:
+            if r.reply_review_status == "pending":
+                r.reply_review_status = "dismissed"
+        # Create an immediate YOUR_REPLY record so it shows in the thread
+        from reply_monitor.models import ReplyRecord
+        your_reply = ReplyRecord(
+            gmail_message_id=_msg_id or f"compose-{now}",
+            received_at=now,
+            from_addr=account,
+            subject=f"Re: {subject}",
+            snippet=reply_body,
+            tags=["YOUR_REPLY"],
+            extracted={},
+            llm_used=False,
+            has_attachment=False,
+            attachment_catalog=None,
+        )
+        state.replies.append(your_reply)
+        save_state(account, states, path=_current_state_path())
+        flash("Reply sent.", "success")
+    else:
+        flash("Failed to send reply. Check Gmail auth.", "danger")
+
+    return redirect(url_for("company_detail", domain=domain, account=account))
+
+
+@app.route("/company/<domain>/compose-sp-reply", methods=["POST"])
+def compose_sp_reply(domain: str):
+    """Send a free-form reply in the SP thread."""
+    account = request.form.get("account", "")
+    reply_body = request.form.get("reply_body", "").strip()
+    to_addr = request.form.get("to_addr", "")
+    subject = request.form.get("subject", "")
+    thread_id = request.form.get("thread_id", "")
+
+    if not reply_body:
+        flash("Reply body cannot be empty.", "warning")
+        return redirect(url_for("company_detail", domain=domain, account=account))
+
+    from letter_engine.sender import send_thread_reply
+
+    sp_states = load_state(account, path=_current_sp_state_path())
+    state = sp_states.get(domain)
+    if not state:
+        flash("SP state not found.", "danger")
+        return redirect(url_for("company_detail", domain=domain, account=account))
+
+    success, _msg_id, _thread_id = send_thread_reply(
+        thread_id or state.gmail_thread_id, to_addr, subject, reply_body, account,
+        tokens_dir=_current_tokens_dir(),
+    )
+    if success:
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        for r in state.replies:
+            if r.reply_review_status == "pending":
+                r.reply_review_status = "dismissed"
+        from reply_monitor.models import ReplyRecord
+        your_reply = ReplyRecord(
+            gmail_message_id=_msg_id or f"compose-{now}",
+            received_at=now,
+            from_addr=account,
+            subject=f"Re: {subject}",
+            snippet=reply_body,
+            tags=["YOUR_REPLY"],
+            extracted={},
+            llm_used=False,
+            has_attachment=False,
+            attachment_catalog=None,
+        )
+        state.replies.append(your_reply)
+        save_state(account, sp_states, path=_current_sp_state_path())
+        flash("Reply sent.", "success")
+    else:
+        flash("Failed to send reply. Check Gmail auth.", "danger")
+
+    return redirect(url_for("company_detail", domain=domain, account=account))
+
+
 @app.route("/data/<domain>")
 def data_card(domain: str):
     account = request.args.get("account", "")
@@ -996,6 +1114,7 @@ def cards_listing():
 
     with_data = []
     without_data = []
+    wrong_channel = []
 
     if account:
         states = _load_all_states(account)
@@ -1044,7 +1163,7 @@ def cards_listing():
                 })
             else:
                 card = _build_card(domain, state, status)
-                without_data.append({
+                card_dict = {
                     "domain": domain,
                     "company_name": state.company_name,
                     "status": status,
@@ -1053,12 +1172,37 @@ def cards_listing():
                     "days_remaining": card["remaining"],
                     "latest_tag": card["tags"][0] if card["tags"] else "",
                     "tried_emails": card["tried_emails"],
-                })
+                }
+                # Check if any GDPR reply has WRONG_CHANNEL tag
+                has_wrong_channel = any(
+                    "WRONG_CHANNEL" in r.tags
+                    for r in state.replies
+                    if "NON_GDPR" not in r.tags
+                )
+                if has_wrong_channel:
+                    # Extract portal URL from the reply if available
+                    portal_url = ""
+                    portal_verification = None
+                    for r in state.replies:
+                        if "WRONG_CHANNEL" in r.tags:
+                            portal_url = r.extracted.get("portal_url", "") if r.extracted else ""
+                            portal_verification = r.portal_verification
+                            break
+                    # Fall back to company record's portal URL (from overrides/resolver)
+                    if not portal_url:
+                        record = _lookup_company(domain)
+                        portal_url = record.get("gdpr_portal_url", "")
+                    card_dict["portal_url"] = portal_url
+                    card_dict["portal_verification"] = portal_verification
+                    wrong_channel.append(card_dict)
+                else:
+                    without_data.append(card_dict)
 
     return render_template(
         "cards.html",
         with_data=with_data,
         without_data=without_data,
+        wrong_channel=wrong_channel,
         tab=tab,
         account=account,
         accounts=accounts,
@@ -1266,6 +1410,7 @@ def _reextract_missing_links(account: str) -> int:
         import os
         states = load_state(account, path=_current_state_path())
         _auto_download_data_links(account, states, os.environ.get("ANTHROPIC_API_KEY"))
+        _auto_analyze_inline_data(account, states, os.environ.get("ANTHROPIC_API_KEY"))
 
     return sum(
         1 for state in states.values()
@@ -1281,10 +1426,11 @@ def _run_monitor_for_account(account: str):
     """
     from auth.gmail_oauth import get_gmail_service
     from reply_monitor.attachment_handler import handle_attachment
-    from reply_monitor.classifier import classify
+    from reply_monitor.classifier import classify, generate_reply_draft, _ACTION_DRAFT_TAGS
     from reply_monitor.fetcher import fetch_replies_for_sar
     from reply_monitor.models import ReplyRecord
     from reply_monitor.state_manager import (
+        _ACTION_TAGS,
         deadline_from_sent,
         domain_from_sent_record,
         promote_latest_attempt,
@@ -1324,6 +1470,20 @@ def _run_monitor_for_account(account: str):
 
         new_replies: list[ReplyRecord] = []
         for msg in new_messages:
+            if msg.get("from_self"):
+                new_replies.append(ReplyRecord(
+                    gmail_message_id=msg["id"],
+                    received_at=msg["received_at"],
+                    from_addr=msg["from"],
+                    subject=msg["subject"],
+                    snippet=msg.get("body", msg["snippet"]) or msg["snippet"],
+                    tags=["YOUR_REPLY"],
+                    extracted={},
+                    llm_used=False,
+                    has_attachment=False,
+                    attachment_catalog=None,
+                ))
+                continue
             result = classify(msg, api_key=api_key)
             catalog_dict = None
             if msg.get("has_attachment"):
@@ -1332,6 +1492,18 @@ def _run_monitor_for_account(account: str):
                     if cat:
                         catalog_dict = cat.to_dict()
                         break
+
+            draft = ""
+            review_status = ""
+            if any(t in _ACTION_DRAFT_TAGS for t in result.tags):
+                draft = generate_reply_draft(
+                    msg.get("body", msg["snippet"]),
+                    result.tags,
+                    state.company_name,
+                    api_key=api_key,
+                )
+                review_status = "pending" if draft else ""
+
             new_replies.append(ReplyRecord(
                 gmail_message_id=msg["id"],
                 received_at=msg["received_at"],
@@ -1343,15 +1515,25 @@ def _run_monitor_for_account(account: str):
                 llm_used=result.llm_used,
                 has_attachment=msg["has_attachment"],
                 attachment_catalog=catalog_dict,
+                suggested_reply=draft,
+                reply_review_status=review_status,
             ))
 
         if new_replies:
             states[domain] = update_state(state, new_replies)
+            # Auto-dismiss stale drafts when a YOUR_REPLY arrives
+            has_your_reply = any("YOUR_REPLY" in r.tags for r in new_replies)
+            if has_your_reply:
+                for r in states[domain].replies:
+                    if r.reply_review_status == "pending" and bool(set(r.tags) & _ACTION_TAGS):
+                        r.reply_review_status = "dismissed"
 
     save_state(email, states, path=_current_state_path())
 
     # Auto-download any DATA_PROVIDED_LINK replies that have a URL but no catalog yet
     _auto_download_data_links(email, states, api_key)
+    # Auto-analyze inline data replies (DATA_PROVIDED_INLINE) without schema yet
+    _auto_analyze_inline_data(email, states, api_key)
 
     return service, email
 
@@ -1366,10 +1548,11 @@ def _run_subprocessor_monitor_for_account(
     Pass _service and _email (returned by _run_monitor_for_account) to reuse an
     already-authenticated Gmail service and avoid a second OAuth prompt.
     """
-    from reply_monitor.classifier import classify
+    from reply_monitor.classifier import classify, generate_reply_draft, _ACTION_DRAFT_TAGS
     from reply_monitor.fetcher import fetch_replies_for_sar
     from reply_monitor.models import ReplyRecord
     from reply_monitor.state_manager import (
+        _ACTION_TAGS,
         deadline_from_sent,
         promote_latest_attempt,
         update_state,
@@ -1413,7 +1596,33 @@ def _run_subprocessor_monitor_for_account(
 
         new_replies: list[ReplyRecord] = []
         for msg in new_messages:
+            if msg.get("from_self"):
+                new_replies.append(ReplyRecord(
+                    gmail_message_id=msg["id"],
+                    received_at=msg["received_at"],
+                    from_addr=msg["from"],
+                    subject=msg["subject"],
+                    snippet=msg.get("body", msg["snippet"]) or msg["snippet"],
+                    tags=["YOUR_REPLY"],
+                    extracted={},
+                    llm_used=False,
+                    has_attachment=False,
+                    attachment_catalog=None,
+                ))
+                continue
             result = classify(msg, api_key=api_key)
+
+            draft = ""
+            review_status = ""
+            if any(t in _ACTION_DRAFT_TAGS for t in result.tags):
+                draft = generate_reply_draft(
+                    msg.get("body", msg["snippet"]),
+                    result.tags,
+                    state.company_name,
+                    api_key=api_key,
+                )
+                review_status = "pending" if draft else ""
+
             new_replies.append(ReplyRecord(
                 gmail_message_id=msg["id"],
                 received_at=msg["received_at"],
@@ -1424,10 +1633,18 @@ def _run_subprocessor_monitor_for_account(
                 extracted=result.extracted,
                 llm_used=result.llm_used,
                 has_attachment=msg["has_attachment"],
+                attachment_catalog=None,
+                suggested_reply=draft,
+                reply_review_status=review_status,
             ))
 
         if new_replies:
             sp_states[domain] = update_state(state, new_replies)
+            has_your_reply = any("YOUR_REPLY" in r.tags for r in new_replies)
+            if has_your_reply:
+                for r in sp_states[domain].replies:
+                    if r.reply_review_status == "pending" and bool(set(r.tags) & _ACTION_TAGS):
+                        r.reply_review_status = "dismissed"
 
     save_state(email, sp_states, path=_current_sp_state_path())
 
@@ -1462,6 +1679,65 @@ def _auto_download_data_links(account: str, states: dict, api_key: str | None) -
     if needs_save:
         save_state(account, states, path=_current_state_path())
 
+
+def _auto_analyze_inline_data(account: str, states: dict, api_key: str | None) -> None:
+    """For every DATA_PROVIDED_INLINE reply without an attachment_catalog,
+    fetch the email body and run LLM schema analysis."""
+    if not api_key:
+        return
+
+    from auth.gmail_oauth import get_gmail_service
+    from reply_monitor.schema_builder import build_schema_from_body
+
+    try:
+        service, _email = get_gmail_service(email_hint=account, tokens_dir=_current_tokens_dir())
+    except Exception:
+        return  # no valid token — skip
+
+    needs_save = False
+    for domain, state in states.items():
+        for reply in state.replies:
+            if (
+                "DATA_PROVIDED_INLINE" in reply.tags
+                and not reply.attachment_catalog
+            ):
+                # Need full email body — fetch from Gmail
+                try:
+                    msg = service.users().messages().get(
+                        userId="me", id=reply.gmail_message_id, format="full"
+                    ).execute()
+                    from reply_monitor.fetcher import _extract_body
+                    body = _extract_body(msg.get("payload", {}))
+                except Exception as exc:
+                    print(f"[inline-schema] {domain}: failed to fetch body — {exc}")
+                    continue
+
+                if not body:
+                    continue
+
+                print(f"[inline-schema] {domain}: analyzing inline data…")
+                try:
+                    result = build_schema_from_body(body, api_key, company_name=state.company_name)
+                    if result:
+                        from reply_monitor.models import AttachmentCatalog
+                        cat = AttachmentCatalog(
+                            path="",
+                            size_bytes=len(body.encode("utf-8")),
+                            file_type="email_body",
+                            files=[],
+                            categories=[c["name"] for c in result.get("categories", [])],
+                            schema=result.get("categories", []),
+                            services=result.get("services", []),
+                            export_meta=result.get("export_meta", {}),
+                        )
+                        reply.attachment_catalog = cat.to_dict()
+                        needs_save = True
+                        print(f"[inline-schema] {domain}: ✓ {len(cat.schema)} categories")
+                except Exception as exc:
+                    print(f"[inline-schema] {domain}: schema analysis failed — {exc}")
+
+    if needs_save:
+        save_state(account, states, path=_current_state_path())
 
 
 @app.route("/costs")
