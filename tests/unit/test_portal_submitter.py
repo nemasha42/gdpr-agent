@@ -148,17 +148,14 @@ class TestBuildUserData:
 
 class TestAnalyzeForm:
     def test_parses_llm_response(self):
-        fake_axtree = {
-            "role": "WebArea",
-            "children": [
-                {"role": "textbox", "name": "First Name"},
-                {"role": "textbox", "name": "Email Address"},
-                {"role": "combobox", "name": "Country"},
-                {"role": "button", "name": "Submit"},
-            ],
-        }
+        fake_aria_snapshot = (
+            '- textbox "First Name"\n'
+            '- textbox "Email Address"\n'
+            '- combobox "Country"\n'
+            '- button "Submit"'
+        )
         fake_page = MagicMock()
-        fake_page.accessibility.snapshot.return_value = fake_axtree
+        fake_page.locator.return_value.aria_snapshot.return_value = fake_aria_snapshot
 
         llm_response = json.dumps({
             "fields": [
@@ -206,15 +203,9 @@ class TestAnalyzeForm:
             submit_button="Submit",
         )
 
-        fake_axtree = {
-            "role": "WebArea",
-            "children": [
-                {"role": "textbox", "name": "Email"},
-                {"role": "button", "name": "Submit"},
-            ],
-        }
+        fake_aria_snapshot = '- textbox "Email"\n- button "Submit"'
         fake_page = MagicMock()
-        fake_page.accessibility.snapshot.return_value = fake_axtree
+        fake_page.locator.return_value.aria_snapshot.return_value = fake_aria_snapshot
 
         llm_response = json.dumps({
             "fields": [{"name": "Email", "value_key": "email", "role": "textbox"}],
@@ -429,14 +420,11 @@ class TestSubmitPortal:
 
         # Mock browser
         mock_page = MagicMock()
-        mock_page.accessibility.snapshot.return_value = {
-            "role": "WebArea",
-            "children": [
-                {"role": "textbox", "name": "Email"},
-                {"role": "button", "name": "Submit"},
-            ],
-        }
+        mock_page.locator.return_value.aria_snapshot.return_value = (
+            '- textbox "Email"\n- button "Submit"'
+        )
         mock_page.query_selector.return_value = None  # no CAPTCHA
+        mock_page.query_selector_all.return_value = []  # no CAPTCHA iframes
         mock_page.screenshot.return_value = b"fake screenshot"
 
         mock_browser = MagicMock()

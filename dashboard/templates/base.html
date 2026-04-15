@@ -56,6 +56,24 @@
       <a class="text-muted small text-decoration-none {% if active_tab == 'costs' %}fw-bold text-dark{% endif %}" href="/costs">Costs</a>
       <a class="text-muted small text-decoration-none {% if active_tab == 'transfers' %}fw-bold text-dark{% endif %}" href="/transfers">Transfers</a>
       {% if current_user.is_authenticated %}
+        {% if nav_accounts %}
+        <div class="dropdown">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            &#x1F4E8; {{ nav_selected_account or 'Mailbox' }}
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            {% if nav_accounts|length > 1 %}
+              <li><a class="dropdown-item {% if not nav_selected_account or nav_selected_account == nav_accounts[0] %}{% endif %}" href="?account=">All mailboxes</a></li>
+              <li><hr class="dropdown-divider"></li>
+            {% endif %}
+            {% for a in nav_accounts %}
+              <li><a class="dropdown-item {% if a == nav_selected_account %}active{% endif %}" href="?account={{ a }}">{{ a }}</a></li>
+            {% endfor %}
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('auth.start_gmail_oauth', scope='readonly') }}">+ Add mailbox</a></li>
+          </ul>
+        </div>
+        {% endif %}
         <span class="text-muted small">{{ current_user.name }}</span>
         {% if current_user.is_admin %}
           <a class="text-muted small text-decoration-none" href="{{ url_for('admin.invite') }}">Invite</a>

@@ -25,8 +25,14 @@ _NAVIGATION_HINTS: dict[str, list[str]] = {
 
 
 def page_has_form(page: Any) -> bool:
-    """Check if the current page has visible form fields."""
-    return page.locator("input:not([type=hidden]), textarea, select").count() > 0
+    """Check if the current page has visible form fields (not hidden cookie/tracking inputs)."""
+    for el in page.locator("input:not([type=hidden]), textarea, select").all():
+        try:
+            if el.is_visible():
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def navigate_to_form(
@@ -45,6 +51,9 @@ def navigate_to_form(
     Returns:
         True if a page with form fields was reached, False otherwise.
     """
+    # Dismiss cookie banners that may overlay the portal
+    _dismiss_cookie_banner(page)
+
     # Layer 1: Platform-specific hints
     hints = _NAVIGATION_HINTS.get(platform, [])
     for pattern in hints:
@@ -80,23 +89,49 @@ def navigate_to_form(
     return page_has_form(page)
 
 
+def _dismiss_cookie_banner(page: Any) -> None:
+    """Try to dismiss cookie consent overlays that block navigation clicks."""
+    for text in ("Reject all", "Rechazar todas", "Decline", "Deny"):
+        try:
+            btn = page.locator(f"button:has-text('{text}')").first
+            if btn.is_visible(timeout=1000):
+                btn.click(force=True)
+                page.wait_for_timeout(500)
+                return
+        except Exception:
+            continue
+
+
 def _click_by_pattern(page: Any, pattern: str) -> bool:
-    """Find and click a link or button matching a regex pattern. Returns True if clicked."""
+    """Find and click a link, button, or tab matching a regex pattern. Returns True if clicked."""
     compiled = re.compile(pattern, re.I)
-    for role in ("link", "button"):
+    for role in ("tab", "link", "button"):
         locator = page.get_by_role(role, name=compiled)
         if locator.count() > 0:
-            locator.first.click()
+            try:
+                locator.first.click(timeout=5000)
+            except Exception:
+                # Overlay may intercept — try force click
+                try:
+                    locator.first.click(force=True)
+                except Exception:
+                    continue
             return True
     return False
 
 
 def _click_by_name(page: Any, name: str) -> bool:
     """Find and click an element by its exact accessible name. Returns True if clicked."""
-    for role in ("link", "button"):
+    for role in ("tab", "link", "button"):
         locator = page.get_by_role(role, name=name)
         if locator.count() > 0:
-            locator.first.click()
+            try:
+                locator.first.click(timeout=5000)
+            except Exception:
+                try:
+                    locator.first.click(force=True)
+                except Exception:
+                    continue
             return True
     return False
 
@@ -115,11 +150,10 @@ def _llm_suggest_click(client: Any, page: Any) -> str:
     Returns the accessible name of the element, or empty string on failure.
     """
     try:
-        snapshot = page.accessibility.snapshot()
+        snapshot_text = page.locator("body").aria_snapshot()
     except Exception:
         return ""
 
-    snapshot_text = json.dumps(snapshot, indent=2, default=str)
     if len(snapshot_text) > 8000:
         snapshot_text = snapshot_text[:8000] + "\n... (truncated)"
 

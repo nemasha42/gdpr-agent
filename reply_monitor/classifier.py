@@ -72,6 +72,18 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
             r"|vielen dank.{0,50}(anfrage|kontakt)",
             re.I)),
     ]),
+    ("PORTAL_VERIFICATION", [
+        ("snippet", re.compile(
+            r"(sent|sending) you an? (email )?verification"
+            r"|email verification request"
+            r"|verify your (email|identity).{0,60}(link|email|respond)"
+            r"|must respond within \d+ days or your request will expire"
+            r"|verify.{0,30}email.{0,30}confirm.{0,30}identity",
+            re.I)),
+        ("subject", re.compile(
+            r"email verification|verify your email|verification request",
+            re.I)),
+    ]),
     ("CONFIRMATION_REQUIRED", [
         ("subject", re.compile(r"confirm (your )?request|verify (your )?request", re.I)),
         ("snippet", re.compile(
@@ -229,6 +241,7 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
 _RE_REF_ZENDESK  = re.compile(r"\[[\w]+-[\d]+\]")
 _RE_REF_GOOGLE   = re.compile(r"\[\d{1,2}-\d{10,}\]")
 _RE_REF_TICKET   = re.compile(r"TICKET-\d{6}-\d+", re.I)
+_RE_REF_UUID     = re.compile(r"Request ID\s+(?:is\s+)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", re.I)
 _RE_REF_GENERIC  = re.compile(r"Ref(?:erence)?[:#\s]\s*([\w-]+)", re.I)
 _RE_CONFIRM_URL  = re.compile(r"https://requests\.hrtechprivacy\.com/confirm/[\w/-]+", re.I)
 _RE_DOWNLOAD_URL = re.compile(
@@ -569,6 +582,10 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
             reference_number = m.group(0)
             break
     if not reference_number:
+        m = _RE_REF_UUID.search(text) or _RE_REF_UUID.search(full_text)
+        if m:
+            reference_number = m.group(1)
+    if not reference_number:
         m = _RE_REF_GENERIC.search(text) or _RE_REF_GENERIC.search(full_text)
         if m:
             reference_number = m.group(1)
@@ -673,7 +690,7 @@ def reextract_data_links(reply_record_dict: dict, body: str) -> dict:
 
 _ACTION_DRAFT_TAGS: frozenset[str] = frozenset({
     "WRONG_CHANNEL", "MORE_INFO_REQUIRED", "CONFIRMATION_REQUIRED",
-    "IDENTITY_REQUIRED", "HUMAN_REVIEW",
+    "IDENTITY_REQUIRED", "HUMAN_REVIEW", "PORTAL_VERIFICATION",
 })
 
 _ACTION_DRAFT_TAG_LABELS: dict[str, str] = {
@@ -682,6 +699,7 @@ _ACTION_DRAFT_TAG_LABELS: dict[str, str] = {
     "CONFIRMATION_REQUIRED": "company requires you to confirm the request",
     "IDENTITY_REQUIRED":     "company requires identity verification",
     "HUMAN_REVIEW":          "reply needs manual review — unclear response",
+    "PORTAL_VERIFICATION":   "company sent an email verification request — check your inbox and verify",
 }
 
 

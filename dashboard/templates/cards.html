@@ -5,13 +5,6 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="mb-0">Data Cards</h2>
   <div class="d-flex gap-2 align-items-center">
-    <label class="mb-0 text-muted small">Account:</label>
-    <select class="form-select form-select-sm" style="width:auto;"
-            onchange="location.href='/cards?account='+this.value+'&tab={{ tab }}'">
-      {% for acc in accounts %}
-      <option value="{{ acc }}" {% if acc == account %}selected{% endif %}>{{ acc }}</option>
-      {% endfor %}
-    </select>
     <a href="/?account={{ account }}" class="btn btn-sm btn-outline-secondary">&#x2190; Dashboard</a>
   </div>
 </div>

@@ -12,7 +12,7 @@ from contact_resolver.models import PortalFieldMapping
 from letter_engine.models import SARLetter
 from portal_submitter.captcha_relay import poll_solution, request_solve
 from portal_submitter.form_analyzer import analyze_form, build_user_data
-from portal_submitter.form_filler import STEALTH_SCRIPT, fill_and_submit
+from portal_submitter.form_filler import STEALTH_SCRIPT, detect_captcha_type, fill_and_submit
 from portal_submitter.models import PortalResult
 from portal_submitter.platform_hints import detect_platform, otp_sender_hints
 from portal_submitter.portal_navigator import navigate_to_form, page_has_form
@@ -173,16 +173,18 @@ def _browser_submit(
                     portal_status="failed",
                 )
 
-            # Fill form
+            # Fill form (without submitting yet)
             fill_result = fill_and_submit(page, mapping, user_data, click_submit=False)
 
-            # Handle CAPTCHA
-            if fill_result["captcha_detected"]:
+            # Detect CAPTCHA type
+            captcha_type = detect_captcha_type(page)
+
+            if captcha_type == "interactive":
+                # Interactive CAPTCHA — relay to user for solving
                 captcha_screenshot = page.screenshot()
                 domain = _domain_from_url(letter.portal_url)
                 challenge = request_solve(domain, letter.portal_url, captcha_screenshot)
                 solution = poll_solution(domain)
-
                 if solution is None:
                     screenshot_path = _take_screenshot(page, letter.company_name)
                     browser.close()
@@ -192,10 +194,27 @@ def _browser_submit(
                         screenshot_path=screenshot_path,
                         portal_status="awaiting_captcha",
                     )
-                # TODO: inject CAPTCHA solution — depends on CAPTCHA type
 
-            # Submit the form
-            submit_result = fill_and_submit(page, mapping, user_data, click_submit=True)
+            if captcha_type == "invisible_v3":
+                # Invisible reCAPTCHA v3 — try submitting (may pass with stealth),
+                # but report pre-filled + needs manual if it fails
+                submit_result = fill_and_submit(page, mapping, user_data, click_submit=True)
+                page.wait_for_timeout(3000)
+
+                # Check if submission was blocked by reCAPTCHA
+                page_text = page.inner_text("body")
+                if "bot" in page_text.lower() and "recaptcha" in page_text.lower():
+                    screenshot_path = _take_screenshot(page, letter.company_name)
+                    browser.close()
+                    return PortalResult(
+                        needs_manual=True,
+                        error="recaptcha_v3_blocked",
+                        screenshot_path=screenshot_path,
+                        portal_status="manual",
+                    )
+            else:
+                # No CAPTCHA or interactive CAPTCHA already solved — submit
+                submit_result = fill_and_submit(page, mapping, user_data, click_submit=True)
 
             # Take confirmation screenshot
             page.wait_for_timeout(2000)

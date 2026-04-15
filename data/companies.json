@@ -1,7 +1,7 @@
 {
   "meta": {
     "version": "1.0",
-    "last_updated": "2026-03-28",
+    "last_updated": "2026-04-13",
     "total_companies": 22
   },
   "companies": {
@@ -34,12 +34,13 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-03-28T08:47:50.678824+00:00",
-        "source_url": "https://workspace.google.com/terms/subprocessors/, https://cloud.google.com/terms/subprocessors, https://firebase.google.com/terms/subprocessors",
+        "fetched_at": "2026-04-13T14:25:28.751071+00:00",
+        "source_url": "https://google.com/third-parties",
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "substack.com": {
       "company_name": "Substack",
@@ -69,7 +70,8 @@
         "identity_verification_required": false,
         "known_response_time_days": 30
       },
-      "subprocessors": null
+      "subprocessors": null,
+      "portal_field_mapping": null
     },
     "hrtechprivacy.com": {
       "company_name": "HR Tech Privacy / Indeed, Inc",
@@ -99,7 +101,8 @@
         "identity_verification_required": true,
         "known_response_time_days": 30
       },
-      "subprocessors": null
+      "subprocessors": null,
+      "portal_field_mapping": null
     },
     "indeed.zendesk.com": {
       "company_name": "Zendesk",
@@ -129,7 +132,8 @@
         "identity_verification_required": true,
         "known_response_time_days": 30
       },
-      "subprocessors": null
+      "subprocessors": null,
+      "portal_field_mapping": null
     },
     "interactivebrokers.com": {
       "company_name": "Interactive Brokers",
@@ -159,7 +163,8 @@
         "identity_verification_required": false,
         "known_response_time_days": 30
       },
-      "subprocessors": null
+      "subprocessors": null,
+      "portal_field_mapping": null
     },
     "paypal.com": {
       "company_name": "PayPal",
@@ -190,12 +195,13 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-03-28T08:48:25.882176+00:00",
+        "fetched_at": "2026-04-13T14:26:09.056899+00:00",
         "source_url": "https://paypal.com/legal/sub-processors",
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "polymarket.intercom-mail.com": {
       "company_name": "Intercom",
@@ -225,7 +231,8 @@
         "identity_verification_required": false,
         "known_response_time_days": 30
       },
-      "subprocessors": null
+      "subprocessors": null,
+      "portal_field_mapping": null
     },
     "reflexivity.com": {
       "company_name": "Reflexivity",
@@ -296,7 +303,8 @@
         ],
         "fetch_status": "ok",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "substackinc.com": {
       "company_name": "Substack",
@@ -332,7 +340,8 @@
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "glassdoor.com": {
       "company_name": "Glassdoor",
@@ -368,7 +377,8 @@
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "finalroundai.com": {
       "company_name": "Final Round AI",
@@ -399,12 +409,13 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-03-28T08:48:03.032238+00:00",
-        "source_url": "",
+        "fetched_at": "2026-04-13T14:25:40.999586+00:00",
+        "source_url": "https://finalroundai.com/sub-processors",
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "paypal.co.uk": {
       "company_name": "PayPal",
@@ -434,7 +445,8 @@
         "identity_verification_required": true,
         "known_response_time_days": 30
       },
-      "subprocessors": null
+      "subprocessors": null,
+      "portal_field_mapping": null
     },
     "emails.paypal.com": {
       "company_name": "PayPal",
@@ -464,7 +476,8 @@
         "identity_verification_required": true,
         "known_response_time_days": 30
       },
-      "subprocessors": null
+      "subprocessors": null,
+      "portal_field_mapping": null
     },
     "xoom.com": {
       "company_name": "Xoom",
@@ -494,7 +507,8 @@
         "identity_verification_required": false,
         "known_response_time_days": 30
       },
-      "subprocessors": null
+      "subprocessors": null,
+      "portal_field_mapping": null
     },
     "figma.com": {
       "company_name": "Figma",
@@ -1095,7 +1109,8 @@
         ],
         "fetch_status": "ok",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "whop.com": {
       "company_name": "Whop",
@@ -1131,7 +1146,8 @@
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "intercom.io": {
       "company_name": "intercom.io",
@@ -1269,7 +1285,8 @@
         ],
         "fetch_status": "ok",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "qcex.com": {
       "company_name": "qcex.com",
@@ -1300,12 +1317,13 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-03-28T08:47:39.796588+00:00",
+        "fetched_at": "2026-04-13T14:25:03.627686+00:00",
         "source_url": "https://qcex.com/sub-processors",
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "zendesk.com": {
       "company_name": "zendesk.com",
@@ -1341,7 +1359,8 @@
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     },
     "clubavolta.com": {
       "company_name": "Clubavolta",
@@ -1371,7 +1390,8 @@
         "identity_verification_required": false,
         "known_response_time_days": 30
       },
-      "subprocessors": null
+      "subprocessors": null,
+      "portal_field_mapping": null
     },
     "society.zendesk.com": {
       "company_name": "Zendesk",
@@ -1401,7 +1421,8 @@
         "identity_verification_required": true,
         "known_response_time_days": 30
       },
-      "subprocessors": null
+      "subprocessors": null,
+      "portal_field_mapping": null
     },
     "avolta.net": {
       "company_name": "avolta.net",
@@ -1437,7 +1458,8 @@
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
-      }
+      },
+      "portal_field_mapping": null
     }
   }
 }

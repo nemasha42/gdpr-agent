@@ -1,6 +1,7 @@
 """Extract form structure via accessibility tree and map fields using LLM."""
 
 import json
+import re
 from datetime import date, timedelta
 from typing import Any, Callable
 
@@ -72,8 +73,11 @@ def analyze_form(
     if cached_mapping and _is_cache_fresh(cached_mapping.cached_at):
         return cached_mapping
 
-    axtree = page.accessibility.snapshot()
-    elements = _extract_interactive_elements(axtree)
+    try:
+        snapshot_text = page.locator("body").aria_snapshot()
+        elements = _extract_elements_from_aria_snapshot(snapshot_text)
+    except Exception:
+        elements = []
 
     if not elements:
         return PortalFieldMapping(cached_at=date.today().isoformat())
@@ -105,6 +109,7 @@ def _is_cache_fresh(cached_at: str) -> bool:
 
 
 def _extract_interactive_elements(node: dict, results: list | None = None) -> list[dict]:
+    """Extract from old JSON accessibility tree (legacy, kept for tests)."""
     if results is None:
         results = []
 
@@ -119,6 +124,25 @@ def _extract_interactive_elements(node: dict, results: list | None = None) -> li
     for child in node.get("children", []):
         _extract_interactive_elements(child, results)
 
+    return results
+
+
+# Regex to parse lines like: - textbox "First Name"  or  - button "Submit"
+_RE_ARIA_ELEMENT = re.compile(
+    r'^\s*-\s+(textbox|combobox|checkbox|radio|spinbutton|searchbox|button|link)\s+"([^"]+)"',
+)
+
+
+def _extract_elements_from_aria_snapshot(snapshot_text: str) -> list[dict]:
+    """Extract interactive elements from Playwright aria_snapshot() text format."""
+    results = []
+    for line in snapshot_text.splitlines():
+        m = _RE_ARIA_ELEMENT.match(line)
+        if m:
+            role, name = m.group(1), m.group(2)
+            if role in ("link",):
+                role = "button"  # normalize for LLM prompt
+            results.append({"role": role, "name": name})
     return results
 
 

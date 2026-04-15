@@ -76,6 +76,40 @@
   </div>
 </div>
 
+{# ── Portal submission status bar ── #}
+{% if state.portal_submission %}
+  {% set ps = state.portal_submission %}
+  <div class="alert {% if ps.status == 'submitted' %}alert-success{% elif ps.status == 'manual' %}alert-info{% elif ps.status == 'failed' %}alert-warning{% else %}alert-secondary{% endif %} py-2 px-3 mb-3 d-flex align-items-center gap-3">
+    {% if ps.status == 'submitted' %}
+      <strong>Portal submitted</strong>
+      {% if ps.confirmation_ref %}<span class="small">Ref: {{ ps.confirmation_ref }}</span>{% endif %}
+      <span class="text-muted small ms-auto">{{ ps.submitted_at[:16].replace('T', ' ') if ps.submitted_at else '' }}</span>
+    {% elif ps.status == 'manual' %}
+      <strong>Please submit manually</strong>
+      <span class="small">
+        {% if ps.portal_url %}<a href="{{ ps.portal_url }}" target="_blank" class="fw-bold">Open portal</a> &rarr;{% endif %}
+        Your Privacy Request &rarr; Access your data &rarr; fill &amp; submit
+      </span>
+      <form method="POST" action="/company/{{ domain }}/mark-portal-submitted" class="ms-auto d-flex gap-2">
+        <input type="hidden" name="account" value="{{ account }}">
+        <button type="submit" class="btn btn-sm btn-success py-0 px-2" style="font-size:0.78rem">Mark as submitted</button>
+      </form>
+      <span class="small text-muted ms-2">The company may send an email verification &mdash; we'll detect it automatically.</span>
+    {% elif ps.status == 'failed' %}
+      <strong>Portal submission failed</strong>
+      {% if ps.error %}<span class="small text-muted">{{ ps.error }}</span>{% endif %}
+      {% if ps.portal_url or portal_url %}
+        <a href="{{ ps.portal_url or portal_url }}" target="_blank" class="btn btn-sm btn-outline-primary py-0">Open portal manually</a>
+      {% endif %}
+      <form method="POST" action="/company/{{ domain }}/mark-portal-submitted" class="ms-auto d-flex gap-2">
+        <input type="hidden" name="account" value="{{ account }}">
+        <button type="submit" class="btn btn-sm btn-success py-0 px-2" style="font-size:0.78rem">Mark as submitted</button>
+      </form>
+      <span class="small text-muted ms-2">The company may send an email verification &mdash; we'll detect it automatically.</span>
+    {% endif %}
+  </div>
+{% endif %}
+
 {# ── Past attempts (bounced addresses) ── #}
 {% if past_attempts %}
 <details class="mb-4">
@@ -136,6 +170,8 @@
   {% set why = "Company says to use a different channel" %}
 {% elif 'IDENTITY_REQUIRED' in last_company.tags %}
   {% set why = "Identity verification required before processing" %}
+{% elif 'PORTAL_VERIFICATION' in last_company.tags %}
+  {% set why = "Company sent an email verification — check your inbox" %}
 {% elif 'CONFIRMATION_REQUIRED' in last_company.tags %}
   {% set why = "Company requires you to confirm the request" %}
 {% elif 'MORE_INFO_REQUIRED' in last_company.tags %}
@@ -271,8 +307,9 @@
             {% if has_confirm_tag and ex.confirmation_url %}<span>&#x1F517; <a href="{{ ex.confirmation_url }}" target="_blank">Confirm request</a></span>{% endif %}
             {% if has_data_tag and ex.data_link %}<span>&#x2B07;&#xFE0F; <a href="{{ ex.data_link }}" target="_blank">Download data</a></span>{% endif %}
             {% if has_data_tag %}<a href="/data/{{ domain }}?account={{ account }}" class="btn btn-sm btn-outline-success py-0 px-2" style="font-size:0.78rem">&#x1F4C2; View received data</a>{% endif %}
-            {% if has_portal_tag and ex.portal_url %}
-              <span>&#x1F4BB; <a href="{{ ex.portal_url }}" target="_blank">Privacy portal</a>
+            {% set display_portal_url = ex.portal_url or portal_url %}
+            {% if has_portal_tag and display_portal_url %}
+              <span>&#x1F4BB; <a href="{{ display_portal_url }}" target="_blank">Privacy portal</a>
               {% if ev.portal_verification %}
                 {% set pv = ev.portal_verification %}
                 {% if pv.classification == 'gdpr_portal' %}
@@ -290,6 +327,13 @@
                 {% endif %}
               {% endif %}
               </span>
+              {% if 'WRONG_CHANNEL' in ev.tags %}
+                <button class="btn btn-sm btn-warning py-0 px-2 ms-2" style="font-size:0.78rem"
+                  onclick="submitViaPortal('{{ domain }}', '{{ account }}', this, '{{ display_portal_url }}')">
+                  Submit SAR via portal
+                </button>
+                <span class="small ms-1"></span>
+              {% endif %}
             {% endif %}
             {% if ex.deadline_extension_days %}<span>&#x23F1; Extended {{ ex.deadline_extension_days }} days</span>{% endif %}
           </div>
@@ -460,5 +504,102 @@ document.querySelectorAll('.stream-panel').forEach(panel => {
     }
   }
 });
+
+// Portal submission via WRONG_CHANNEL
+async function submitViaPortal(domain, account, btn, portalUrl) {
+  const statusEl = btn.nextElementSibling;
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+  statusEl.style.cssText = 'color:#6c757d;font-size:0.78rem;display:inline';
+  statusEl.textContent = 'Opening portal…';
+
+  // Step messages shown during polling (timed to match actual Playwright flow)
+  const steps = [
+    {t: 0,  msg: 'Opening portal…'},
+    {t: 4,  msg: 'Navigating to form…'},
+    {t: 8,  msg: 'Analyzing form fields…'},
+    {t: 12, msg: 'Filling in your details…'},
+    {t: 16, msg: 'Checking for CAPTCHA…'},
+    {t: 20, msg: 'Submitting form…'},
+    {t: 25, msg: 'Waiting for confirmation…'},
+  ];
+  const t0 = Date.now();
+  const stepTimer = setInterval(() => {
+    const elapsed = (Date.now() - t0) / 1000;
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (elapsed >= steps[i].t) { statusEl.textContent = steps[i].msg; break; }
+    }
+  }, 500);
+
+  try {
+    const resp = await fetch(`/portal/submit/${domain}?account=${encodeURIComponent(account)}&portal_url=${encodeURIComponent(portalUrl)}`, {method: 'POST'});
+    const data = await resp.json();
+    if (resp.status === 409) { clearInterval(stepTimer); statusEl.textContent = 'Already in progress'; return; }
+    if (!resp.ok) { clearInterval(stepTimer); statusEl.textContent = data.error || 'Failed to start'; btn.disabled = false; btn.textContent = 'Submit SAR via portal'; return; }
+
+    // Poll for result
+    const poll = setInterval(async () => {
+      try {
+        const sr = await fetch(`/portal/status/${domain}`);
+        const r = await sr.json();
+        if (r.status === 'done') {
+          clearInterval(poll);
+          clearInterval(stepTimer);
+          if (r.success) {
+            btn.classList.replace('btn-warning', 'btn-success');
+            btn.textContent = '✓ Submitted';
+            statusEl.style.color = '#198754';
+            statusEl.innerHTML = r.confirmation_ref
+              ? `Ref: ${r.confirmation_ref}`
+              : 'Form submitted successfully. <a href="javascript:location.reload()" class="ms-2">Refresh page</a>';
+          } else if (r.needs_manual) {
+            btn.classList.replace('btn-warning', 'btn-info');
+            statusEl.style.color = '';
+            if (r.error === 'recaptcha_v3_blocked') {
+              btn.textContent = 'Manual submission needed';
+              const mkId = 'manual-mark-' + domain.replace(/\./g,'-');
+              statusEl.innerHTML = `reCAPTCHA blocked auto-submit. `
+                + `<a href="${portalUrl}" target="_blank" class="fw-bold">Open portal</a>, `
+                + `click <strong>Your Privacy Request → Access your data</strong>, fill the form and submit. `
+                + `Then <a href="javascript:void(0)" onclick="document.getElementById('${mkId}').style.display='inline'" class="fw-bold">mark as submitted</a>.`
+                + `<span id="${mkId}" style="display:none" class="ms-2">`
+                + `<form method="POST" action="/company/${domain}/mark-portal-submitted" style="display:inline">`
+                + `<input type="hidden" name="account" value="${account}">`
+                + ` <button type="submit" class="btn btn-sm btn-success py-0 px-2" style="font-size:0.75rem">Done</button>`
+                + `</form></span>`
+                + `<span class="text-muted small ms-2">The company may send email verification &mdash; we'll detect it automatically.</span>`;
+            } else if (r.error && r.error.includes('captcha')) {
+              btn.textContent = 'CAPTCHA needed';
+              statusEl.innerHTML = `<a href="/captcha/${domain}" target="_blank">Solve CAPTCHA</a> to complete submission`;
+            } else {
+              btn.textContent = 'Manual step needed';
+              statusEl.innerHTML = (r.error || 'Please submit manually')
+                + ` <a href="${portalUrl}" target="_blank">Open portal</a>`;
+            }
+          } else {
+            btn.classList.replace('btn-warning', 'btn-danger');
+            btn.textContent = 'Failed';
+            statusEl.style.color = '#dc3545';
+            statusEl.textContent = r.error || 'Submission failed';
+            btn.disabled = false;
+          }
+        } else if (r.status === 'error') {
+          clearInterval(poll);
+          clearInterval(stepTimer);
+          btn.classList.replace('btn-warning', 'btn-danger');
+          btn.textContent = 'Error';
+          statusEl.style.color = '#dc3545';
+          statusEl.textContent = r.error || 'Submission failed';
+          btn.disabled = false;
+        }
+      } catch(e) { /* keep polling */ }
+    }, 2000);
+  } catch(e) {
+    clearInterval(stepTimer);
+    statusEl.textContent = 'Network error';
+    btn.disabled = false;
+    btn.textContent = 'Submit SAR via portal';
+  }
+}
 </script>
 {% endblock %}

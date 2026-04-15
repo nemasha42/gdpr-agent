@@ -17,6 +17,9 @@ from dashboard.user_model import (
 
 auth_bp = Blueprint("auth", __name__)
 
+# Path to the canonical OAuth credentials file (same one used by CLI).
+_CREDENTIALS_JSON = Path(__file__).resolve().parent.parent / "credentials.json"
+
 
 def _users_path() -> Path:
     return current_app.config.get("USERS_PATH", Path("user_data/users.json"))
@@ -72,7 +75,6 @@ def onboarding_submit():
 def start_gmail_oauth():
     """Initiate Gmail OAuth flow."""
     from google_auth_oauthlib.flow import Flow
-    from config.settings import settings
 
     scope_label = request.args.get("scope", "readonly")
     scopes = {
@@ -80,15 +82,8 @@ def start_gmail_oauth():
         "send": ["https://www.googleapis.com/auth/gmail.send"],
     }[scope_label]
 
-    flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": settings.google_client_id,
-                "client_secret": settings.google_client_secret,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-            }
-        },
+    flow = Flow.from_client_secrets_file(
+        str(_CREDENTIALS_JSON),
         scopes=scopes,
         redirect_uri=url_for("auth.oauth_callback", _external=True),
     )
@@ -99,6 +94,7 @@ def start_gmail_oauth():
     )
     session["oauth_state"] = state
     session["oauth_scope_label"] = scope_label
+    session["oauth_code_verifier"] = flow.code_verifier
     return redirect(auth_url)
 
 
@@ -106,7 +102,6 @@ def start_gmail_oauth():
 def oauth_callback():
     """Handle Google OAuth callback."""
     from google_auth_oauthlib.flow import Flow
-    from config.settings import settings
     from auth.gmail_oauth import _safe_email
 
     scope_label = session.pop("oauth_scope_label", "readonly")
@@ -115,18 +110,12 @@ def oauth_callback():
         "send": ["https://www.googleapis.com/auth/gmail.send"],
     }[scope_label]
 
-    flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": settings.google_client_id,
-                "client_secret": settings.google_client_secret,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-            }
-        },
+    flow = Flow.from_client_secrets_file(
+        str(_CREDENTIALS_JSON),
         scopes=scopes,
         redirect_uri=url_for("auth.oauth_callback", _external=True),
     )
+    flow.code_verifier = session.pop("oauth_code_verifier", None)
     flow.fetch_token(authorization_response=request.url)
     creds = flow.credentials
 
@@ -135,6 +124,22 @@ def oauth_callback():
     profile = service.users().getProfile(userId="me").execute()
     gmail_email = profile["emailAddress"]
 
+    # Login flow: find existing user by Gmail email and log them in
+    if session.pop("login_flow", False):
+        user = load_user(gmail_email, path=_users_path())
+        if user is None:
+            flash("No account found for this Google account. Ask your admin for an invite link.", "danger")
+            return redirect(url_for("auth.login"))
+        login_user(user, remember=True)
+        # Save/refresh the token
+        safe = _safe_email(gmail_email)
+        tokens_dir = user_data_dir(user.email, root=_user_data_root()) / "tokens"
+        tokens_dir.mkdir(parents=True, exist_ok=True)
+        token_file = tokens_dir / f"{safe}_{scope_label}.json"
+        token_file.write_text(creds.to_json())
+        return redirect(url_for("dashboard"))
+
+    # Normal flow: user is already logged in, connecting a Gmail account
     safe = _safe_email(gmail_email)
     tokens_dir = user_data_dir(
         current_user.email, root=_user_data_root()
@@ -144,23 +149,40 @@ def oauth_callback():
     token_file.write_text(creds.to_json())
 
     if session.pop("onboarding_email", None):
-        return redirect(url_for("index"))
+        return redirect(url_for("dashboard"))
 
     flash(f"Gmail account {gmail_email} connected ({scope_label}).")
-    return redirect(url_for("index"))
+    return redirect(url_for("dashboard"))
 
 
 @auth_bp.route("/login")
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("index"))
+        return redirect(url_for("dashboard"))
     return render_template("login.html")
 
 
 @auth_bp.route("/login/google")
 def login_google():
+    """Start OAuth flow for login — no @login_required since user isn't logged in yet."""
+    from google_auth_oauthlib.flow import Flow
+
     session["login_flow"] = True
-    return redirect(url_for("auth.start_gmail_oauth", scope="readonly"))
+    scopes = ["https://www.googleapis.com/auth/gmail.readonly"]
+
+    flow = Flow.from_client_secrets_file(
+        str(_CREDENTIALS_JSON),
+        scopes=scopes,
+        redirect_uri=url_for("auth.oauth_callback", _external=True),
+    )
+    auth_url, state = flow.authorization_url(
+        access_type="offline",
+        prompt="consent",
+    )
+    session["oauth_state"] = state
+    session["oauth_scope_label"] = "readonly"
+    session["oauth_code_verifier"] = flow.code_verifier
+    return redirect(auth_url)
 
 
 @auth_bp.route("/logout")

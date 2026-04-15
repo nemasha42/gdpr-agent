@@ -47,7 +47,7 @@ class TestGenerateReplyDraft:
 
     def test_all_action_draft_tags_covered(self):
         expected = {"WRONG_CHANNEL", "MORE_INFO_REQUIRED", "CONFIRMATION_REQUIRED",
-                    "IDENTITY_REQUIRED", "HUMAN_REVIEW"}
+                    "IDENTITY_REQUIRED", "HUMAN_REVIEW", "PORTAL_VERIFICATION"}
         assert _ACTION_DRAFT_TAGS == expected
 
     def test_draft_generated_for_each_action_tag(self):

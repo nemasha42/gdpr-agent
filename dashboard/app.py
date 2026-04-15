@@ -116,6 +116,7 @@ app.config["USER_DATA_ROOT"] = _USER_DATA
 
 login_manager = LoginManager(app)
 login_manager.login_view = "auth.login"
+login_manager.login_message = None  # suppress flash on redirect to login
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
@@ -322,12 +323,24 @@ def _inject_globals():
         active_tab = "transfers"
     else:
         active_tab = "dashboard"
+
+    # Mailbox accounts — available globally for navbar dropdown
+    nav_accounts: list[str] = []
+    nav_selected_account = ""
+    if current_user.is_authenticated:
+        nav_accounts = _get_accounts()
+        nav_selected_account = _req.args.get("account", "")
+        if not nav_selected_account and nav_accounts:
+            nav_selected_account = nav_accounts[0]
+
     return {
         "status_colour": _STATUS_COLOUR,
         "tag_colour": _TAG_COLOUR,
         "tag_names": _DISPLAY_NAMES,
         "active_tab": active_tab,
         "now_ts": _time.time(),
+        "nav_accounts": nav_accounts,
+        "nav_selected_account": nav_selected_account,
     }
 
 
@@ -511,11 +524,31 @@ def _build_card(domain: str, state, status: str) -> dict:
 
 
 def _lookup_company(domain: str) -> dict:
-    """Return company record from companies.json for Company Info tab."""
+    """Return company record from companies.json, merged with overrides."""
     try:
-        import json
-        data = json.loads(_COMPANIES_PATH.read_text())
-        return data.get(domain, {})
+        import json as _j2
+        raw = _j2.loads(_COMPANIES_PATH.read_text())
+        # Handle nested {"companies": {...}} structure
+        data = raw.get("companies", raw) if isinstance(raw, dict) else raw
+        record = dict(data.get(domain, {}))
+        # Merge overrides (higher priority)
+        overrides_path = _PROJECT_ROOT / "data" / "dataowners_overrides.json"
+        if overrides_path.exists():
+            overrides = _j2.loads(overrides_path.read_text())
+            override = overrides.get(domain, {})
+            if override:
+                # Deep-merge contact dict
+                if "contact" in override and "contact" in record:
+                    merged_contact = dict(record["contact"])
+                    for k, v in override["contact"].items():
+                        if v:  # only override non-empty values
+                            merged_contact[k] = v
+                    record["contact"] = merged_contact
+                # Shallow merge other top-level fields
+                for k, v in override.items():
+                    if k != "contact" and v:
+                        record[k] = v
+        return record
     except Exception:
         return {}
 
@@ -765,6 +798,10 @@ def company_detail(domain: str):
     )
     sar_days_left = days_remaining(state.sar_sent_at)
 
+    # Look up portal URL from company records (overrides included)
+    company_record = _lookup_company(domain)
+    portal_url = (company_record.get("contact", {}) or {}).get("gdpr_portal_url", "")
+
     return render_template(
         "company_detail.html",
         domain=domain,
@@ -784,6 +821,7 @@ def company_detail(domain: str):
         company_status=company_status,
         company_status_colour=_STATUS_COLOUR.get(company_status, "secondary"),
         sar_days_left=sar_days_left,
+        portal_url=portal_url,
     )
 
 
@@ -2001,20 +2039,46 @@ _portal_tasks: dict[str, dict] = {}  # domain -> {"status": ..., "result": ...}
 def portal_submit(domain: str):
     """Start a portal submission as a background task."""
     account = request.args.get("account", "")
+    portal_url_param = request.args.get("portal_url", "")
 
     if domain in _portal_tasks and _portal_tasks[domain].get("status") == "running":
         return jsonify({"error": "submission already in progress"}), 409
 
-    # Find the letter for this domain
+    # Resolve portal URL: explicit param > resolver > overrides
     from contact_resolver.resolver import ContactResolver
     from letter_engine.composer import compose
+    from letter_engine.models import SARLetter
 
     resolver = ContactResolver()
     record = resolver.resolve(domain, domain, verbose=False)
-    if not record or record.contact.preferred_method != "portal":
-        return jsonify({"error": "not a portal company"}), 400
 
-    letter = compose(record)
+    # Determine portal URL from all available sources
+    effective_portal_url = portal_url_param
+    if not effective_portal_url and record:
+        effective_portal_url = record.contact.gdpr_portal_url
+    if not effective_portal_url:
+        company_rec = _lookup_company(domain)
+        effective_portal_url = (company_rec.get("contact", {}) or {}).get("gdpr_portal_url", "")
+
+    if not effective_portal_url:
+        return jsonify({"error": "no portal URL found for this company"}), 400
+
+    # Build the letter — use compose() if we have a record, otherwise build minimal
+    if record:
+        letter = compose(record)
+        letter.portal_url = effective_portal_url
+        letter.method = "portal"
+    else:
+        company_name = domain
+        letter = SARLetter(
+            company_name=company_name,
+            method="portal",
+            to_email="",
+            subject=f"Subject Access Request - {company_name}",
+            body=f"I am writing to make a Subject Access Request for {company_name}.",
+            portal_url=effective_portal_url,
+            postal_address="",
+        )
 
     _portal_tasks[domain] = {"status": "running", "result": None}
 
@@ -2024,17 +2088,30 @@ def portal_submit(domain: str):
             result = submit_portal(letter, scan_email=account)
             _portal_tasks[domain] = {"status": "done", "result": result}
 
-            # Record to tracker
+            # Save portal submission status to reply_state.json
             if result.success or result.needs_manual:
-                from letter_engine import tracker
-                tracker.record_sent(
-                    letter,
-                    portal_status=result.portal_status,
-                    portal_confirmation_ref=result.confirmation_ref,
-                    portal_screenshot=result.screenshot_path,
+                from reply_monitor.state_manager import save_portal_submission
+                ps_status = "submitted" if result.success else "manual"
+                save_portal_submission(
+                    account, domain,
+                    status=ps_status,
+                    portal_url=letter.portal_url or "",
+                    confirmation_ref=result.confirmation_ref or "",
+                    error=result.error or "",
+                    data_dir=_current_data_dir(),
                 )
         except Exception as exc:
             _portal_tasks[domain] = {"status": "error", "result": str(exc)}
+            try:
+                from reply_monitor.state_manager import save_portal_submission
+                save_portal_submission(
+                    account, domain,
+                    status="failed",
+                    error=str(exc),
+                    data_dir=_current_data_dir(),
+                )
+            except Exception:
+                pass
 
     _threading.Thread(target=_run, daemon=True).start()
     return jsonify({"status": "started"})
@@ -2064,6 +2141,29 @@ def portal_status(domain: str):
     })
 
 
+@app.route("/company/<domain>/mark-portal-submitted", methods=["POST"])
+def mark_portal_submitted(domain: str):
+    """Manually mark a portal submission as completed by the user."""
+    account = request.form.get("account", "")
+    if not account:
+        flash("No account specified.", "danger")
+        return redirect(url_for("company_detail", domain=domain))
+
+    from reply_monitor.state_manager import save_portal_submission
+    company_record = _lookup_company(domain)
+    p_url = (company_record.get("contact", {}) or {}).get("gdpr_portal_url", "")
+
+    save_portal_submission(
+        account, domain,
+        status="submitted",
+        portal_url=p_url,
+        confirmation_ref=request.form.get("confirmation_ref", ""),
+        data_dir=_current_data_dir(),
+    )
+    flash(f"Marked {domain} as submitted via portal.", "success")
+    return redirect(url_for("company_detail", domain=domain, account=account))
+
+
 @app.route("/captcha/<domain>")
 def captcha_show(domain: str):
     """Show a pending CAPTCHA for the user to solve."""
@@ -2073,7 +2173,7 @@ def captcha_show(domain: str):
 
     if not screenshot.exists() or not challenge_file.exists():
         flash("No pending CAPTCHA for this domain.", "warning")
-        return redirect(url_for("index"))
+        return redirect(url_for("dashboard"))
 
     import base64
     img_b64 = base64.b64encode(screenshot.read_bytes()).decode()
@@ -2107,7 +2207,7 @@ def captcha_solve(domain: str):
     else:
         flash("CAPTCHA challenge not found or already expired.", "warning")
 
-    return redirect(url_for("index"))
+    return redirect(url_for("dashboard"))
 
 
 # ===========================================================================

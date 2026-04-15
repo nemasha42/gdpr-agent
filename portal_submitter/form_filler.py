@@ -4,7 +4,7 @@ from typing import Any
 
 from contact_resolver.models import PortalFieldMapping
 
-# Selectors that indicate CAPTCHA presence
+# Selectors that indicate CAPTCHA presence (interactive or invisible)
 _CAPTCHA_SELECTORS = [
     'iframe[src*="recaptcha"]',
     'iframe[src*="hcaptcha"]',
@@ -12,6 +12,7 @@ _CAPTCHA_SELECTORS = [
     '#captcha',
     '[data-sitekey]',
     'iframe[src*="challenges.cloudflare.com"]',
+    '.grecaptcha-badge',  # invisible reCAPTCHA v3 badge
 ]
 
 # Stealth script to reduce automation detection (same as link_downloader.py)
@@ -24,7 +25,7 @@ STEALTH_SCRIPT = """
 
 
 def detect_captcha(page: Any) -> bool:
-    """Check if the page contains a CAPTCHA element."""
+    """Check if the page contains a CAPTCHA element (interactive or invisible)."""
     for selector in _CAPTCHA_SELECTORS:
         try:
             if page.query_selector(selector):
@@ -32,6 +33,36 @@ def detect_captcha(page: Any) -> bool:
         except Exception:
             continue
     return False
+
+
+def detect_captcha_type(page: Any) -> str:
+    """Detect the type of CAPTCHA: 'interactive', 'invisible_v3', or 'none'.
+
+    Invisible reCAPTCHA v3 has a badge but no visible iframe/checkbox.
+    Interactive CAPTCHAs have a visible iframe or checkbox.
+    """
+    has_badge = bool(page.query_selector(".grecaptcha-badge"))
+    has_visible_iframe = False
+    for iframe in page.query_selector_all('iframe[src*="recaptcha"], iframe[src*="hcaptcha"]'):
+        try:
+            if iframe.is_visible():
+                has_visible_iframe = True
+                break
+        except Exception:
+            continue
+    has_interactive = bool(page.query_selector(".g-recaptcha, [data-sitekey]"))
+
+    if has_visible_iframe or has_interactive:
+        return "interactive"
+    if has_badge:
+        return "invisible_v3"
+    for selector in _CAPTCHA_SELECTORS:
+        try:
+            if page.query_selector(selector):
+                return "interactive"
+        except Exception:
+            continue
+    return "none"
 
 
 def fill_and_submit(

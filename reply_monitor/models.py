@@ -203,6 +203,9 @@ class CompanyState:
     past_attempts: list[dict] = field(default_factory=list)
     # Set True when all address retry attempts are exhausted (no more addresses to try)
     address_exhausted: bool = False
+    # Portal submission tracking: {status, submitted_at, confirmation_ref, portal_url, error}
+    # status: "submitted" | "manual" | "failed" | None (not attempted)
+    portal_submission: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -217,6 +220,7 @@ class CompanyState:
             "last_checked": self.last_checked,
             "past_attempts": self.past_attempts,
             "address_exhausted": self.address_exhausted,
+            "portal_submission": self.portal_submission,
         }
 
     @classmethod
@@ -234,4 +238,5 @@ class CompanyState:
             last_checked=d.get("last_checked", ""),
             past_attempts=d.get("past_attempts", []),
             address_exhausted=d.get("address_exhausted", False),
+            portal_submission=d.get("portal_submission"),
         )

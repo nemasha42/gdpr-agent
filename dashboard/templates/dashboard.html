@@ -3,30 +3,22 @@
 {% block title %}GDPR SAR Dashboard{% endblock %}
 
 {% block nav_extra %}
-  {% if accounts %}
-  <form class="d-flex gap-2 align-items-center" method="get" action="/">
-    <label class="text-muted small mb-0">Account:</label>
-    <select class="form-select form-select-sm" name="account" onchange="this.form.submit()" style="width:220px">
-      {% for a in accounts %}
-        <option value="{{ a }}" {% if a == selected_account %}selected{% endif %}>{{ a }}</option>
-      {% endfor %}
-    </select>
+  <div class="d-flex gap-2 align-items-center">
     <a href="/refresh?account={{ selected_account }}" class="btn btn-sm btn-outline-secondary">&#x21bb; Refresh</a>
-    <a href="/cards?account={{ selected_account }}" class="btn btn-sm btn-outline-secondary ms-2">Data Cards</a>
+    <a href="/cards?account={{ selected_account }}" class="btn btn-sm btn-outline-secondary">Data Cards</a>
     {% if last_scan_at %}
       <a href="/pipeline?account={{ selected_account }}"
-         class="badge bg-success text-decoration-none ms-1"
+         class="badge bg-success text-decoration-none"
          title="Last scanned: {{ last_scan_at[:16].replace('T',' ') }} UTC">
         &#x2713; Scanned
       </a>
     {% else %}
       <a href="/pipeline?account={{ selected_account }}"
-         class="badge bg-secondary text-decoration-none ms-1">
+         class="badge bg-secondary text-decoration-none">
         Not scanned
       </a>
     {% endif %}
-  </form>
-  {% endif %}
+  </div>
 {% endblock %}
 
 {% block content %}

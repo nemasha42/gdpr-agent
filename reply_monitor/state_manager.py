@@ -32,13 +32,14 @@ _STATUS_PRIORITY: dict[str, int] = {
 # Tags that indicate a terminal / resolved state
 _TERMINAL_TAGS = frozenset({
     "DATA_PROVIDED_LINK", "DATA_PROVIDED_ATTACHMENT", "DATA_PROVIDED_PORTAL",
-    "FULFILLED_DELETION", "REQUEST_DENIED", "NO_DATA_HELD", "NOT_GDPR_APPLICABLE",
+    "DATA_PROVIDED_INLINE", "FULFILLED_DELETION",
+    "REQUEST_DENIED", "NO_DATA_HELD", "NOT_GDPR_APPLICABLE",
 })
 
 # Tags that require user action
 _ACTION_TAGS = frozenset({
     "CONFIRMATION_REQUIRED", "IDENTITY_REQUIRED", "MORE_INFO_REQUIRED",
-    "WRONG_CHANNEL", "HUMAN_REVIEW",
+    "WRONG_CHANNEL", "HUMAN_REVIEW", "PORTAL_VERIFICATION",
 })
 
 # Tags that count as acknowledged (but not action required)
@@ -94,6 +95,35 @@ def save_state(
 
     existing[key] = {domain: state.to_dict() for domain, state in states.items()}
     path.write_text(json.dumps(existing, indent=2))
+
+
+def save_portal_submission(
+    account_email: str,
+    domain: str,
+    *,
+    status: str,
+    portal_url: str = "",
+    confirmation_ref: str = "",
+    error: str = "",
+    data_dir: Path | None = None,
+) -> None:
+    """Record portal submission status on a company's state in reply_state.json.
+
+    status: "submitted" | "manual" | "failed"
+    Preserves existing gmail_thread_id so monitor continues tracking email replies.
+    """
+    states = load_state(account_email, data_dir=data_dir)
+    state = states.get(domain)
+    if not state:
+        return
+    state.portal_submission = {
+        "status": status,
+        "submitted_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "portal_url": portal_url,
+        "confirmation_ref": confirmation_ref,
+        "error": error,
+    }
+    save_state(account_email, states, data_dir=data_dir)
 
 
 def update_state(state: CompanyState, new_replies: list[ReplyRecord]) -> CompanyState:
@@ -165,22 +195,34 @@ def compute_status(state: CompanyState) -> str:
     except (ValueError, AttributeError):
         pass
 
+    # Terminal tags (data provided, denied, etc.) override unresolved actions.
+    # If the company already fulfilled the request, stale action items are moot.
+    if tags_seen & _TERMINAL_TAGS:
+        if {"REQUEST_DENIED", "NO_DATA_HELD", "NOT_GDPR_APPLICABLE"} & tags_seen:
+            return "DENIED"
+        return "COMPLETED"
+
     action_replies = [
         r for r in state.replies
         if "NON_GDPR" not in r.tags and "YOUR_REPLY" not in r.tags
         and bool(set(r.tags) & _ACTION_TAGS)
     ]
     if action_replies:
-        if all(r.reply_review_status == "sent" for r in action_replies):
+        # Check if all action replies are resolved (sent, dismissed, or YOUR_REPLY postdates them)
+        all_resolved = all(
+            r.reply_review_status in ("sent", "dismissed") for r in action_replies
+        )
+        if not all_resolved:
+            # Check if a YOUR_REPLY exists that postdates the latest action reply
+            latest_action_at = max(r.received_at for r in action_replies)
+            your_replies = [
+                r for r in state.replies if "YOUR_REPLY" in r.tags
+            ]
+            if your_replies and max(r.received_at for r in your_replies) > latest_action_at:
+                all_resolved = True
+        if all_resolved:
             return "USER_REPLIED"
         return "ACTION_REQUIRED"
-
-    if {"REQUEST_DENIED", "NO_DATA_HELD", "NOT_GDPR_APPLICABLE"} & tags_seen:
-        return "DENIED"
-
-    if {"DATA_PROVIDED_LINK", "DATA_PROVIDED_ATTACHMENT",
-            "DATA_PROVIDED_PORTAL", "FULFILLED_DELETION"} & tags_seen:
-        return "COMPLETED"
 
     if "EXTENDED" in tags_seen:
         return "EXTENDED"
