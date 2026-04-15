@@ -41,6 +41,8 @@ COMPANY_STATUSES = [
     "COMPLETED",
     "DENIED",
     "OVERDUE",
+    "PORTAL_SUBMITTED",
+    "PORTAL_VERIFICATION",
 ]
 
 # Derived company-level (two-stream) statuses (computed, never stored)
@@ -199,6 +201,13 @@ class CompanyState:
     past_attempts: list[dict] = field(default_factory=list)
     # Set True when all address retry attempts are exhausted (no more addresses to try)
     address_exhausted: bool = False
+    # Portal submission tracking
+    portal_status: str = ""            # "submitted" | "awaiting_verification" | "awaiting_captcha" | "manual" | "failed" | ""
+    portal_verified_at: str = ""       # ISO datetime — when verification was confirmed passed
+    portal_confirmation_ref: str = ""  # reference/ticket number from portal
+    portal_screenshot: str = ""        # path to confirmation screenshot
+    # Status transition log — list of {from, to, at, reason}
+    status_log: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -213,6 +222,11 @@ class CompanyState:
             "last_checked": self.last_checked,
             "past_attempts": self.past_attempts,
             "address_exhausted": self.address_exhausted,
+            "portal_status": self.portal_status,
+            "portal_verified_at": self.portal_verified_at,
+            "portal_confirmation_ref": self.portal_confirmation_ref,
+            "portal_screenshot": self.portal_screenshot,
+            "status_log": self.status_log,
         }
 
     @classmethod
@@ -230,4 +244,9 @@ class CompanyState:
             last_checked=d.get("last_checked", ""),
             past_attempts=d.get("past_attempts", []),
             address_exhausted=d.get("address_exhausted", False),
+            portal_status=d.get("portal_status", ""),
+            portal_verified_at=d.get("portal_verified_at", ""),
+            portal_confirmation_ref=d.get("portal_confirmation_ref", ""),
+            portal_screenshot=d.get("portal_screenshot", ""),
+            status_log=d.get("status_log", []),
         )

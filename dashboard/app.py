@@ -42,7 +42,9 @@ from reply_monitor.state_manager import (
     load_state,
     promote_latest_attempt,
     save_state,
+    set_portal_status,
     status_sort_key,
+    verify_portal,
 )
 
 # ---------------------------------------------------------------------------
@@ -1639,7 +1641,14 @@ def transfers_request_letter(domain: str):
         flash(f"Could not load company record for {domain}.", "danger")
         return redirect(url_for("transfers", account=account))
 
-    letter = compose_subprocessor_request(record)
+    # Fall back to the email used for the SAR if the record has no privacy/dpo email
+    sar_email = ""
+    states = _load_all_states(account)
+    sar_state = states.get(domain)
+    if sar_state:
+        sar_email = sar_state.to_email
+
+    letter = compose_subprocessor_request(record, to_email_override=sar_email)
     if not letter:
         flash(f"No email contact found for {domain}.", "warning")
         return redirect(url_for("transfers", account=account))
@@ -1757,6 +1766,21 @@ def portal_submit(domain: str):
                     portal_confirmation_ref=result.confirmation_ref,
                     portal_screenshot=result.screenshot_path,
                 )
+
+                # Also update CompanyState in reply_state.json
+                try:
+                    states = _load_all_states(account)
+                    state = states.get(domain)
+                    if state:
+                        set_portal_status(
+                            state,
+                            result.portal_status,
+                            confirmation_ref=result.confirmation_ref,
+                            screenshot=result.screenshot_path,
+                        )
+                        save_state(account, states, path=_current_state_path())
+                except Exception:
+                    pass  # tracker is the primary record; state sync is best-effort
         except Exception as exc:
             _portal_tasks[domain] = {"status": "error", "result": str(exc)}
 
@@ -1785,6 +1809,25 @@ def portal_status(domain: str):
         "portal_status": result.portal_status,
         "confirmation_ref": result.confirmation_ref,
         "error": result.error,
+    })
+
+
+@app.route("/portal/verify/<domain>", methods=["POST"])
+def portal_verify(domain: str):
+    """Mark portal verification as passed — restarts 30-day deadline."""
+    account = request.args.get("account", "")
+    states = _load_all_states(account)
+    state = states.get(domain)
+    if not state:
+        return jsonify({"error": "domain not found"}), 404
+
+    verify_portal(state)
+    save_state(account, states, path=_current_state_path())
+    return jsonify({
+        "status": "ok",
+        "portal_status": state.portal_status,
+        "deadline": state.deadline,
+        "portal_verified_at": state.portal_verified_at,
     })
 
 
@@ -2218,7 +2261,13 @@ def _send_all_disclosure_requests(task_id: str, account: str) -> dict:
             skipped += 1
             continue
 
-        letter = compose_subprocessor_request(record)
+        # Fall back to the email used for the SAR
+        sar_email = ""
+        sar_state = states.get(domain)
+        if sar_state:
+            sar_email = sar_state.to_email
+
+        letter = compose_subprocessor_request(record, to_email_override=sar_email)
         if not letter:
             skipped += 1
             continue
