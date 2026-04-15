@@ -77,11 +77,22 @@
         <span class="text-muted small">{{ current_user.name }}</span>
         {% if current_user.is_admin %}
           <a class="text-muted small text-decoration-none" href="{{ url_for('admin.invite') }}">Invite</a>
+    <div class="d-flex align-items-center w-100">
+      <a class="navbar-brand mb-0 me-4" href="/">&#x1F512; GDPR SAR Monitor</a>
+      <div class="d-flex gap-3 align-items-center mx-auto">
+        <a class="text-muted small text-decoration-none {% if active_tab == 'dashboard' %}fw-bold text-dark{% endif %}" href="/">Dashboard</a>
+        <a class="text-muted small text-decoration-none {% if active_tab == 'pipeline' %}fw-bold text-dark{% endif %}" href="/pipeline">Pipeline</a>
+        <a class="text-muted small text-decoration-none {% if active_tab == 'cards' %}fw-bold text-dark{% endif %}" href="/cards">Data Cards</a>
+        <a class="text-muted small text-decoration-none {% if active_tab == 'costs' %}fw-bold text-dark{% endif %}" href="/costs">Costs</a>
+        <a class="text-muted small text-decoration-none {% if active_tab == 'transfers' %}fw-bold text-dark{% endif %}" href="/transfers">Transfers</a>
+      </div>
+      <div class="d-flex gap-2 align-items-center ms-auto">
+        {% block nav_extra %}{% endblock %}
+        {% if current_user.is_authenticated %}
+          <a class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.72rem" href="{{ url_for('auth.logout') }}">Logout</a>
         {% endif %}
-        <a class="text-muted small text-decoration-none" href="{{ url_for('auth.logout') }}">Logout</a>
-      {% endif %}
+      </div>
     </div>
-    {% block nav_extra %}{% endblock %}
   </nav>
   <div class="container-xl">
     {% with messages = get_flashed_messages(with_categories=true) %}

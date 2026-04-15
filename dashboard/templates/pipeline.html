@@ -2,15 +2,15 @@
 {% block title %}Pipeline — GDPR SAR{% endblock %}
 
 {% block nav_extra %}
-<div class="d-flex gap-2 align-items-center ms-3">
+<div class="d-flex gap-1 align-items-center">
   {% for acc in accounts %}
     <a href="/pipeline?account={{ acc }}"
-       class="btn btn-sm {% if acc == account %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+       class="btn btn-sm py-0 px-2 {% if acc == account %}btn-dark{% else %}btn-outline-secondary{% endif %}" style="font-size:0.72rem">
       {{ acc }}
     </a>
   {% endfor %}
-  <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addAccountModal">
-    + Add account
+  <button class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:0.72rem" data-bs-toggle="modal" data-bs-target="#addAccountModal">
+    +
   </button>
 </div>
 {% endblock %}

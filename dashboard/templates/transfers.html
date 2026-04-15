@@ -49,6 +49,37 @@
 </div>
 {% endif %}
 
+{# ── Graph ─────────────────────────────────────────────────────────────── #}
+{% if graph_json %}
+<div class="card mb-3" id="graph-card">
+  <div class="card-body p-0">
+    <div class="d-flex align-items-center justify-content-between px-3 pt-2 pb-1">
+      <div class="d-flex align-items-center gap-3">
+        <h6 class="mb-0 fw-bold">Transfer Graph</h6>
+        <div class="d-flex align-items-center gap-1">
+          <label class="text-muted small mb-0">Layers:</label>
+          <select id="graph-depth-select" class="form-select form-select-sm py-0" style="width:60px;font-size:0.75rem">
+            {% for d in range(1, 7) %}
+            <option value="{{ d }}" {% if d == graph_depth %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <svg id="coverage-donut" width="80" height="80" style="flex-shrink:0"></svg>
+      </div>
+      <div class="d-flex align-items-center gap-1">
+        <button id="graph-zoom-in" class="btn btn-sm btn-outline-secondary py-0 px-1" style="font-size:0.72rem">+</button>
+        <button id="graph-zoom-out" class="btn btn-sm btn-outline-secondary py-0 px-1" style="font-size:0.72rem">−</button>
+        <button id="graph-reset" class="btn btn-sm btn-outline-secondary py-0 px-1" style="font-size:0.72rem">Reset</button>
+      </div>
+    </div>
+    <div style="height:420px;position:relative">
+      <svg id="transfer-graph" width="100%" height="100%"></svg>
+    </div>
+  </div>
+</div>
+<script type="application/json" id="graph-data">{{ graph_json | safe }}</script>
+{% endif %}
+
 {# ── Filter bar ───────────────────────────────────────────────────────────── #}
 <div class="card mb-3">
   <div class="card-body py-2">
@@ -346,5 +377,19 @@ document.addEventListener('click', async function(e) {
     .catch(() => setTimeout(poll, 3000));
 })();
 {% endif %}
+
+// ---------------------------------------------------------------------------
+// Graph depth selector — reload page with new depth parameter
+// ---------------------------------------------------------------------------
+const depthSelect = document.getElementById('graph-depth-select');
+if (depthSelect) {
+  depthSelect.addEventListener('change', function() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('depth', this.value);
+    window.location.href = url.toString();
+  });
+}
 </script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="{{ url_for('static', filename='js/transfer-graph.js') }}"></script>
 {% endblock %}
