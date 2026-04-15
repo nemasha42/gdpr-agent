@@ -17,16 +17,18 @@ _SAR_DEADLINE_DAYS = 30
 # Higher = more urgent
 # ---------------------------------------------------------------------------
 _STATUS_PRIORITY: dict[str, int] = {
-    "OVERDUE":            9,
-    "ACTION_REQUIRED":    8,
-    "ADDRESS_NOT_FOUND":  7,
-    "BOUNCED":            6,
-    "DENIED":             5,
-    "COMPLETED":          4,
-    "EXTENDED":           4,
-    "USER_REPLIED":       3,
-    "ACKNOWLEDGED":       2,
-    "PENDING":            1,
+    "OVERDUE":              9,
+    "ACTION_REQUIRED":      8,
+    "ADDRESS_NOT_FOUND":    7,
+    "BOUNCED":              6,
+    "DENIED":               5,
+    "COMPLETED":            4,
+    "EXTENDED":             4,
+    "USER_REPLIED":         3,
+    "PORTAL_VERIFICATION":  3,
+    "ACKNOWLEDGED":         2,
+    "PORTAL_SUBMITTED":     2,
+    "PENDING":              1,
 }
 
 # Tags that indicate a terminal / resolved state
@@ -230,6 +232,12 @@ def compute_status(state: CompanyState) -> str:
     if tags_seen & _ACK_TAGS:
         return "ACKNOWLEDGED"
 
+    # Portal-specific statuses (more informative than bare PENDING)
+    if state.portal_status == "awaiting_verification":
+        return "PORTAL_VERIFICATION"
+    if state.portal_status in ("submitted", "awaiting_captcha"):
+        return "PORTAL_SUBMITTED"
+
     return "PENDING"
 
 
@@ -263,6 +271,50 @@ def deadline_from_sent(sar_sent_at: str | None) -> str:
         return (date.today() + timedelta(days=_SAR_DEADLINE_DAYS)).isoformat()
 
 
+def log_status_transition(state: CompanyState, old_status: str, new_status: str, reason: str = "") -> None:
+    """Append a status transition entry to the state's log."""
+    if old_status == new_status:
+        return
+    state.status_log.append({
+        "from": old_status,
+        "to": new_status,
+        "at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "reason": reason,
+    })
+
+
+def set_portal_status(
+    state: CompanyState,
+    portal_status: str,
+    *,
+    confirmation_ref: str = "",
+    screenshot: str = "",
+) -> CompanyState:
+    """Update portal_status on a CompanyState and log the transition."""
+    old = compute_status(state)
+    state.portal_status = portal_status
+    if confirmation_ref:
+        state.portal_confirmation_ref = confirmation_ref
+    if screenshot:
+        state.portal_screenshot = screenshot
+    new = compute_status(state)
+    log_status_transition(state, old, new, reason=f"portal_status={portal_status}")
+    return state
+
+
+def verify_portal(state: CompanyState) -> CompanyState:
+    """Mark portal verification as passed: restart deadline from now."""
+    old = compute_status(state)
+    now_str = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    state.portal_verified_at = now_str
+    state.portal_status = "submitted"
+    # Restart 30-day countdown from verification date
+    state.deadline = deadline_from_sent(now_str)
+    new = compute_status(state)
+    log_status_transition(state, old, new, reason="portal_verification_passed")
+    return state
+
+
 def status_sort_key(status: str) -> int:
     """Return numeric priority for sorting — higher means more urgent."""
     return _STATUS_PRIORITY.get(status, 0)
@@ -274,7 +326,7 @@ def status_sort_key(status: str) -> int:
 
 _SAR_TERMINAL = frozenset({"COMPLETED", "DENIED"})
 _STALLED      = frozenset({"BOUNCED", "ADDRESS_NOT_FOUND"})
-_PROGRESS     = frozenset({"ACKNOWLEDGED", "EXTENDED"})
+_PROGRESS     = frozenset({"ACKNOWLEDGED", "EXTENDED", "PORTAL_SUBMITTED", "PORTAL_VERIFICATION"})
 
 _COMPANY_STATUS_PRIORITY: dict[str, int] = {
     "OVERDUE":          8,
@@ -383,6 +435,27 @@ def promote_latest_attempt(
 
     company_name = latest.get("company_name", domain)
 
+    # Preserve portal fields: prefer existing state (may have been updated via
+    # verify_portal), fall back to sent record values.
+    portal_status = ""
+    portal_confirmed_ref = ""
+    portal_screenshot = ""
+    portal_verified_at = ""
+    status_log: list[dict] = []
+    if existing_state:
+        portal_status = existing_state.portal_status
+        portal_confirmed_ref = existing_state.portal_confirmation_ref
+        portal_screenshot = existing_state.portal_screenshot
+        portal_verified_at = existing_state.portal_verified_at
+        status_log = existing_state.status_log
+    # If no existing portal_status, seed from the sent record
+    if not portal_status:
+        portal_status = latest.get("portal_status", "")
+    if not portal_confirmed_ref:
+        portal_confirmed_ref = latest.get("portal_confirmation_ref", "")
+    if not portal_screenshot:
+        portal_screenshot = latest.get("portal_screenshot", "")
+
     return CompanyState(
         domain=domain,
         company_name=company_name,
@@ -394,6 +467,11 @@ def promote_latest_attempt(
         replies=active_replies,
         last_checked=existing_state.last_checked if existing_state else "",
         past_attempts=past_attempts,
+        portal_status=portal_status,
+        portal_confirmation_ref=portal_confirmed_ref,
+        portal_screenshot=portal_screenshot,
+        portal_verified_at=portal_verified_at,
+        status_log=status_log,
     )
 
 

@@ -63,14 +63,23 @@ def compose(record: CompanyRecord, *, user_identity: dict | None = None) -> SARL
 
 
 def compose_subprocessor_request(
-    record: CompanyRecord, *, user_identity: dict | None = None
+    record: CompanyRecord,
+    *,
+    user_identity: dict | None = None,
+    to_email_override: str = "",
 ) -> SARLetter | None:
     """Compose a subprocessor disclosure request letter.
 
-    Returns None if the record has no usable email contact and method is not postal.
+    Args:
+        record: Company record with contact information.
+        user_identity: Optional override for user identity fields.
+        to_email_override: Fallback email when record has no privacy/dpo email
+            (e.g. the address used to send the SAR).
+
+    Returns None if no usable email contact exists and method is not postal.
     """
     identity = _resolve_identity(user_identity)
-    to_email = record.contact.privacy_email or record.contact.dpo_email
+    to_email = record.contact.privacy_email or record.contact.dpo_email or to_email_override
     method = record.contact.preferred_method
 
     if method != "postal" and not to_email:
