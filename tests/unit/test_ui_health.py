@@ -222,3 +222,19 @@ def test_base_html_has_nav_extra_block() -> None:
     """base.html must define the nav_extra block for per-page controls."""
     html = (_TEMPLATES / "base.html").read_text()
     assert "{% block nav_extra %}" in html, "base.html missing nav_extra block"
+
+
+# ── Jinja2 syntax validation ─────────────────────────────────────────────
+
+def test_all_templates_parse_without_syntax_errors() -> None:
+    """Every .html template must be valid Jinja2 — catches unclosed if/for blocks."""
+    from jinja2 import Environment, FileSystemLoader
+
+    env = Environment(loader=FileSystemLoader(str(_TEMPLATES)))
+    errors = []
+    for tpl_path in sorted(_TEMPLATES.glob("*.html")):
+        try:
+            env.get_template(tpl_path.name)
+        except Exception as exc:
+            errors.append(f"{tpl_path.name}: {exc}")
+    assert not errors, "Jinja2 syntax errors:\n" + "\n".join(errors)
