@@ -5,25 +5,16 @@
 {% block nav_extra %}
   {% if accounts %}
   <form class="d-flex gap-2 align-items-center" method="get" action="/">
-    <label class="text-muted small mb-0">Account:</label>
-    <select class="form-select form-select-sm" name="account" onchange="this.form.submit()" style="width:220px">
+    <select class="form-select form-select-sm" name="account" onchange="this.form.submit()" style="width:200px;font-size:0.78rem">
       {% for a in accounts %}
         <option value="{{ a }}" {% if a == selected_account %}selected{% endif %}>{{ a }}</option>
       {% endfor %}
     </select>
-    <a href="/refresh?account={{ selected_account }}" class="btn btn-sm btn-outline-secondary">&#x21bb; Refresh</a>
-    <a href="/cards?account={{ selected_account }}" class="btn btn-sm btn-outline-secondary ms-2">Data Cards</a>
+    <a href="/refresh?account={{ selected_account }}" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.72rem">&#x21bb;</a>
     {% if last_scan_at %}
-      <a href="/pipeline?account={{ selected_account }}"
-         class="badge bg-success text-decoration-none ms-1"
-         title="Last scanned: {{ last_scan_at[:16].replace('T',' ') }} UTC">
-        &#x2713; Scanned
-      </a>
+      <span class="badge bg-success" style="font-size:0.65rem" title="Last scanned: {{ last_scan_at[:16].replace('T',' ') }} UTC">&#x2713;</span>
     {% else %}
-      <a href="/pipeline?account={{ selected_account }}"
-         class="badge bg-secondary text-decoration-none ms-1">
-        Not scanned
-      </a>
+      <a href="/pipeline?account={{ selected_account }}" class="badge bg-secondary text-decoration-none" style="font-size:0.65rem">Not scanned</a>
     {% endif %}
   </form>
   {% endif %}

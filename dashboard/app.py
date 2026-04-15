@@ -1581,6 +1581,14 @@ def transfers():
         })
     rows.sort(key=lambda r: r["company_name"].lower())
 
+    # Build graph data for D3.js visualization
+    import json as _json
+    from dashboard.services.graph_data import build_graph_data
+    max_depth = request.args.get("depth", 4, type=int)
+    max_depth = max(1, min(max_depth, 6))
+    graph = build_graph_data(rows, companies_raw, max_depth=max_depth)
+    graph_json = _json.dumps(graph)
+
     running_task = find_running_task("subprocessors")
     running_request_task = find_running_task("subprocessor_requests")
     return render_template(
@@ -1590,6 +1598,8 @@ def transfers():
         accounts=accounts,
         running_task=running_task,
         running_request_task=running_request_task,
+        graph_json=graph_json,
+        graph_depth=max_depth,
     )
 
 
