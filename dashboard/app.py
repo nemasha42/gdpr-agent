@@ -1426,23 +1426,35 @@ def _reextract_missing_links(account: str) -> int:
 
     states = load_state(account, path=_current_state_path())
     needs_update = False
-    for domain, state in states.items():
-        for reply in state.replies:
-            if "DATA_PROVIDED_LINK" in reply.tags and not reply.extracted.get("data_link"):
-                try:
-                    service, _email = get_gmail_service(email_hint=account, tokens_dir=_current_tokens_dir())
-                    msg = service.users().messages().get(
-                        userId="me",
-                        id=reply.gmail_message_id,
-                        format="full",
-                    ).execute()
-                    body = _extract_body(msg.get("payload", {}))
-                    new_extracted = reextract_data_links(reply.to_dict(), body)
-                    if new_extracted.get("data_link"):
-                        reply.extracted = new_extracted
-                        needs_update = True
-                except Exception as exc:
-                    print(f"[reextract] {domain}/{reply.gmail_message_id}: {exc}")
+
+    # Collect replies that need re-extraction first
+    pending = [
+        (domain, reply)
+        for domain, state in states.items()
+        for reply in state.replies
+        if "DATA_PROVIDED_LINK" in reply.tags and not reply.extracted.get("data_link")
+    ]
+
+    if not pending:
+        return 0
+
+    # Single OAuth call for the entire batch
+    service, _email = get_gmail_service(email_hint=account, tokens_dir=_current_tokens_dir())
+
+    for domain, reply in pending:
+        try:
+            msg = service.users().messages().get(
+                userId="me",
+                id=reply.gmail_message_id,
+                format="full",
+            ).execute()
+            body = _extract_body(msg.get("payload", {}))
+            new_extracted = reextract_data_links(reply.to_dict(), body)
+            if new_extracted.get("data_link"):
+                reply.extracted = new_extracted
+                needs_update = True
+        except Exception as exc:
+            print(f"[reextract] {domain}/{reply.gmail_message_id}: {exc}")
 
     if needs_update:
         save_state(account, states, path=_current_state_path())
