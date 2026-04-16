@@ -34,7 +34,7 @@ def reextract():
             )
         except Exception as exc:
             print(f"[reextract] Error for {account}: {exc}")
-    return redirect(url_for("dashboard", account=account))
+    return redirect(url_for("main.dashboard", account=account))
 
 
 @monitor_bp.route("/refresh")
@@ -87,4 +87,4 @@ def refresh():
             )
         except Exception as exc:
             print(f"[refresh] Re-extract error for {account}: {exc}")
-    return redirect(url_for("dashboard", account=account))
+    return redirect(url_for("main.dashboard", account=account))
