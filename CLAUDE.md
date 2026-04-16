@@ -31,7 +31,7 @@ python dashboard/app.py                                # Flask on :5001
 
 Five-stage pipeline: Scanner → Resolver → Composer/Sender → Monitor → Subprocessors
 
-- **dashboard/app.py is a god module (known tech debt).** Do not add new routes here without discussion.
+- **Dashboard uses an app factory pattern.** `dashboard/__init__.py` contains `create_app()` (Flask setup, LoginManager, auth blueprints, before_request hook). `dashboard/shared.py` contains all shared helpers, constants, and the context processor. `dashboard/app.py` has routes only (~3,038 lines, down from 3,594). Do not add new routes without discussion.
 - All LLM calls go through `contact_resolver/cost_tracker.py` — call `record_llm_call()` AFTER JSON extraction so `found=` reflects the actual result.
 - Portal automation uses Playwright with stealth scripts in `portal_submitter/`.
 - Playwright ≥1.58: `page.accessibility.snapshot()` is removed. Use `page.locator("body").aria_snapshot()`.
@@ -42,13 +42,13 @@ Five-stage pipeline: Scanner → Resolver → Composer/Sender → Monitor → Su
 SP letters must NEVER be written to `sent_letters.json` — use `send_letter(record=False)`. If SP letters leak in, `promote_latest_attempt()` corrupts SAR state (wrong thread_id, lost replies).
 
 ### Always use `_load_all_states(account)`, not `load_state()`
-`_load_all_states()` merges reply_state.json with sent_letters.json via `promote_latest_attempt()`. Using `load_state()` directly undercounts companies.
+`_load_all_states()` (in `dashboard/shared.py`) merges reply_state.json with sent_letters.json via `promote_latest_attempt()`. Using `load_state()` directly undercounts companies.
 
 ### Portal status persistence goes to reply_state.json, NEVER sent_letters.json
 `save_portal_submission()` writes to reply_state.json. Getting this wrong corrupts `promote_latest_attempt()`.
 
 ### `_lookup_company(domain)` does deep-merge
-Merges `data/companies.json` with `data/dataowners_overrides.json`. Override contact fields win when non-empty. Used by company_detail, portal_submit, and mark_portal_submitted routes.
+`_lookup_company()` (in `dashboard/shared.py`) merges `data/companies.json` with `data/dataowners_overrides.json`. Override contact fields win when non-empty. Used by company_detail, portal_submit, and mark_portal_submitted routes.
 
 ### `write_subprocessors()` must create stubs for unknown domains
 Never skip-on-missing. Without stubs, subprocessors silently don't persist for domains only in reply_state.json.
@@ -81,7 +81,7 @@ All tests in `tests/unit/` use DI or `unittest.mock` — no real network calls. 
 
 ## Known Tech Debt
 
-- `dashboard/app.py` — god module, no route test coverage
+- `dashboard/app.py` — still ~3,038 lines of route handlers (blueprint extraction in progress), no route test coverage
 - GitHub API rate limit (60/hour) blocks 500+ company runs — needs `GITHUB_TOKEN`
 - Ketch portal reCAPTCHA v3 — no automated workaround
 

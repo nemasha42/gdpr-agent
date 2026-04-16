@@ -8,11 +8,11 @@
 
 **What it does:** Provides a web UI at `localhost:5001` for reviewing SAR status, viewing reply threads, inspecting data schemas, managing portal submissions, sending subprocessor disclosure requests, and seeing LLM cost history.
 
-**How it works:** `dashboard/app.py` is a Flask application. It reads `reply_state.json`, `sent_letters.json`, `companies.json`, and `cost_log.json` on every request — there is no in-memory state. This makes it safe to run while `monitor.py` is also running, at the cost of disk reads on every page load.
+**How it works:** The dashboard uses an app factory pattern. `dashboard/__init__.py` provides `create_app()` which sets up Flask, LoginManager, auth blueprints, the before_request hook, context processor, and template filter. `dashboard/shared.py` contains all shared helpers, constants, and data-loading functions. `dashboard/app.py` registers all route handlers on the app instance. State files (`reply_state.json`, `sent_letters.json`, `companies.json`, `cost_log.json`) are read on every request — there is no in-memory state. This makes it safe to run while `monitor.py` is also running, at the cost of disk reads on every page load.
 
-**Important:** Always use `_load_all_states(account)` — not `load_state()` — for any route that displays company counts or cards. `_load_all_states()` merges reply_state.json with sent_letters.json via `promote_latest_attempt()` so recently-sent letters appear immediately without waiting for a monitor run. Using `load_state()` directly undercounts by missing companies sent since the last monitor run.
+**Important:** Always use `_load_all_states(account)` (in `dashboard/shared.py`) — not `load_state()` — for any route that displays company counts or cards. `_load_all_states()` merges reply_state.json with sent_letters.json via `promote_latest_attempt()` so recently-sent letters appear immediately without waiting for a monitor run. Using `load_state()` directly undercounts by missing companies sent since the last monitor run.
 
-**`_lookup_company(domain)`** merges `data/companies.json` (handles nested `{"companies": {...}}` structure) with `data/dataowners_overrides.json`. Override contact fields are deep-merged (non-empty values win). Used by `company_detail()` to provide `portal_url` template var and by `portal_submit`/`mark_portal_submitted` routes.
+**`_lookup_company(domain)`** (in `dashboard/shared.py`) merges `data/companies.json` (handles nested `{"companies": {...}}` structure) with `data/dataowners_overrides.json`. Override contact fields are deep-merged (non-empty values win). Used by `company_detail()` to provide `portal_url` template var and by `portal_submit`/`mark_portal_submitted` routes.
 
 ---
 
@@ -78,7 +78,7 @@ Show a "View correspondence" button (no reply count) — styled `btn-outline-pri
 
 ### Snippet display
 
-Raw Gmail snippets often contain encoding artifacts (HTML entities, MIME quoted-printable, URL encoding). `_clean_snippet(text)` in `dashboard/app.py` decodes these at display time — raw data in `reply_state.json` is never modified. Applied in `company_detail()` for SAR replies, past-attempt replies, and SP replies. `_is_human_friendly(text)` is the paired test predicate; it is not called in production routes.
+Raw Gmail snippets often contain encoding artifacts (HTML entities, MIME quoted-printable, URL encoding). `_clean_snippet(text)` in `dashboard/shared.py` decodes these at display time — raw data in `reply_state.json` is never modified. Applied in `company_detail()` for SAR replies, past-attempt replies, and SP replies. `_is_human_friendly(text)` is the paired test predicate; it is not called in production routes.
 
 ### Draft reply guard
 
@@ -92,7 +92,7 @@ When `classifier.py` falls back to Claude Haiku, it also populates `extracted["s
 
 ## Tag Display
 
-`_effective_tags(all_tags)` in app.py applies tier-based supersession for cards:
+`_effective_tags(all_tags)` in `dashboard/shared.py` applies tier-based supersession for cards:
 
 | Tier | Type | Tags |
 |------|------|------|
@@ -128,4 +128,4 @@ Invariant: SP can only escalate; `sp_sent=False` never downgrades. `DATA_RECEIVE
 
 ## Known Limitations
 
-The `/refresh` route blocks the HTTP response during the full monitor run — flagged for future async handling. Port 5001 is hardcoded. There is no authentication (local-only tool).
+The `/refresh` route blocks the HTTP response during the full monitor run — flagged for future async handling. Port 5001 is hardcoded. Authentication is handled by Flask-Login via `dashboard/__init__.py`'s `create_app()` — the before_request hook redirects unauthenticated users to the login page (except for `auth.*` and `static` endpoints).

@@ -1,4 +1,4 @@
-from dashboard.app import _clean_snippet, _dedup_reply_rows, _is_human_friendly
+from dashboard.shared import _clean_snippet, _dedup_reply_rows, _is_human_friendly
 
 MESSY_INPUTS = [
     ("Hello=20World", "Hello World"),  # QP space

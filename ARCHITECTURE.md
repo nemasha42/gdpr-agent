@@ -13,7 +13,7 @@ Under GDPR (and UK GDPR), individuals have the right to obtain a copy of all per
 
 ## 2. System Overview
 
-The pipeline runs in five stages triggered by `run.py`, with a separate monitoring CLI (`monitor.py`) and a Flask dashboard (`dashboard/app.py`) that also drives portal automation and subprocessor disclosure requests.
+The pipeline runs in five stages triggered by `run.py`, with a separate monitoring CLI (`monitor.py`) and a Flask dashboard that also drives portal automation and subprocessor disclosure requests. The dashboard uses an app factory pattern: `dashboard/__init__.py` provides `create_app()` (Flask setup, LoginManager, auth blueprints), `dashboard/shared.py` holds shared helpers and constants, and `dashboard/app.py` registers all route handlers.
 
 ```mermaid
 flowchart TD
@@ -84,7 +84,7 @@ flowchart TD
     SF4 -.writes.-> companies
 
     subgraph Dashboard["Dashboard (read-write)"]
-        W[Flask app.py\nport 5001] --> state
+        W[Flask dashboard\nport 5001] --> state
         W --> sent
         W --> costs
         W --> companies
@@ -107,7 +107,7 @@ Data flows strictly left to right within each run. The resolver writes back to `
 | `letter_engine/` | SAR letter composition (`composer.py`), dispatch + Y/N prompt (`sender.py`), sent-letter logging (`tracker.py`) |
 | `reply_monitor/` | Gmail reply fetcher, 3-pass classifier, state manager (`reply_state.json`), link downloader, schema builder, URL verifier, data models (`models.py`) |
 | `portal_submitter/` | Playwright-based portal automation: form analysis, filling, CAPTCHA relay, OTP handling, platform detection, multi-step navigation |
-| `dashboard/` | Flask app (`app.py`) on port 5001, Jinja2 templates, static JS/CSS, service modules (`services/graph_data.py`, `services/jurisdiction.py`) |
+| `dashboard/` | App factory (`__init__.py`: `create_app()`), shared helpers & constants (`shared.py`), route handlers (`app.py`), Jinja2 templates, static JS/CSS, service modules (`services/graph_data.py`, `services/jurisdiction.py`), auth (`auth_routes.py`, `admin_routes.py`, `user_model.py`) |
 | `auth/` | Gmail OAuth2 with per-account token storage, service cache, call logger |
 | `config/` | `.env` loader via Pydantic (`settings.py`) |
 | `templates/` | SAR email/postal templates, subprocessor disclosure request templates |
@@ -205,7 +205,7 @@ All tests live in `tests/unit/`. There are no integration test directories, no e
 
 Files follow the naming convention `test_{module_name}.py`. Each file corresponds to one source module. Test classes are named `Test{ConceptBeingTested}` (e.g. `TestContactResolver`, `TestNONGDPRPrepass`); individual test functions are named `test_{specific_scenario}`.
 
-As of the last test run: **378 tests pass, 1 skipped** (the Playwright binary test, skipped when the `playwright` package is not installed).
+As of the last test run: **655 tests pass, 1 failed** (the `test_portal_submitter` settings mock — known issue).
 
 ---
 
@@ -233,7 +233,7 @@ As of the last test run: **378 tests pass, 1 skipped** (the Playwright binary te
 | `reply_monitor/link_downloader.py` | `test_link_downloader.py` | Good — DownloadResult, filename parsing, requests path, too-large, 404 expiry; Playwright path skipped if not installed |
 | `reply_monitor/models.py` | Covered indirectly | No dedicated tests |
 | `dashboard/app.py` | `test_dashboard.py` | Partial — routes `/`, `/costs`, `/refresh`, `/company/<domain>` covered; `/data/<domain>`, `/cards`, `/scan/<domain>`, `/download/<domain>`, `/reextract`, `/api/body/<domain>/<id>` untested |
-| `dashboard/app.py` (helpers) | `test_snippet_clean.py` | Good — `_clean_snippet()` HTML entity/MIME/URL decoding, `_is_human_friendly()` predicate |
+| `dashboard/shared.py` (helpers) | `test_snippet_clean.py` | Good — `_clean_snippet()` HTML entity/MIME/URL decoding, `_is_human_friendly()` predicate, `_dedup_reply_rows()` |
 | `dashboard/app.py` (portal routes) | `test_portal_submit_route.py` | Good — portal URL resolution from query param, overrides fallback, rejection when no URL, `save_portal_submission()` persistence lifecycle |
 | `dashboard/` (UI health) | `test_ui_health.py` | Good — verifies required templates, static JS assets, service modules, and template cross-references exist; catches missing files after merges |
 | `portal_submitter/` | `test_portal_submitter.py` | Good — models, platform detection, OTP sender hints, `build_user_data()`, `analyze_form()` with LLM mocking and cache expiration, CAPTCHA detection/relay, `fill_and_submit()` with various field types, OTP extraction, `wait_for_otp()` with mock Gmail, full `submit_portal()` workflow |
@@ -317,7 +317,7 @@ Issues identified during code review (2026-03-16). 29 issues were found and fixe
 | P3 | Dashboard `/refresh` | Blocks the HTTP response during a full monitor run. Should use a background thread or task queue. |
 | P3 | Monitor reply dedup cache | `_llm_cache` in `classifier.py` resets between runs. Identical auto-replies in separate runs each trigger an LLM call. |
 | P2 | `portal_submitter/submitter.py` | Ketch portals always fail reCAPTCHA v3 in headless Playwright — falls back to manual. No known workaround. |
-| P3 | `dashboard/app.py` | Flask routes and template rendering have no test coverage — only pure helper functions tested. |
+| P3 | `dashboard/app.py` | Flask routes and template rendering have no test coverage — only pure helper functions (now in `shared.py`) are tested. Blueprint extraction in progress. |
 | — | `monitor.py` | Zero test coverage for the CLI entry point. |
 
 ---
