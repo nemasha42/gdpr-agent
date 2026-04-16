@@ -2,13 +2,11 @@
 
 import re
 import time
-from typing import Any, Callable
+from typing import Callable
 
 # Patterns for confirmation/verification URLs
 _CONFIRM_URL_RE = re.compile(
-    r"https?://[\w./-]+"
-    r"(?:confirm|verify|validate|activate)"
-    r"[\w./?&=%-]*",
+    r"https?://[\w./-]+" r"(?:confirm|verify|validate|activate)" r"[\w./?&=%-]*",
     re.IGNORECASE,
 )
 
@@ -84,7 +82,6 @@ def _gmail_fetch_recent(
     """Fetch recent Gmail messages matching sender hints. Uses existing OAuth."""
     try:
         from auth.gmail_oauth import get_gmail_service
-        import base64
         from datetime import datetime, timedelta, timezone
 
         service, _ = get_gmail_service(email_hint=scan_email)
@@ -93,23 +90,36 @@ def _gmail_fetch_recent(
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
         query = f"({from_clauses}) after:{int(cutoff.timestamp())}"
 
-        resp = service.users().messages().list(userId="me", q=query, maxResults=5).execute()
+        resp = (
+            service.users()
+            .messages()
+            .list(userId="me", q=query, maxResults=5)
+            .execute()
+        )
         messages = resp.get("messages", [])
 
         results = []
         for msg_ref in messages:
-            msg = service.users().messages().get(
-                userId="me", id=msg_ref["id"], format="full"
-            ).execute()
+            msg = (
+                service.users()
+                .messages()
+                .get(userId="me", id=msg_ref["id"], format="full")
+                .execute()
+            )
 
-            headers = {h["name"].lower(): h["value"] for h in msg.get("payload", {}).get("headers", [])}
+            headers = {
+                h["name"].lower(): h["value"]
+                for h in msg.get("payload", {}).get("headers", [])
+            }
             body = _extract_body(msg.get("payload", {}))
 
-            results.append({
-                "from": headers.get("from", ""),
-                "body": body,
-                "date": headers.get("date", ""),
-            })
+            results.append(
+                {
+                    "from": headers.get("from", ""),
+                    "body": body,
+                    "date": headers.get("date", ""),
+                }
+            )
 
         return results
     except Exception:
@@ -121,7 +131,9 @@ def _extract_body(payload: dict) -> str:
     import base64
 
     if payload.get("mimeType") == "text/plain" and payload.get("body", {}).get("data"):
-        return base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8", errors="replace")
+        return base64.urlsafe_b64decode(payload["body"]["data"]).decode(
+            "utf-8", errors="replace"
+        )
 
     for part in payload.get("parts", []):
         text = _extract_body(part)

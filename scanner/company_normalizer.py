@@ -91,7 +91,7 @@ def _strip_subdomains(domain: str) -> str:
     """Recursively strip known noise subdomain prefixes from *domain*."""
     for prefix in _SUBDOMAIN_PREFIXES:
         if domain.startswith(prefix):
-            return _strip_subdomains(domain[len(prefix):])
+            return _strip_subdomains(domain[len(prefix) :])
     return domain
 
 

@@ -25,12 +25,31 @@ _CONTACT_FIELDS = ("dpo_email", "privacy_email", "gdpr_portal_url")
 
 # Email local parts that are generic helpdesk addresses — NOT acceptable as a
 # GDPR/privacy contact unless the company explicitly directs GDPR requests there.
-_GENERIC_LOCAL_PARTS: frozenset[str] = frozenset({
-    "support", "info", "hello", "contact", "sales", "admin",
-    "help", "team", "noreply", "noreply", "service", "services",
-    "enquiries", "enquiry", "queries", "query", "customerservice",
-    "customersupport", "helpdesk", "billing", "feedback",
-})
+_GENERIC_LOCAL_PARTS: frozenset[str] = frozenset(
+    {
+        "support",
+        "info",
+        "hello",
+        "contact",
+        "sales",
+        "admin",
+        "help",
+        "team",
+        "noreply",
+        "noreply",
+        "service",
+        "services",
+        "enquiries",
+        "enquiry",
+        "queries",
+        "query",
+        "customerservice",
+        "customersupport",
+        "helpdesk",
+        "billing",
+        "feedback",
+    }
+)
 
 # System prompt
 _SYSTEM_PROMPT = """\
@@ -98,7 +117,9 @@ def _extract_with_websearch(
             model=_MODEL,
             max_tokens=_MAX_TOKENS,
             system=_SYSTEM_PROMPT,
-            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 2}],
+            tools=[
+                {"type": "web_search_20250305", "name": "web_search", "max_uses": 2}
+            ],
             messages=[{"role": "user", "content": user_message}],
         )
     except anthropic.APIError:
@@ -167,9 +188,13 @@ def _validate_and_build(data: dict, company_name: str) -> CompanyRecord | None:
     dpo_email = contact_data.get("dpo_email", "").strip()
     privacy_email = contact_data.get("privacy_email", "").strip()
     portal_url = contact_data.get("gdpr_portal_url", "").strip()
-    if (confidence == "medium"
-            and not dpo_email and not portal_url
-            and privacy_email and _is_generic_email(privacy_email)):
+    if (
+        confidence == "medium"
+        and not dpo_email
+        and not portal_url
+        and privacy_email
+        and _is_generic_email(privacy_email)
+    ):
         return None
 
     preferred: str = contact_data.get("preferred_method", "email")

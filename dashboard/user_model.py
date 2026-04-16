@@ -37,8 +37,14 @@ def user_data_dir(email: str, *, root: Path = _USER_DATA_ROOT) -> Path:
 
 
 class User(UserMixin):
-    def __init__(self, email: str, name: str, role: str = "user",
-                 *, data_root: Path = _USER_DATA_ROOT):
+    def __init__(
+        self,
+        email: str,
+        name: str,
+        role: str = "user",
+        *,
+        data_root: Path = _USER_DATA_ROOT,
+    ):
         self.email = email
         self.name = name
         self.role = role
@@ -70,14 +76,16 @@ def load_users(*, path: Path = _USERS_PATH) -> dict:
     return _read_users_file(path)
 
 
-def load_user(email: str, *, path: Path = _USERS_PATH,
-              data_root: Path = _USER_DATA_ROOT) -> User | None:
+def load_user(
+    email: str, *, path: Path = _USERS_PATH, data_root: Path = _USER_DATA_ROOT
+) -> User | None:
     data = _read_users_file(path)
     if email not in data:
         return None
     rec = data[email]
-    return User(email=email, name=rec["name"], role=rec.get("role", "user"),
-                data_root=data_root)
+    return User(
+        email=email, name=rec["name"], role=rec.get("role", "user"), data_root=data_root
+    )
 
 
 def save_user(user: User, *, path: Path = _USERS_PATH) -> None:

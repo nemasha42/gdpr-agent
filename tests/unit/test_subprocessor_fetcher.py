@@ -21,7 +21,10 @@ from contact_resolver.models import SubprocessorRecord
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
 
-def _make_response(text: str, input_tokens: int = 500, output_tokens: int = 200) -> MagicMock:
+
+def _make_response(
+    text: str, input_tokens: int = 500, output_tokens: int = 200
+) -> MagicMock:
     block = MagicMock()
     block.text = text
     response = MagicMock()
@@ -53,8 +56,10 @@ _VALID_PAYLOAD = {
 # _extract_json
 # ---------------------------------------------------------------------------
 
+
 def test_extract_json_plain():
     import json
+
     text = json.dumps(_VALID_PAYLOAD)
     result = _extract_json(text)
     assert result is not None
@@ -63,6 +68,7 @@ def test_extract_json_plain():
 
 def test_extract_json_fenced():
     import json
+
     text = f"```json\n{json.dumps(_VALID_PAYLOAD)}\n```"
     result = _extract_json(text)
     assert result is not None
@@ -76,8 +82,11 @@ def test_extract_json_no_json():
 # _build_record
 # ---------------------------------------------------------------------------
 
+
 def test_build_record_valid():
-    record = _build_record(_VALID_PAYLOAD, "example.com", "https://example.com/sub-processors")
+    record = _build_record(
+        _VALID_PAYLOAD, "example.com", "https://example.com/sub-processors"
+    )
     assert record.fetch_status == "ok"
     assert len(record.subprocessors) == 1
     sp = record.subprocessors[0]
@@ -87,10 +96,12 @@ def test_build_record_valid():
 
 def test_build_record_self_referential_excluded():
     data = {
-        "subprocessors": [{
-            "domain": "example.com",
-            "company_name": "Example",
-        }],
+        "subprocessors": [
+            {
+                "domain": "example.com",
+                "company_name": "Example",
+            }
+        ],
         "source_url": "",
     }
     record = _build_record(data, "example.com", "")
@@ -111,6 +122,7 @@ def test_build_record_none():
 # ---------------------------------------------------------------------------
 # is_stale
 # ---------------------------------------------------------------------------
+
 
 def test_is_stale_fresh():
     now = datetime.now(timezone.utc).isoformat()
@@ -140,6 +152,7 @@ def test_is_stale_empty_fetched_at():
 # fetch_subprocessors (mocked Anthropic)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def reset_cost_tracker():
     cost_tracker.reset()
@@ -149,10 +162,12 @@ def reset_cost_tracker():
 
 def test_fetch_subprocessors_success():
     import json
+
     mock_response = _make_response(json.dumps(_VALID_PAYLOAD))
 
-    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, \
-         patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
+    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, patch(
+        "contact_resolver.subprocessor_fetcher.anthropic.Anthropic"
+    ) as MockClient:
         mock_get.return_value.status_code = 404
         instance = MockClient.return_value
         instance.messages.create.return_value = mock_response
@@ -180,8 +195,10 @@ def test_fetch_subprocessors_no_api_key():
 
 def test_fetch_subprocessors_api_error():
     import anthropic
-    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, \
-         patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
+
+    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, patch(
+        "contact_resolver.subprocessor_fetcher.anthropic.Anthropic"
+    ) as MockClient:
         mock_get.return_value.status_code = 404
         instance = MockClient.return_value
         instance.messages.create.side_effect = anthropic.APIError(
@@ -203,7 +220,9 @@ _JS_SHELL_HTML = (
     "<meta name='viewport' content='width=device-width'>"
     "</head><body><div id='root'></div></body></html>"
 )
-_REAL_PAGE_TEXT = "A" * (_MIN_PLAIN_TEXT + 100)  # enough plain text to pass the threshold
+_REAL_PAGE_TEXT = "A" * (
+    _MIN_PLAIN_TEXT + 100
+)  # enough plain text to pass the threshold
 
 
 def test_js_shell_not_passed_to_llm():
@@ -217,12 +236,14 @@ def test_js_shell_not_passed_to_llm():
         captured_messages.append(kwargs.get("messages", []))
         return mock_response
 
-    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, \
-         patch("contact_resolver.subprocessor_fetcher._fetch_page_playwright", return_value=""), \
-         patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
+    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, patch(
+        "contact_resolver.subprocessor_fetcher._fetch_page_playwright", return_value=""
+    ), patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.text = _JS_SHELL_HTML  # JS shell — plain text after strip < _MIN_PLAIN_TEXT
+        mock_resp.text = (
+            _JS_SHELL_HTML  # JS shell — plain text after strip < _MIN_PLAIN_TEXT
+        )
         mock_get.return_value = mock_resp
         MockClient.return_value.messages.create.side_effect = _capture_create
 
@@ -246,8 +267,9 @@ def test_real_page_text_passed_to_llm():
         captured_messages.append(kwargs.get("messages", []))
         return mock_response
 
-    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, \
-         patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
+    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, patch(
+        "contact_resolver.subprocessor_fetcher.anthropic.Anthropic"
+    ) as MockClient:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         # Real page: strip_html of plain text returns the text unchanged (no tags)
@@ -273,9 +295,10 @@ def test_playwright_fallback_called_when_requests_returns_shell():
         playwright_calls.append(url)
         return ""  # also returns nothing (Playwright not installed in test env)
 
-    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, \
-         patch("contact_resolver.subprocessor_fetcher._fetch_page_playwright", side_effect=_fake_playwright), \
-         patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
+    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, patch(
+        "contact_resolver.subprocessor_fetcher._fetch_page_playwright",
+        side_effect=_fake_playwright,
+    ), patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = _JS_SHELL_HTML
@@ -298,9 +321,10 @@ def test_playwright_fallback_not_called_when_requests_succeeds():
         playwright_calls.append(url)
         return ""
 
-    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, \
-         patch("contact_resolver.subprocessor_fetcher._fetch_page_playwright", side_effect=_fake_playwright), \
-         patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
+    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, patch(
+        "contact_resolver.subprocessor_fetcher._fetch_page_playwright",
+        side_effect=_fake_playwright,
+    ), patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = _REAL_PAGE_TEXT
@@ -331,9 +355,9 @@ def test_llm_message_uses_search_queries_not_url_fetch():
         captured_messages.append(kwargs.get("messages", []))
         return mock_response
 
-    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, \
-         patch("contact_resolver.subprocessor_fetcher._fetch_page_playwright", return_value=""), \
-         patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
+    with patch("contact_resolver.subprocessor_fetcher.requests.get") as mock_get, patch(
+        "contact_resolver.subprocessor_fetcher._fetch_page_playwright", return_value=""
+    ), patch("contact_resolver.subprocessor_fetcher.anthropic.Anthropic") as MockClient:
         mock_get.return_value.status_code = 404
         MockClient.return_value.messages.create.side_effect = _capture_create
 

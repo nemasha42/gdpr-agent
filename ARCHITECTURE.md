@@ -13,7 +13,7 @@ Under GDPR (and UK GDPR), individuals have the right to obtain a copy of all per
 
 ## 2. System Overview
 
-The pipeline runs in four sequential stages triggered by `run.py`, with a separate monitoring CLI (`monitor.py`) and a read-mostly Flask dashboard (`dashboard/app.py`).
+The pipeline runs in five stages triggered by `run.py`, with a separate monitoring CLI (`monitor.py`) and a Flask dashboard (`dashboard/app.py`) that also drives portal automation and subprocessor disclosure requests.
 
 ```mermaid
 flowchart TD
@@ -36,12 +36,16 @@ flowchart TD
         I -->|miss| Z6[return None\nskip company]
     end
 
-    subgraph Stage3["Stage 3 — Letter Engine"]
+    subgraph Stage3["Stage 3 — Letter Engine + Portal Automation"]
         J[composer.py\nfill template] --> K[sender.py\npreview + Y/N prompt]
         K -->|email| L[Gmail API send\nrecord thread_id]
-        K -->|portal| M[print portal URL\nmanual action]
+        K -->|portal| PA[portal_submitter/\nPlaywright automation]
         K -->|postal| N[print instructions\nmanual action]
         L --> O[tracker.py\nsent_letters.json]
+        PA -->|success| O
+        PA -->|captcha/fail| PM[manual instructions]
+        J2[compose_subprocessor_request] --> K2[sender.py\nrecord=False]
+        K2 --> SP_LOG[subprocessor_requests.json]
     end
 
     subgraph Stage4["Stage 4 — Monitor"]
@@ -51,6 +55,15 @@ flowchart TD
         S --> T{DATA_PROVIDED_LINK?}
         T -->|yes| U[link_downloader.py\nPlaywright + schema_builder.py LLM]
         T -->|attachment| V[attachment_handler.py]
+        R --> UV{portal URL?}
+        UV -->|yes| UVV[url_verifier.py\nclassify + auto-submit]
+    end
+
+    subgraph Stage5["Stage 5 — Subprocessors"]
+        SF[subprocessor_fetcher.py] --> SF1[scrape known paths]
+        SF1 -->|miss| SF2[Playwright fallback]
+        SF2 -->|miss| SF3[Claude Haiku + web_search]
+        SF1 & SF2 & SF3 --> SF4[write_subprocessors\ncompanies.json]
     end
 
     subgraph Persist["Persistent State"]
@@ -58,6 +71,7 @@ flowchart TD
         sent[(sent_letters.json\nuser_data/)]
         state[(reply_state.json\nuser_data/)]
         costs[(cost_log.json\nuser_data/)]
+        sp_req[(subprocessor_requests.json\nuser_data/)]
     end
 
     C --> D
@@ -66,12 +80,17 @@ flowchart TD
     S --> state
     E -.reads/writes.-> companies
     I -.writes cost.-> costs
+    K2 --> sp_req
+    SF4 -.writes.-> companies
 
-    subgraph Dashboard["Dashboard (read-only)"]
+    subgraph Dashboard["Dashboard (read-write)"]
         W[Flask app.py\nport 5001] --> state
         W --> sent
         W --> costs
         W --> companies
+        W -->|portal submit| PA
+        W -->|SP disclosure| J2
+        W -->|refresh| P
     end
 ```
 
@@ -129,7 +148,33 @@ The `--dry-run` flag skips actual dispatch but still records the user's `y` deci
 
 **Key assumptions:** The user reviews each letter before sending. There is no batch-send or auto-send mode (the pipeline is explicitly interactive). Portal and postal letters cannot be tracked for replies because no Gmail thread ID is generated.
 
-**Known limitations:** Portal and postal letters enter the monitoring system with an empty `gmail_thread_id`, which means the monitor cannot poll for replies. These companies will stay in `PENDING` status indefinitely. The Y/N prompt makes fully automated runs impossible — this is intentional but limits large-scale use.
+**Known limitations:** Portal and postal letters enter the monitoring system with an empty `gmail_thread_id`, which means the monitor cannot poll for replies. These companies will stay in `PENDING` status indefinitely unless portal automation succeeds. The Y/N prompt makes fully automated runs impossible — this is intentional but limits large-scale use.
+
+#### Portal Automation (`portal_submitter/`)
+
+Automates SAR submission via GDPR web portals using Playwright with stealth scripts. Seven modules:
+
+- **`submitter.py`** — Entry point: `submit_portal(letter, scan_email)`. Detects platform, analyzes form, fills & submits, handles CAPTCHA/OTP, captures screenshots to `user_data/portal_screenshots/`, extracts confirmation references. Falls back to manual instructions on failure.
+- **`models.py`** — `PortalResult` (success, needs_manual, confirmation_ref, screenshot_path, error, portal_status) and `CaptchaChallenge` (domain, portal_url, created_at, status, solution, screenshot_path).
+- **`form_analyzer.py`** — LLM-powered (Claude Haiku) form field analysis. Extracts form fields via `page.locator("body").aria_snapshot()` (Playwright text-format API, replaces deprecated `page.accessibility.snapshot()`), parses with `_extract_elements_from_aria_snapshot()` regex, calls LLM to map user data to fields. Results cached in `CompanyRecord.portal_field_mapping` with 90-day TTL (`cached_at` checked before re-analyzing). Cost tracked via `cost_tracker`.
+- **`form_filler.py`** — Playwright automation: fills textbox/combobox/checkbox fields, clicks submit. `detect_captcha_type(page)` returns `"interactive"`, `"invisible_v3"`, or `"none"` — invisible reCAPTCHA v3 (`.grecaptcha-badge`) is distinguished from interactive CAPTCHAs. Injects stealth JavaScript to bypass automation detection.
+- **`captcha_relay.py`** — Bridges CAPTCHA challenges to the dashboard for manual solving. Saves screenshot + challenge JSON to `user_data/captcha_pending/{domain}.png|.json`. Polls for user solution with 5-minute timeout (2-second intervals). Files cleaned on solution or timeout.
+- **`otp_handler.py`** — Handles email verification steps during portal submission. `wait_for_otp()` polls Gmail for verification emails from platform-specific senders. `extract_otp_from_message()` extracts confirmation URLs (preferred) or 6-digit codes. 2-minute timeout.
+- **`portal_navigator.py`** — Multi-step portal navigation. `navigate_to_form(page, platform, api_key=)` dismisses cookie banners first, then uses platform-specific hint patterns (free, fast) then LLM-guided fallback (Claude Haiku, max 3 steps via `aria_snapshot()`). Called by `submitter.py` when landing page has no form fields. Hint patterns in `_NAVIGATION_HINTS` dict, extensible per platform. `page_has_form(page)` checks for *visible* input/textarea/select (iterates `.all()` + `.is_visible()` to exclude hidden cookie/tracking inputs). Click helpers include `"tab"` role and force-click fallback for overlay-intercepted elements.
+- **`platform_hints.py`** — Detects portal platform: `onetrust`, `trustarc`, `ketch`, `salesforce`, `login_required` (Google, Apple, Meta, Amazon, Facebook, Twitter/X), `unknown`. `detect_platform(url, html="")` checks URL patterns first, then HTML signatures for branded domains (e.g. zendesk.es → ketch via `_KETCH_HTML_SIGNATURES`). `otp_sender_hints()` returns expected verification email senders per platform.
+
+**Portal-specific constraints:**
+- Ketch portals (Zendesk) use reCAPTCHA v3 invisible — headless Playwright always fails the score check. `submitter.py` detects this (`"bot-like behavior"` text after submit) and returns `needs_manual=True`. The headless browser session is destroyed after the attempt, so the form cannot be "pre-filled" for the user.
+- Login-required portals (Google, Apple, Meta, Amazon, Facebook, Twitter/X) are detected by `platform_hints.py` and fall back to manual instructions.
+- `Playwright ≥1.58`: `page.accessibility.snapshot()` is removed. Use `page.locator("body").aria_snapshot()` which returns a text-format accessibility tree (not JSON).
+
+#### Subprocessor Disclosure Request Path
+
+A parallel composition path for subprocessor disclosure letters: `compose_subprocessor_request(record, *, to_email_override="") → SARLetter | None` uses `templates/subprocessor_request_email.txt` / `subprocessor_request_postal.txt` (cites CJEU C-154/21 and EDPB Opinion 22/2024, requests AI providers, data brokers, advertising platforms by name). Logged to `user_data/subprocessor_requests.json` via `record_subprocessor_request(letter, domain)`.
+
+`to_email_override` is a fallback email (typically the SAR `to_email`) used when the record has no privacy/dpo email — the dashboard passes `sar_state.to_email` so disclosure requests can be sent even when only a generic contact address is known. Returns `None` if no usable email contact exists and method is not postal.
+
+**Critical invariant:** `send_letter(record=False)` must be used for all SP disclosure request sends. SP letters are tracked in `subprocessor_requests.json`, never `sent_letters.json`. If SP letters leak into `sent_letters.json`, `promote_latest_attempt()` will corrupt SAR state (wrong thread_id, lost replies).
 
 ---
 
@@ -139,7 +184,7 @@ The `--dry-run` flag skips actual dispatch but still records the user's `y` deci
 
 **How it works:** `monitor.py` is the CLI entry point. It loads `sent_letters.json` to get the list of sent SARs (including their Gmail thread IDs), then for each SAR calls `fetcher.fetch_replies_for_sar()`.
 
-`fetcher.py` uses the Gmail thread ID when available — it fetches all messages in the thread and filters out the user's own outgoing message by comparing the `From` header to the authenticated user's email. When no thread ID is available (portal/postal letters), it falls back to two Gmail search queries: one for exact sender address match and one for domain match. Messages are deduplicated against already-seen message IDs.
+`fetcher.py` uses the Gmail thread ID when available — it fetches all messages in the thread and filters out the user's own outgoing message by comparing the `From` header to the authenticated user's email. When no thread ID is available (portal/postal letters), it falls back to two Gmail search queries: one for exact sender address match and one for domain match. Messages are deduplicated against already-seen message IDs. Skips only the first message (the original sent letter); subsequent outgoing messages (user's manual Gmail replies) are returned with `from_self=True`. `monitor.py` converts `from_self` messages into `ReplyRecord` with `tags=["YOUR_REPLY"]` without LLM classification. `YOUR_REPLY` is excluded from status computation in `state_manager.py` and from company reply counts on dashboard cards — it is display-only.
 
 Each new message is passed to `classifier.classify()`, which applies a three-pass strategy:
 
@@ -147,19 +192,33 @@ Each new message is passed to `classifier.classify()`, which applies a three-pas
 
 - **Pass 1 (regex):** 18 compiled patterns match against the `from`, `subject`, and `snippet` fields to produce tags. Multiple tags can fire on a single message. If `BOUNCE_PERMANENT` and `BOUNCE_TEMPORARY` both fire, only `BOUNCE_TEMPORARY` is kept (the 4xx transient signal overrides the 5xx permanent one). If the message has an attachment and no `DATA_PROVIDED_LINK` tag fired, `DATA_PROVIDED_ATTACHMENT` is added.
 
-- **Body-level pass:** After Pass 1, the full decoded message body is scanned for two additional patterns that are commonly absent from snippets. `_RE_BODY_WRONG_CHANNEL` detects **self-service deflection** responses — where the company tells the user to manage their own data via an account portal rather than delivering it directly. `_RE_BODY_WRONG_CHANNEL` is intentionally conservative (requires specific deflection phrases such as "available to you through our tools" or "sign in to your account to manage your data") to avoid false positives on bodies that merely contain account links.
+- **Body-level pass:** After Pass 1, the full decoded message body is scanned for additional patterns that are commonly absent from snippets. `_RE_BODY_WRONG_CHANNEL` detects **self-service deflection** responses — where the company tells the user to manage their own data via an account portal rather than delivering it directly. `_RE_BODY_WRONG_CHANNEL` is intentionally conservative (requires specific deflection phrases such as "available to you through our tools" or "sign in to your account to manage your data") to avoid false positives on bodies that merely contain account links. `_RE_BODY_INLINE_DATA` detects structured personal data provided directly in the email body, replacing false `DATA_PROVIDED_ATTACHMENT` tags that fire on CID inline images. `_RE_ZENDESK_ATTACHMENT_A/B` patterns detect Zendesk-format linked attachments (`filename.zip\nURL` and `Attachment(s): filename.zip - URL`). Closure detection patterns (Zendesk "set to Solved", premature ticket closure) are included with a post-pass guard that suppresses WRONG_CHANNEL when a terminal data tag is already present.
 
 - **URL extraction:** `_extract()` searches the full body for download links using a four-pass strategy: (A) Zendesk/support-platform expanded format — `filename.zip\nURL` on separate lines, which correctly handles multi-file deliveries without URL concatenation; (B) generic download URL patterns (token URLs, path-based `/download/` or `/export/` segments, token query params); (C) Zendesk compact inline format — `Attachment(s): filename.zip - URL`; (D) any URL within 400 chars of data/export/download keywords. All matching URLs are collected into `data_links` (list) in addition to `data_link` (first URL, kept for backward compatibility). Unicode smart quotes and HTML artefacts are stripped from all extracted URLs.
 
 - **Link-first promotion:** Handles **notification-shell emails** — where the body is a brief "your export is ready" message containing a download URL, but the subject and snippet contain no recognisable data-delivery keywords. After extraction, if `data_link` is populated, `_is_data_url()` validates that the URL points to a data file (requires a downloadable extension, a `/download/`-style path, or a token query param) before tagging `DATA_PROVIDED_LINK`. This guard prevents generic account or privacy-policy URLs from triggering false positives.
 
+- **Junk URL filter:** `_RE_JUNK_URL` + `_is_junk_url()` filters Zendesk ticket URLs, survey URLs, help center paths (`/requests/`, `/support/tickets/`, `/help/`), and vendor/sub-processor pages from all extraction passes. Prevents false positives on `data_link` and `portal_url`.
+
+- **`extracted` field schema** (all keys always present, empty/null if not found): `reference_number` (ticket/case ref), `confirmation_url` (URL to confirm request), `data_link` (first export URL, backward compat), `data_links` (all export URLs), `portal_url` (self-service portal), `deadline_extension_days` (integer or null), `summary` (plain-English ≤15-word sentence — LLM path only, empty string on regex path).
+
+- **`extracted` field reliability:** `data_link` and `portal_url` can contain false positives — e.g. a privacy policy URL misclassified as a data export link, or multiple URLs concatenated. Templates gate link display on reply tags (see Dashboard UI Components section). Do not trust `extracted` URLs without checking the reply's tags.
+
 - **Pass 2 (LLM fallback):** Only triggers if the regex produced no tags, or produced only `AUTO_ACKNOWLEDGE`. The LLM prompt now includes the first 500 chars of the body (not just the snippet) and explicit guidance to tag `DATA_PROVIDED_LINK` when a download URL is present. Results are cached in a module-level `_llm_cache` dict keyed by `(from_addr, subject)` to prevent re-classifying identical auto-replies from the same company. The cache is in-memory only and resets between runs.
 
 After classification, `attachment_handler.py` downloads any Gmail attachment parts and catalogs their contents. For ZIP files it recursively lists files and guesses data categories from filenames. For JSON and CSV files it extracts top-level keys and column headers respectively.
 
-`state_manager.py` loads and saves `user_data/reply_state.json`, which is partitioned by account email. It maintains a `CompanyState` for each domain with all accumulated `ReplyRecord` objects. The derived `status` (computed on demand, never stored) follows a strict priority order: `BOUNCED > OVERDUE > ACTION_REQUIRED > DENIED > COMPLETED > EXTENDED > ACKNOWLEDGED > PENDING`. `OVERDUE` fires when today's date exceeds the 30-day GDPR deadline and no terminal tag (data provided, denied, deletion fulfilled) has been seen.
+`state_manager.py` loads and saves `user_data/reply_state.json`, which is partitioned by account email. It maintains a `CompanyState` for each domain with all accumulated `ReplyRecord` objects. The derived `status` (computed on demand, never stored) follows this priority order: `BOUNCED > OVERDUE > ACTION_REQUIRED > DENIED > COMPLETED > EXTENDED > USER_REPLIED > PORTAL_VERIFICATION > PORTAL_SUBMITTED > ADDRESS_NOT_FOUND > ACKNOWLEDGED > PENDING`. `OVERDUE` fires when today's date exceeds the 30-day GDPR deadline and no terminal tag (data provided, denied, deletion fulfilled) has been seen.
 
-For replies tagged `DATA_PROVIDED_LINK`, the monitor iterates the full `data_links` list and attempts to download each linked data package using `link_downloader.py`. Playwright (headless Chromium) is tried first because many data download pages are Cloudflare-protected; if Playwright is not installed, `requests` is used as a fallback. After download, `schema_builder.py` sends file samples to Claude Haiku for LLM-powered schema analysis, producing a structured description of what categories of personal data the export contains.
+**Status resolution rules:** (1) `_TERMINAL_TAGS` (includes `DATA_PROVIDED_INLINE`) are checked BEFORE action tags — if the company already provided data or fulfilled deletion, stale action items are moot; (2) `USER_REPLIED` fires when all action-tagged replies have `reply_review_status` in `("sent", "dismissed")` OR when a `YOUR_REPLY` exists that postdates the latest action-required reply; (3) `ADDRESS_NOT_FOUND` fires when `address_exhausted=True` on the CompanyState; (4) `PORTAL_VERIFICATION` fires when `portal_status == "awaiting_verification"` (no reply yet but portal needs confirmation); (5) `PORTAL_SUBMITTED` fires when `portal_status in ("submitted", "awaiting_captcha")`.
+
+**Portal helpers:** `set_portal_status(state, portal_status, *, confirmation_ref, screenshot)` updates `CompanyState.portal_status` and logs the transition. `verify_portal(state)` marks portal verification as passed, resets `portal_status` to `"submitted"`, and restarts the 30-day deadline from the verification date. `log_status_transition(state, old, new, reason)` appends to `state.status_log`. `save_portal_submission()` persists portal submission state to reply_state.json — **never** to sent_letters.json.
+
+**`promote_latest_attempt()`:** When multiple SAR letters were sent to the same domain (e.g. first address bounced, user retried with a new address), this function ensures the most recent letter is the "active" attempt. Older attempts — along with their replies — are archived into `CompanyState.past_attempts`. Called by `_load_all_states()` on every dashboard load. Portal field preservation: carries forward `portal_status`, `portal_confirmation_ref`, `portal_screenshot`, `portal_verified_at`, `status_log` from the existing `CompanyState` when available — these may have been updated via `verify_portal()` or `set_portal_status()` since the sent record was created. Falls back to the sent record's portal fields only when no existing state exists. `compute_status()` also checks `past_attempts` for terminal tags (DATA_PROVIDED, FULFILLED_DELETION) so a company that received data on a previous attempt retains COMPLETED status.
+
+For replies tagged `DATA_PROVIDED_LINK`, the monitor iterates the full `data_links` list and attempts to download each linked data package using `link_downloader.py`. Playwright (headless Chromium) is tried first because many data download pages are Cloudflare-protected; if Playwright is not installed, `requests` is used as a fallback. After download, `schema_builder.py` sends file samples to Claude Haiku for LLM-powered schema analysis, producing a structured description of what categories of personal data the export contains. `schema_builder` has two entry points: `build_schema(file_path)` for downloaded files (ZIP/JSON/CSV) and `build_schema_from_body(body)` for inline email data (`DATA_PROVIDED_INLINE` replies). Both return `{categories, services, export_meta}` dicts stored as `attachment_catalog` on the reply.
+
+`url_verifier.py` classifies URLs extracted from replies as `gdpr_portal`, `help_center`, `login_required`, `dead_link`, `survey`, or `unknown`. Layered strategy: (1) fast path via `platform_hints.detect_platform()` for login-required and known platforms; (2) URL path heuristics for surveys and help centers; (3) HTTP fetch + HTML inspection for form/submit detection. `verify_if_needed()` uses 7-day TTL caching. Results stored on `ReplyRecord.portal_verification`. When `monitor.py` classifies a WRONG_CHANNEL/CONFIRMATION_REQUIRED/DATA_PROVIDED_PORTAL reply with a portal URL, it runs verification and auto-submits via `portal_submitter` if the URL is a real GDPR portal.
 
 **Key assumptions:** The Gmail thread ID accurately identifies the reply thread. Replies arrive in the same thread as the original SAR email (true for most companies, not true for all). The 30-day deadline is computed from `sar_sent_at` — a company that processes the request in 29 days and 23 hours will not appear as `OVERDUE`.
 
@@ -167,17 +226,111 @@ For replies tagged `DATA_PROVIDED_LINK`, the monitor iterates the full `data_lin
 
 ---
 
+### Stage 5 — Subprocessors
+
+**What it does:** Discovers third-party data processors (subprocessors) for each SAR company by scraping public subprocessor pages and falling back to LLM web search.
+
+**How it works:** `contact_resolver/subprocessor_fetcher.py` implements `fetch_subprocessors(company_name, domain)` returning a `SubprocessorRecord`.
+
+Strategy: (1) Scrape known paths (`/sub-processors`, `/vendors`, etc.) with `requests` for both bare and `www.` domain. (2) `_extract_page_content()` extracts `<table>` elements first (subprocessor pages nearly always use tables), then falls back to a keyword-anchored text window, then full stripped text — a page must yield ≥500 chars of plain text (`_MIN_PLAIN_TEXT`) to be considered non-empty. (3) Playwright fallback for JS-rendered SPAs. (4) Claude Haiku call — `web_search` tool only attached when no scraped content was found (saves output tokens for JSON).
+
+The background task (`_fetch_all_subprocessors`) in `dashboard/app.py` only skips a domain if it has `fetch_status="ok"` within the 30-day TTL — `not_found` and `error` records are always retried.
+
+`write_subprocessors(domain, record)` persists a `SubprocessorRecord` into `data/companies.json`. If the domain has no existing entry it creates a minimal stub (`source="llm_search"`, `source_confidence="low"`) so subprocessors are stored for all SAR domains regardless of whether contact resolution succeeded. Never skip-on-missing — without stubs, subprocessors silently don't persist for domains only in reply_state.json.
+
+**Known limitations:** Subprocessor pages are frequently behind logins or behind JavaScript frameworks that Playwright cannot always render. The 30-day TTL means stale subprocessor data can persist. The `web_search` tool adds cost when scraping fails.
+
+---
+
 ### Dashboard
 
-**What it does:** Provides a read-only web UI at `localhost:5001` for reviewing the status of all sent SARs, viewing reply threads, inspecting downloaded data schemas, and seeing LLM cost history.
+**What it does:** Provides a web UI at `localhost:5001` for reviewing SAR status, viewing reply threads, inspecting data schemas, managing portal submissions, sending subprocessor disclosure requests, and seeing LLM cost history.
 
-**How it works:** `dashboard/app.py` is a standard Flask application. All routes are `GET`-only except `/refresh` (which triggers an inline monitor run) and `/scan/<domain>` (which re-analyzes a locally downloaded file). The app reads `reply_state.json`, `sent_letters.json`, `companies.json`, and `cost_log.json` on every request — there is no in-memory state. This makes it safe to run while `monitor.py` is also running, at the cost of disk reads on every page load.
+**How it works:** `dashboard/app.py` is a Flask application. It reads `reply_state.json`, `sent_letters.json`, `companies.json`, and `cost_log.json` on every request — there is no in-memory state. This makes it safe to run while `monitor.py` is also running, at the cost of disk reads on every page load.
 
-The `/refresh` route runs `_run_monitor_for_account()` inline in the HTTP request handler — meaning the browser will wait for the full monitor run to complete before getting a redirect response. This is a deliberate simplicity trade-off (no task queue, no WebSocket progress updates) that works acceptably when monitoring tens of companies but will time out for large runs.
+**Important:** Always use `_load_all_states(account)` — not `load_state()` — for any route that displays company counts or cards. `_load_all_states()` merges reply_state.json with sent_letters.json via `promote_latest_attempt()` so recently-sent letters appear immediately without waiting for a monitor run. Using `load_state()` directly undercounts by missing companies sent since the last monitor run.
 
-Status cards are built by `_build_card()`, which computes days remaining, progress percentage, action hints, and data-ready indicators from the accumulated reply state. The dashboard surfaces action hints (e.g. "Click the confirmation link", "Submit identity proof") derived from the most recent action-required tag.
+**`_lookup_company(domain)`** merges `data/companies.json` (handles nested `{"companies": {...}}` structure) with `data/dataowners_overrides.json`. Override contact fields are deep-merged (non-empty values win). Used by `company_detail()` to provide `portal_url` template var and by `portal_submit`/`mark_portal_submitted` routes.
 
-**Known limitations:** The `/refresh` route blocks the HTTP response during the full monitor run — a known limitation flagged for future async handling. Port 5001 is hardcoded. There is no authentication (it is a local-only tool).
+#### Route Reference
+
+**Core routes:**
+- `GET /` — all companies dashboard
+- `GET /company/<domain>` — reply thread detail
+- `GET /data/<domain>` — data catalog viewer
+- `GET /cards` — companies with/without data (Data Cards view)
+- `GET /costs` — LLM cost history
+- `GET /transfers` — subprocessor data transfer map + D3.js graph
+- `GET /pipeline` — scan/resolve/send pipeline
+- `GET /pipeline/review` — letter review & approve
+- `GET /pipeline/reauth-send` — re-authorize gmail.send OAuth
+- `POST /refresh` — runs monitor + re-extracts missing links, saves to reply_state.json
+
+**Portal automation routes:**
+- `POST /portal/submit/<domain>?account=EMAIL&portal_url=URL` — starts background portal submission. Accepts `portal_url` query param for WRONG_CHANNEL companies whose `preferred_method` is not "portal"; falls back to resolver then `dataowners_overrides.json`. Returns 409 if already running. Syncs portal status to `CompanyState` via `set_portal_status()`.
+- `GET /portal/status/<domain>` — polls task progress. Returns **flat JSON** with `status`, `success`, `needs_manual`, `portal_status`, `confirmation_ref`, `error` — NOT nested under a `result` key. JS must read `sd.success` not `sd.result.success`.
+- `POST /portal/verify/<domain>` — marks portal verification as passed. Restarts 30-day deadline via `verify_portal()`. Returns JSON with updated `portal_status`, `deadline`, `portal_verified_at`.
+- `POST /company/<domain>/mark-portal-submitted` — manual marking after user fills portal form themselves. Persists `portal_submission.status="submitted"` to reply_state.json.
+- `GET /captcha/<domain>` — displays CAPTCHA screenshot + solution form
+- `POST /captcha/<domain>` — accepts user CAPTCHA solution, resumes portal submission
+
+**Background task routes:**
+- `POST /transfers/fetch` — starts subprocessor fetch task
+- `GET /api/transfers/task` — polls task progress
+- `POST /transfers/request-letter/<domain>` — sends SP disclosure request for one company (falls back to SAR `to_email` when no privacy/dpo email)
+- `POST /transfers/request-all` — background task, sends to all companies with email contact and no prior request, tracked in `subprocessor_requests.json`; also uses SAR email fallback
+
+**Compose routes:**
+- `POST /company/<domain>/compose-reply` — sends SAR follow-up email, creates YOUR_REPLY record, auto-dismisses pending action drafts
+- `POST /company/<domain>/compose-sp-reply` — sends SP follow-up email
+
+#### UI Components
+
+**Navbar** (`base.html`): Centered tab navigation (Dashboard, Pipeline, Data Cards, Costs, Transfers) with `active_tab` highlighting. Account selector and action buttons in `{% block nav_extra %}`. Logout is a small `btn-outline-secondary` button in the right-side control group.
+
+**Transfer Graph** (`/transfers`): D3.js v7 force-directed visualization of subprocessor data flows. `dashboard/services/graph_data.py` builds graph JSON (nodes + edges + stats) from subprocessor rows and company records, with configurable depth (1–6 layers, default 4 via `?depth=N` query param). `dashboard/services/jurisdiction.py` provides GDPR adequacy assessment — classifies countries as EU/EEA, adequate (DPF, bilateral), or third-country for risk coloring. `dashboard/static/js/transfer-graph.js` renders the graph with zoom controls, coverage donut, and depth selector.
+
+**Data Cards** (`cards.html`): Account selector dropdown in `nav_extra`. Cards show a `Wrong channel` warning badge (yellow border + badge) when `is_wrong_channel` is true. Two sections: "With data" and "Without data" with tab navigation.
+
+**Company detail** (`company_detail.html`): Two-panel layout with a `stream_panel()` Jinja2 macro rendering SAR and SP streams independently. `company_detail()` builds `sar_thread` and `sp_thread` as separate event lists (oldest first). `sp_all_msg_ids` (all SP reply IDs including `YOUR_REPLY`) is used to dedup SAR replies — if a message appears in the SP stream, it is excluded from SAR. Thread events have types: `sent` (outgoing letter), `reply` (company message), `your_reply` (user's manual Gmail reply or dashboard-sent follow-up). NON_GDPR replies are hidden entirely from the detail view (not dimmed). Links in reply messages are gated on tags: "Download data" requires `DATA_PROVIDED_*` or `FULFILLED_DELETION`; "Privacy portal" requires `WRONG_CHANNEL`, `DATA_PROVIDED_PORTAL`, `CONFIRMATION_REQUIRED`, or `MORE_INFO_REQUIRED`; "Confirm request" requires `CONFIRMATION_REQUIRED`. Portal URL in template uses `display_portal_url = ex.portal_url or portal_url` where `portal_url` comes from `_lookup_company(domain)`. WRONG_CHANNEL replies with a portal URL show a "Submit SAR via portal" button — `submitViaPortal()` JS shows live step-by-step progress ("Opening portal…", "Filling in your details…") and displays actionable results (success, reCAPTCHA blocked with manual instructions, or failure). A "View received data" button links to `/data/<domain>` on messages with data provision tags or attachments. Each stream panel includes a "Compose follow-up" collapsible form at the bottom of the thread for free-form replies. When `state.portal_submission` exists, a status bar appears above the thread: green for "submitted", blue for "manual needed" (with "Mark as submitted" form), yellow for "failed".
+
+**Dashboard cards:** Show a "View correspondence" button (no reply count) — styled `btn-outline-primary` when the company has at least one non-`NON_GDPR`, non-`YOUR_REPLY` reply, pale `btn-outline-secondary` otherwise. A "View data" button appears when `has_data` is true (status=COMPLETED with a DATA_PROVIDED tag).
+
+**Snippet display:** Raw Gmail snippets often contain encoding artifacts (HTML entities, MIME quoted-printable, URL encoding). `_clean_snippet(text)` in `dashboard/app.py` decodes these at display time — raw data in `reply_state.json` is never modified. Applied in `company_detail()` for SAR replies, past-attempt replies, and SP replies. `_is_human_friendly(text)` is the paired test predicate; it is not called in production routes.
+
+**Draft reply guard:** `has_pending_draft` (used to show the "Draft reply ready" badge on cards) requires three conditions: `reply_review_status == "pending"`, a non-empty `suggested_reply`, **and** at least one tag in `_ACTION_DRAFT_TAGS` (imported from `reply_monitor.classifier`). The tag guard prevents stale `"pending"` state on AUTO_ACKNOWLEDGE or other non-action replies from showing a false-positive badge. `company_detail.html` applies the same guard (`r.has_action_draft`) before rendering the draft form. When a YOUR_REPLY is detected by the monitor, all pending action drafts for that company are auto-dismissed. Both `monitor.py` and the dashboard's inline monitors apply this auto-dismiss logic.
+
+**LLM summary:** When `classifier.py` falls back to Claude Haiku, it also populates `extracted["summary"]` — a ≤15-word plain-English sentence. `company_detail.html` shows this in italic instead of the raw snippet when present. Summary is only set on the LLM path (~10–20% of replies).
+
+**Tag display:** `_effective_tags(all_tags)` in app.py applies tier-based supersession for cards:
+
+| Tier | Type | Tags |
+|------|------|------|
+| 1 | Terminal | DATA_PROVIDED_*, REQUEST_DENIED, NO_DATA_HELD, NOT_GDPR_APPLICABLE, FULFILLED_DELETION |
+| 2 | Action | WRONG_CHANNEL, IDENTITY_REQUIRED, CONFIRMATION_REQUIRED, MORE_INFO_REQUIRED, HUMAN_REVIEW |
+| 3 | Progress | REQUEST_ACCEPTED, IN_PROGRESS, EXTENDED |
+| 4 | Informational | AUTO_ACKNOWLEDGE, BOUNCE_* |
+| — | Always hidden | OUT_OF_OFFICE, NON_GDPR (unless only tag) |
+
+Higher tiers supersede lower — e.g. DATA_PROVIDED hides REQUEST_ACCEPTED; WRONG_CHANNEL hides ACK. `_DISPLAY_NAMES` maps raw constants to user-friendly labels. `HUMAN_REVIEW` is in `_ACTION_TAGS` (state_manager.py) so it triggers ACTION_REQUIRED status.
+
+**Company-Level Status:** `compute_company_status(sar_status, sp_status, sp_sent)` in `state_manager.py` aggregates SAR and SP streams into one company-level badge shown as the primary badge on dashboard cards. 9 values, priority order (highest first):
+
+| Priority | Value | Condition |
+|----------|-------|-----------|
+| 8 | `OVERDUE` | Any stream past GDPR deadline |
+| 7 | `ACTION_REQUIRED` | Any stream needs user action |
+| 6 | `STALLED` | Any stream is BOUNCED or ADDRESS_NOT_FOUND |
+| 5 | `USER_REPLIED` | SAR=USER_REPLIED — user sent follow-up, awaiting company response |
+| 4 | `DATA_RECEIVED` | SAR terminal (COMPLETED/DENIED); SP sent but not yet terminal |
+| 3 | `FULLY_RESOLVED` | SAR terminal + (SP terminal OR SP not sent) |
+| 2 | `IN_PROGRESS` | SAR is ACKNOWLEDGED, EXTENDED, PORTAL_SUBMITTED, or PORTAL_VERIFICATION |
+| 1 | `SP_PENDING` | SAR=PENDING + SP sent + SP=PENDING |
+| 0 | `PENDING` | Default — SAR pending, SP not sent |
+
+Invariant: SP can only escalate; `sp_sent=False` never downgrades. `DATA_RECEIVED` ranks above `FULLY_RESOLVED` in sort urgency because the SP thread is still open. `_COMPANY_STATUS_PRIORITY` dict drives sort order. `COMPANY_LEVEL_STATUSES` list in `models.py` is the canonical list of 9 values.
+
+**Known limitations:** The `/refresh` route blocks the HTTP response during the full monitor run — flagged for future async handling. Port 5001 is hardcoded. There is no authentication (local-only tool).
 
 ---
 
@@ -199,6 +352,7 @@ The public GDPR contact cache. Safe to commit because it contains only publicly 
 - `flags.portal_only` — if true, email is not accepted; letter engine skips email dispatch
 - `request_notes.special_instructions` — free text shown to user before composing letter
 - `request_notes.identity_verification_required` — flag; shown in dashboard action hints
+- `portal_field_mapping` — optional cached `PortalFieldMapping` with `cached_at`, `platform`, `fields: list[PortalFormField]`, `submit_button` — 90-day TTL. Used by `form_analyzer.py` to avoid re-analyzing portal forms.
 
 **What breaks if malformed:** `CompanyRecord.model_validate_json()` is called on load; any schema violation causes the entire DB to be treated as empty (`CompaniesDB()` is returned) and all cached contacts are lost, forcing a fresh resolution run. This is silent — no error is printed.
 
@@ -241,6 +395,14 @@ Per-account, per-domain reply state. Written by `state_manager.save_state()` aft
 - `deadline` — ISO date, 30 days from `sar_sent_at`; computed at state creation
 - `replies` — list of `ReplyRecord` objects in receipt order
 - `last_checked` — ISO datetime of the last monitor poll
+- `past_attempts` — archived older attempts, each with `to_email`, `gmail_thread_id`, `sar_sent_at`, `deadline`, `replies`. Populated by `promote_latest_attempt()` when a retry is detected.
+- `address_exhausted: bool` — all known addresses bounced; triggers `ADDRESS_NOT_FOUND` status
+- `portal_submission: dict | None` — portal submission tracking: `{status, submitted_at, portal_url, confirmation_ref, error}`. Status: `"submitted"` (auto or manual), `"manual"` (needs manual — e.g. reCAPTCHA blocked), `"failed"`. Persisted by `save_portal_submission()`.
+- `portal_status: str` — `""` | `"submitted"` | `"awaiting_verification"` | `"awaiting_captcha"` | `"manual"` | `"failed"`. Drives `PORTAL_SUBMITTED`/`PORTAL_VERIFICATION` SAR statuses. Updated by `set_portal_status()` and `verify_portal()`.
+- `portal_verified_at: str` — ISO datetime when portal verification was confirmed. Set by `verify_portal()`, which also resets `deadline` to 30 days from this date.
+- `portal_confirmation_ref: str` — reference/ticket number returned by the portal.
+- `portal_screenshot: str` — path to confirmation screenshot.
+- `status_log: list[dict]` — status transition audit log, each entry `{from, to, at, reason}`. Appended by `log_status_transition()`.
 
 **Key fields in `ReplyRecord`:**
 - `gmail_message_id` — dedup key; ensures the same message is never processed twice
@@ -250,6 +412,11 @@ Per-account, per-domain reply state. Written by `state_manager.save_state()` aft
 - `extracted` — dict with `reference_number`, `confirmation_url`, `data_link` (first URL, for backward compat), `data_links` (all URLs — multi-file deliveries like Substack send multiple ZIPs), `portal_url`, `deadline_extension_days`
 - `llm_used` — boolean; shown as an indicator in the dashboard
 - `has_attachment` / `attachment_catalog` — attachment metadata if downloaded
+- `suggested_reply: str` — LLM-generated draft follow-up text (empty if not generated)
+- `reply_review_status: str` — `""` (unseen) | `"pending"` (draft ready) | `"sent"` (user replied) | `"dismissed"`
+- `sent_reply_body: str` — actual text the user sent (may differ from `suggested_reply` if edited before sending)
+- `sent_reply_at: str` — ISO 8601 UTC timestamp of when the user sent the follow-up
+- `portal_verification: dict | None` — URL verification result: `{url, classification, checked_at, error, page_title}`. Classification values: `gdpr_portal`, `help_center`, `login_required`, `dead_link`, `survey`, `unknown`. Set by `monitor.py` when a reply has a portal URL and tags include WRONG_CHANNEL, CONFIRMATION_REQUIRED, or DATA_PROVIDED_PORTAL.
 
 **What breaks if malformed:** `json.JSONDecodeError` is caught in both `load_state()` and `save_state()` — a corrupt file causes the account's state to reset to empty, losing all reply history for that account. The monitor will re-fetch and re-classify all messages on the next run (duplicate detection by `gmail_message_id` prevents duplicate entries, but the LLM fallback may be called again for previously-classified messages).
 
@@ -271,6 +438,21 @@ Persistent log of every LLM API call made. Appended to by `cost_tracker._persist
 
 ---
 
+### `user_data/subprocessor_requests.json` (gitignored)
+
+Log of sent subprocessor disclosure request letters. Created by `record_subprocessor_request(letter, domain)`. Same structure as `sent_letters.json` entries but tracked separately. **Must never be mixed with `sent_letters.json`** — see SP letter invariant in Stage 3.
+
+---
+
+### Portal Automation Models (`portal_submitter/models.py`)
+
+Not persisted as standalone files — these are runtime types:
+
+- **`PortalResult`** — returned by `submit_portal()`: `success: bool`, `needs_manual: bool`, `confirmation_ref: str`, `screenshot_path: str`, `error: str`, `portal_status: str`.
+- **`CaptchaChallenge`** — bridges portal submission to dashboard CAPTCHA UI: `domain`, `portal_url`, `created_at`, `status`, `solution`, `screenshot_path`. Files stored in `user_data/captcha_pending/{domain}.png|.json`.
+
+---
+
 ## 5. External Dependencies
 
 ### Gmail API (Google Cloud)
@@ -287,7 +469,7 @@ Persistent log of every LLM API call made. Appended to by `cost_tracker._persist
 
 ### Anthropic API (Claude)
 
-**Used for:** Contact resolution (Step 5, `llm_searcher.py`); reply classification fallback (`classifier.py`); data export schema analysis (`schema_builder.py`). All calls use `claude-haiku-4-5-20251001`.
+**Used for:** Contact resolution (Step 5, `llm_searcher.py`); reply classification fallback (`classifier.py`); data export schema analysis (`schema_builder.py`); portal form analysis (`form_analyzer.py`); portal navigation (`portal_navigator.py`); subprocessor discovery (`subprocessor_fetcher.py`). All calls use `claude-haiku-4-5-20251001`.
 
 **If unavailable:** `llm_searcher.search_company()` returns `None` — the company is skipped. `_llm_classify()` returns `None` — the message gets `["HUMAN_REVIEW"]`. `schema_builder.build_schema()` returns `{}` — no schema is attached to the catalog. In all cases, failure is caught and the pipeline continues.
 
@@ -309,13 +491,13 @@ Persistent log of every LLM API call made. Appended to by `cost_tracker._persist
 
 ---
 
-### Playwright (optional)
+### Playwright (optional for downloads, required for portal automation)
 
-**Used for:** Downloading GDPR data packages from links that are Cloudflare-protected or require JavaScript rendering (`link_downloader._download_playwright()`).
+**Used for:** (1) Downloading GDPR data packages from links that are Cloudflare-protected or require JavaScript rendering (`link_downloader._download_playwright()`). (2) Portal automation — form analysis, filling, submission, CAPTCHA detection, and navigation (`portal_submitter/`). (3) Subprocessor page scraping as fallback for JS-rendered SPAs (`subprocessor_fetcher.py`).
 
-**If not installed:** `import playwright` raises `ImportError`, caught by `_download_playwright()` which returns `None`. The downloader falls back to `requests`. If Playwright is installed but browser binaries are missing, the error message now includes a hint to run `python -m playwright install chromium`.
+**If not installed:** For downloads: `import playwright` raises `ImportError`, caught by `_download_playwright()` which returns `None`. The downloader falls back to `requests`. For portal automation: portal submission fails and returns `needs_manual=True`. If Playwright is installed but browser binaries are missing, the error message now includes a hint to run `python -m playwright install chromium`.
 
-**Failure mode:** Silent fallback to `requests`. If `requests` also fails (e.g. Cloudflare blocks it), a `DownloadResult(error=...)` is returned and the data link remains undownloaded — the user must download manually.
+**Failure mode:** Silent fallback to `requests` for downloads. For portal automation, failure returns `PortalResult(success=False, needs_manual=True)` and the user receives manual instructions. Portal automation uses stealth scripts (`form_filler.py` injects JavaScript) to bypass automation detection.
 
 ---
 
@@ -329,7 +511,7 @@ Persistent log of every LLM API call made. Appended to by `cost_tracker._persist
 
 ## 6. LLM Usage Map
 
-The system calls an LLM in exactly three places. All three use `claude-haiku-4-5-20251001` — never Sonnet or Opus — because the tasks are structured extraction and classification, not open reasoning.
+The system calls an LLM in six places. All use `claude-haiku-4-5-20251001` — never Sonnet or Opus — because the tasks are structured extraction and classification, not open reasoning.
 
 ---
 
@@ -371,6 +553,54 @@ The system calls an LLM in exactly three places. All three use `claude-haiku-4-5
 
 ---
 
+### Call site 4: `portal_submitter/form_analyzer.py` — `analyze_form()`
+
+**Why LLM is used here:** GDPR portal forms vary wildly in field naming, layout, and required information. A rules-based approach cannot reliably map user data (name, email, address) to arbitrary form fields across hundreds of portal implementations. The LLM reads the accessibility tree (`aria_snapshot()`) and produces a mapping.
+
+**Prompt strategy:** Structured extraction. The LLM receives the parsed form elements from `_extract_elements_from_aria_snapshot()` regex output and user data fields, and returns a JSON mapping of which user data goes into which form field.
+
+**Fallback:** If the API call fails, the portal submission falls back to manual instructions (`needs_manual=True`).
+
+**Cost:** ~$0.020 per company. One-time per portal company, cached in `CompanyRecord.portal_field_mapping` for 90 days. Cost tracked via `cost_tracker`.
+
+---
+
+### Call site 5: `portal_submitter/portal_navigator.py` — `navigate_to_form()`
+
+**Why LLM is used here:** Many GDPR portals require navigating through cookie consent banners, landing pages, and multi-step flows before reaching the actual request form. Platform-specific hint patterns (`_NAVIGATION_HINTS`) handle common cases for free, but unknown portals need the LLM to read the page and decide what to click.
+
+**Prompt strategy:** Iterative navigation. The LLM receives the `aria_snapshot()` output and decides which element to click. Max 3 steps to prevent runaway navigation. Only triggered when `page_has_form(page)` returns false after hint-based navigation.
+
+**Fallback:** If the LLM cannot find a form after 3 steps, returns failure and falls back to manual instructions.
+
+**Cost:** ~$0.010–0.030 per navigation attempt (1–3 LLM calls). Only triggered for portals where hint patterns fail.
+
+---
+
+### Call site 6: `contact_resolver/subprocessor_fetcher.py` — `fetch_subprocessors()`
+
+**Why LLM is used here:** Subprocessor pages have no standardised format — some are tables, some are prose, some are behind JavaScript SPAs. The LLM can extract structured subprocessor data from any page format. The `web_search` tool is attached only when no scraped content was found, to minimise output token cost.
+
+**Prompt strategy:** Structured extraction. The LLM receives scraped page content (or web search results) and returns a structured `SubprocessorRecord` with provider names, categories, and jurisdictions.
+
+**Fallback:** If the API call fails, the domain gets `fetch_status="error"` and will be retried on the next background fetch.
+
+**Cost:** ~$0.030–0.050 per company. At 500 companies, cold fetch costs $15–25. Free on re-fetch within 30-day TTL.
+
+---
+
+### LLM Cost Projections (500+ companies, cold cache)
+
+| Call site | Per-company | 500 companies (cold) | Warm cache |
+|-----------|-------------|----------------------|------------|
+| Resolver (step 5) | ~$0.025 | ~$12.50 | ~$1 |
+| Subprocessor discovery | ~$0.030–0.050 | ~$15–25 | Free (30-day TTL) |
+| Classifier fallback | ~$0.010/reply | ~$5/cycle | — |
+| Schema builder | ~$0.080/export | On demand | — |
+| Portal form analyzer | ~$0.020 | One-time, cached 90 days | — |
+
+---
+
 ## 7. Test Suite
 
 ### 7.1 Test Structure
@@ -407,7 +637,11 @@ As of the last test run: **378 tests pass, 1 skipped** (the Playwright binary te
 | `reply_monitor/link_downloader.py` | `test_link_downloader.py` | Good — DownloadResult, filename parsing, requests path, too-large, 404 expiry; Playwright path skipped if not installed |
 | `reply_monitor/models.py` | Covered indirectly | No dedicated tests |
 | `dashboard/app.py` | `test_dashboard.py` | Partial — routes `/`, `/costs`, `/refresh`, `/company/<domain>` covered; `/data/<domain>`, `/cards`, `/scan/<domain>`, `/download/<domain>`, `/reextract`, `/api/body/<domain>/<id>` untested |
-| `auth/gmail_oauth.py` | **Untested** | No test file. Token loading, refresh, migration, and multi-account selection are all untested. |
+| `dashboard/app.py` (helpers) | `test_snippet_clean.py` | Good — `_clean_snippet()` HTML entity/MIME/URL decoding, `_is_human_friendly()` predicate |
+| `dashboard/app.py` (portal routes) | `test_portal_submit_route.py` | Good — portal URL resolution from query param, overrides fallback, rejection when no URL, `save_portal_submission()` persistence lifecycle |
+| `dashboard/` (UI health) | `test_ui_health.py` | Good — verifies required templates, static JS assets, service modules, and template cross-references exist; catches missing files after merges |
+| `portal_submitter/` | `test_portal_submitter.py` | Good — models, platform detection, OTP sender hints, `build_user_data()`, `analyze_form()` with LLM mocking and cache expiration, CAPTCHA detection/relay, `fill_and_submit()` with various field types, OTP extraction, `wait_for_otp()` with mock Gmail, full `submit_portal()` workflow |
+| `auth/gmail_oauth.py` | `test_oauth_refactor.py` | Good — service cache (hit/miss/expiry/clear), OAuth call logging (counter persistence, TSV format, caller info), `getProfile` skip optimization |
 | `run.py` | `test_run.py` | Partial — no-services path, sent/skipped counts, `--max-llm-calls` flag, LLM limit enforcement; credentials.json check and Gmail connection path not tested |
 | `monitor.py` | **Untested** | No test file for the monitor CLI entry point. |
 | `config/settings.py` | **Untested** | No test; tested implicitly when settings are accessed in other tests |
@@ -463,7 +697,7 @@ All test data is inline — there are no external fixture files, sample emails J
 
 The following are genuinely untested — not undercovered, but absent:
 
-**`auth/gmail_oauth.py` — entirely untested.** The OAuth flow (token loading, refresh, multi-account selection, legacy migration) has no tests. Risk: a corrupt or expired token file will crash any stage that requires Gmail access, with an uncaught exception from the Google auth library.
+**`auth/gmail_oauth.py` — core flows now tested** via `test_oauth_refactor.py` (service cache hit/miss/expiry/clear, OAuth call logging, getProfile skip). Remaining gaps: full browser-based OAuth consent flow, legacy token migration edge cases.
 
 **`monitor.py` — entirely untested.** The CLI entry point logic (argument parsing, account selection, summary table printing, auto-download orchestration) is not tested. Risk: regressions in the monitor CLI are invisible until a live run.
 
@@ -501,6 +735,18 @@ All configuration is loaded from a `.env` file at the project root by `config/se
 
 **What breaks silently:** Missing `ANTHROPIC_API_KEY` causes all LLM steps to silently return `None`. A run with an empty API key will successfully scan the inbox, resolve via cache/datarequests/scraper, compose letters, and send them — but companies that require LLM lookup will be silently skipped. The cost summary will show zero LLM calls, which is the only hint that something is wrong.
 
+### Auth Subsystem (`auth/gmail_oauth.py`)
+
+Centralised OAuth2 logic. Tokens are stored per-account in `user_data/tokens/{email}_readonly.json` and `{email}_send.json`. Auto-migrates legacy flat `token.json`/`token_send.json` on first run.
+
+**Service cache:** In-memory TTL cache (5 minutes) keyed by `(email, scope, tokens_dir)` avoids redundant disk loads and OAuth refreshes — `_cache_get()`/`_cache_put()`/`clear_service_cache()`. When the email hint is provided and credentials were loaded from disk, the `getProfile` API call is skipped (saves one round-trip per service construction).
+
+**OAuth call logger:** Every `get_gmail_service()`, `get_gmail_send_service()`, and `check_send_token_valid()` call appends a TSV line to `user_data/oauth_calls.log` with a monotonic counter, UTC timestamp, function name, reason (cache_hit/disk_load/browser_auth/etc.), email, and caller location. Thread-safe via `_log_lock`. The log is append-only — never truncate or rotate.
+
+**Batched OAuth:** The `_reextract_missing_links()` helper in `dashboard/app.py` shares a single `get_gmail_service()` call across all pending re-extractions instead of one per reply.
+
+**Gmail send tokens** (`*_send.json`) can be revoked by Google independently of readonly tokens. Symptoms: letters show "ready" forever, send task completes with 0 sent, no error shown. Diagnosis: run `check_send_token_valid(email)` or visit `/pipeline/reauth-send`. The dashboard pre-flight check in `pipeline_send()` calls `_send_token_valid()` before launching the background task.
+
 ---
 
 ## 9. Known Issues & Tech Debt
@@ -522,11 +768,27 @@ Issues identified during code review (2026-03-16). Fixed items are marked.
 | P2 | `link_downloader._download_playwright()` | ✓ Missing Playwright browser binaries raised an opaque exception. Now prints a hint to run `playwright install chromium`. | Fixed |
 | P3 | `schema_builder._call_llm()` | ✓ `max_tokens=2048` too low for complex data exports. Raised to 4096. Dynamic per-file truncation added (total context capped at ~60 KB). | Fixed |
 | P3 | `privacy_page_scraper._PRIVACY_EMAIL_RE` | ✓ Matched `privacy@localhost`, `privacy@internal`, `dpo@staging.corp`. Now requires 2-char TLD and excludes internal hostnames. | Fixed |
+| P1 | `portal_submitter/submitter.py` | ✓ No multi-step navigation — Ketch portals (zendesk.es) failed with `no_form_fields_detected`. Added `portal_navigator.py` with hybrid hint + LLM navigation. | Fixed |
+| P1 | `portal_submitter/platform_hints.py` | ✓ Ketch platform not detected — added URL rules + HTML signature fallback via `detect_platform(url, html="")`. | Fixed |
+| P2 | `classifier.py` | ✓ Zendesk-format linked attachments not detected — `_RE_ZENDESK_ATTACHMENT_A/B` added. | Fixed |
+| P2 | `classifier.py` | ✓ Self-service deflection in body not tagged `WRONG_CHANNEL` — `_RE_BODY_WRONG_CHANNEL` added. | Fixed |
+| P2 | `classifier.py` | ✓ Inline personal data responses tagged as `DATA_PROVIDED_ATTACHMENT` due to CID images — `_RE_BODY_INLINE_DATA` + `DATA_PROVIDED_INLINE` tag added. | Fixed |
+| P2 | `classifier.py` | ✓ Multi-file data deliveries only tracked first URL — `data_links` list added. | Fixed |
+| P2 | `monitor.py` | ✓ Auto-downloader only followed first data URL — now iterates full `data_links` list. | Fixed |
+| P2 | `llm_searcher.py` | ✓ LLM accepted generic `support@`/`info@` emails — `_GENERIC_LOCAL_PARTS` blocklist (confidence-gated) added. | Fixed |
+| P2 | `classifier.py` | ✓ Gmail snippets displayed with encoding artifacts — `_clean_snippet()` + `extracted["summary"]` added. | Fixed |
+| P2 | `classifier.py` | ✓ Premature ticket closure (Zendesk "set to Solved") not detected — closure regex patterns added to WRONG_CHANNEL, post-pass guard suppresses when terminal data tag present. | Fixed |
+| P2 | `classifier.py` | ✓ Zendesk ticket/survey/help center URLs extracted as data_link/portal_url — `_RE_JUNK_URL` + `_is_junk_url()` filter added. | Fixed |
+| P2 | `classifier.py` | ✓ Junk URL filter missed bare `/requests/`, `/support/tickets/`, `/help/` paths — expanded `_RE_JUNK_URL`. | Fixed |
+| P2 | `classifier.py` | ✓ WRONG_CHANNEL draft tone argued GDPR violations — closure-aware prompt now says "follow portal first". | Fixed |
+| P2 | `monitor.py` | ✓ `--reprocess` didn't re-extract URLs — stale `portal_url`/`data_link` persisted after classifier updates. Now re-extracts URL fields during reprocess. | Fixed |
+| — | `run.py` | ✓ No LLM call cap — `--max-llm-calls N` flag added. | Fixed |
 | P3 | GitHub API authentication | No `GITHUB_TOKEN` support — rate limit is 60 req/hour unauthenticated. At 500+ companies this will be exhausted. Adding a `GITHUB_TOKEN` env var to `_fetch_dir_listing()` would raise the limit to 5,000/hour. | **Open** |
 | P3 | Resolver concurrency | The 5-step chain is sequential per domain and across domains. At 500 companies, a run with many LLM calls is slow. Steps 1–4 (free) could be parallelised with `ThreadPoolExecutor`. | **Open** |
 | P3 | Dashboard `/refresh` | Blocks the HTTP response during a full monitor run. Should use a background thread or task queue for large accounts. | **Open** |
 | P3 | Monitor reply dedup cache | `_llm_cache` in `classifier.py` is module-level and resets between monitor runs. Identical auto-replies processed in separate runs each trigger an LLM call. | **Open** |
-| — | `auth/gmail_oauth.py` | Zero test coverage for token loading, refresh, migration, and multi-account selection. | **Open** |
+| P2 | `portal_submitter/submitter.py` | Ketch portals (Zendesk, etc.) always fail reCAPTCHA v3 in headless Playwright — falls back to manual. No known workaround short of a CAPTCHA-solving service or non-headless mode. | **Open** |
+| P3 | `dashboard/app.py` | Flask routes and template rendering have no test coverage — only pure helper functions are tested via `test_snippet_clean.py`. | **Open** |
 | — | `monitor.py` | Zero test coverage for the CLI entry point. | **Open** |
 
 ---

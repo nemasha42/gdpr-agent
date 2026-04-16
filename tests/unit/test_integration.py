@@ -5,18 +5,14 @@ exercises cross-module data flow and catches model mismatches that unit tests
 can miss when each module is isolated.
 """
 
-import json
 from datetime import date
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 from contact_resolver.models import (
     CompanyRecord,
     Contact,
     Flags,
-    PostalAddress,
     RequestNotes,
 )
 from contact_resolver.resolver import ContactResolver
@@ -232,7 +228,8 @@ def test_save_state_handles_corrupt_existing_file(tmp_path):
     from reply_monitor.models import CompanyState
 
     state = CompanyState(
-        domain="test.com", company_name="Test",
+        domain="test.com",
+        company_name="Test",
         sar_sent_at="2026-01-01T00:00:00Z",
         to_email="privacy@test.com",
         subject="SAR",
@@ -250,6 +247,7 @@ def test_load_sent_letters_corrupt_handled(tmp_path):
     letters_path.write_text("not json")
 
     from letter_engine.tracker import get_log
+
     result = get_log(path=letters_path)
     assert isinstance(result, list)
     assert result == []

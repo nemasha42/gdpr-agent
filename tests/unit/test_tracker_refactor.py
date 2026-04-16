@@ -1,7 +1,6 @@
 """Tests for data_dir parameter on letter_engine/tracker.py functions."""
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock
 
 from letter_engine.tracker import get_log, record_sent, record_subprocessor_request

@@ -36,9 +36,7 @@ _RE_HELP_CENTER = re.compile(
 )
 
 _RE_SURVEY = re.compile(
-    r"/survey[_-]?responses?/"
-    r"|/satisfaction/"
-    r"|/feedback/",
+    r"/survey[_-]?responses?/" r"|/satisfaction/" r"|/feedback/",
     re.I,
 )
 
@@ -62,16 +60,12 @@ _RE_SURVEY_CONTENT = re.compile(
 )
 
 _RE_FORM_ELEMENT = re.compile(
-    r"<form[\s>]"
-    r"|<input[\s>]"
-    r"|<textarea[\s>]"
-    r"|<select[\s>]",
+    r"<form[\s>]" r"|<input[\s>]" r"|<textarea[\s>]" r"|<select[\s>]",
     re.I,
 )
 
 _RE_SUBMIT_BUTTON = re.compile(
-    r"<button[^>]*>.*?(submit|send|request).*?</button>"
-    r"|type=['\"]submit['\"]",
+    r"<button[^>]*>.*?(submit|send|request).*?</button>" r"|type=['\"]submit['\"]",
     re.I | re.S,
 )
 
@@ -83,7 +77,9 @@ def verify(url: str) -> dict:
 
     Returns dict with keys: url, classification, checked_at, error, page_title.
     """
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = (
+        datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    )
 
     if not url:
         return _result(url, CLASSIFICATION.DEAD_LINK, now, error="empty URL")
@@ -110,17 +106,25 @@ def verify(url: str) -> dict:
 
     # HTTP fetch
     try:
-        resp = requests.get(url, timeout=_TIMEOUT, allow_redirects=True,
-                            headers={"User-Agent": "Mozilla/5.0 (compatible; GDPR-Agent/1.0)"})
+        resp = requests.get(
+            url,
+            timeout=_TIMEOUT,
+            allow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; GDPR-Agent/1.0)"},
+        )
     except requests.Timeout:
         return _result(url, CLASSIFICATION.DEAD_LINK, now, error="timeout")
     except requests.ConnectionError as e:
-        return _result(url, CLASSIFICATION.DEAD_LINK, now, error=f"connection error: {e}")
+        return _result(
+            url, CLASSIFICATION.DEAD_LINK, now, error=f"connection error: {e}"
+        )
     except requests.RequestException as e:
         return _result(url, CLASSIFICATION.DEAD_LINK, now, error=str(e))
 
     if resp.status_code >= 400:
-        return _result(url, CLASSIFICATION.DEAD_LINK, now, error=f"HTTP {resp.status_code}")
+        return _result(
+            url, CLASSIFICATION.DEAD_LINK, now, error=f"HTTP {resp.status_code}"
+        )
 
     content_type = resp.headers.get("content-type", "")
     if "text/html" not in content_type:
@@ -164,7 +168,9 @@ def verify_if_needed(
         if now is None:
             now = datetime.now(timezone.utc)
         try:
-            checked = datetime.fromisoformat(existing["checked_at"].replace("Z", "+00:00"))
+            checked = datetime.fromisoformat(
+                existing["checked_at"].replace("Z", "+00:00")
+            )
             if now - checked < _VERIFY_TTL:
                 return existing
         except (ValueError, TypeError):

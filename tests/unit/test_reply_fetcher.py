@@ -1,8 +1,7 @@
 """Unit tests for reply_monitor/fetcher.py — Gmail lookup and search fallback."""
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 from reply_monitor.fetcher import (
     _extract_body,
@@ -17,10 +16,15 @@ from reply_monitor.fetcher import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_gmail_msg(msg_id="msg001", from_addr="privacy@example.com",
-                    subject="Re: SAR", snippet="thank you",
-                    date_str="Mon, 17 Mar 2026 10:00:00 +0000",
-                    parts=None):
+
+def _make_gmail_msg(
+    msg_id="msg001",
+    from_addr="privacy@example.com",
+    subject="Re: SAR",
+    snippet="thank you",
+    date_str="Mon, 17 Mar 2026 10:00:00 +0000",
+    parts=None,
+):
     """Build a fake Gmail full message resource."""
     return {
         "id": msg_id,
@@ -52,6 +56,7 @@ def _make_service(thread_messages=None, search_messages=None):
         service.users().messages().list().execute.return_value = {
             "messages": [{"id": m["id"]} for m in search_messages]
         }
+
         # Each messages.get() call returns the corresponding message
         def get_full_msg(userId, id, format):
             for m in search_messages:
@@ -69,6 +74,7 @@ def _make_service(thread_messages=None, search_messages=None):
 # ---------------------------------------------------------------------------
 # Thread-based lookup tests
 # ---------------------------------------------------------------------------
+
 
 class TestFetchByThread:
     def test_thread_returns_reply_messages(self):
@@ -93,7 +99,11 @@ class TestFetchByThread:
         assert results[0]["id"] == "reply001"
 
     def test_thread_deduplicates_existing_replies(self):
-        sent_record = {"gmail_thread_id": "thread001", "to_email": "p@example.com", "sent_at": "2026-03-16T00:00:00"}
+        sent_record = {
+            "gmail_thread_id": "thread001",
+            "to_email": "p@example.com",
+            "sent_at": "2026-03-16T00:00:00",
+        }
         existing = {"reply001"}  # already stored
 
         reply_msg = _make_gmail_msg(msg_id="reply001")
@@ -103,11 +113,17 @@ class TestFetchByThread:
         # real dict (not a MagicMock) so _paginated_search's loop can terminate.
         service.users().messages().list().execute.return_value = {"messages": []}
 
-        results = fetch_replies_for_sar(service, sent_record, existing_reply_ids=existing)
+        results = fetch_replies_for_sar(
+            service, sent_record, existing_reply_ids=existing
+        )
         assert len(results) == 0  # already seen
 
     def test_thread_returns_empty_on_api_error(self):
-        sent_record = {"gmail_thread_id": "thread001", "to_email": "p@example.com", "sent_at": "2026-03-16T00:00:00"}
+        sent_record = {
+            "gmail_thread_id": "thread001",
+            "to_email": "p@example.com",
+            "sent_at": "2026-03-16T00:00:00",
+        }
         service = MagicMock()
         service.users().threads().get().execute.side_effect = Exception("API error")
         service.users().messages().list().execute.return_value = {"messages": []}
@@ -116,7 +132,11 @@ class TestFetchByThread:
         assert results == []
 
     def test_own_email_filtered_out(self):
-        sent_record = {"gmail_thread_id": "t1", "to_email": "p@example.com", "sent_at": "2026-03-16T00:00:00"}
+        sent_record = {
+            "gmail_thread_id": "t1",
+            "to_email": "p@example.com",
+            "sent_at": "2026-03-16T00:00:00",
+        }
         own_msg = _make_gmail_msg(msg_id="own001", from_addr="trader@gmail.com")
 
         service = MagicMock()
@@ -124,13 +144,16 @@ class TestFetchByThread:
         # Search fallback runs when thread returns empty — must return a real dict
         service.users().messages().list().execute.return_value = {"messages": []}
 
-        results = fetch_replies_for_sar(service, sent_record, user_email="trader@gmail.com")
+        results = fetch_replies_for_sar(
+            service, sent_record, user_email="trader@gmail.com"
+        )
         assert results == []
 
 
 # ---------------------------------------------------------------------------
 # Search fallback tests
 # ---------------------------------------------------------------------------
+
 
 class TestSearchFallback:
     def test_search_used_when_no_thread_id(self):
@@ -139,7 +162,9 @@ class TestSearchFallback:
             "to_email": "privacy@glassdoor.com",
             "sent_at": "2026-03-16T00:00:00",
         }
-        reply_msg = _make_gmail_msg(msg_id="search001", from_addr="privacy@glassdoor.com")
+        reply_msg = _make_gmail_msg(
+            msg_id="search001", from_addr="privacy@glassdoor.com"
+        )
 
         service = MagicMock()
         # Both queries (exact address + domain) return the same message
@@ -155,14 +180,22 @@ class TestSearchFallback:
         assert len(results) == 1
 
     def test_search_skips_empty_to_email(self):
-        sent_record = {"gmail_thread_id": "", "to_email": "", "sent_at": "2026-03-16T00:00:00"}
+        sent_record = {
+            "gmail_thread_id": "",
+            "to_email": "",
+            "sent_at": "2026-03-16T00:00:00",
+        }
         service = MagicMock()
         results = fetch_replies_for_sar(service, sent_record)
         assert results == []
         service.users().messages().list.assert_not_called()
 
     def test_search_deduplicates_by_id(self):
-        sent_record = {"gmail_thread_id": "", "to_email": "p@example.com", "sent_at": "2026-03-16T00:00:00"}
+        sent_record = {
+            "gmail_thread_id": "",
+            "to_email": "p@example.com",
+            "sent_at": "2026-03-16T00:00:00",
+        }
         existing = {"already001"}
         reply_msg = _make_gmail_msg(msg_id="already001")
 
@@ -172,13 +205,16 @@ class TestSearchFallback:
         }
         service.users().messages().get().execute.return_value = reply_msg
 
-        results = fetch_replies_for_sar(service, sent_record, existing_reply_ids=existing)
+        results = fetch_replies_for_sar(
+            service, sent_record, existing_reply_ids=existing
+        )
         assert results == []
 
 
 # ---------------------------------------------------------------------------
 # _get_header tests
 # ---------------------------------------------------------------------------
+
 
 class TestGetHeader:
     def test_returns_header_value(self):
@@ -197,6 +233,7 @@ class TestGetHeader:
 # ---------------------------------------------------------------------------
 # _find_attachment_parts tests
 # ---------------------------------------------------------------------------
+
 
 class TestFindAttachmentParts:
     def test_finds_attachment_in_parts(self):
@@ -246,6 +283,7 @@ class TestFindAttachmentParts:
 # _parse_message tests
 # ---------------------------------------------------------------------------
 
+
 class TestParseMessage:
     def test_parses_basic_message(self):
         msg = _make_gmail_msg(
@@ -264,12 +302,14 @@ class TestParseMessage:
 
     def test_detects_attachment(self):
         msg = _make_gmail_msg(
-            parts=[{
-                "filename": "data.zip",
-                "mimeType": "application/zip",
-                "body": {"attachmentId": "att001", "size": 2048},
-                "parts": [],
-            }]
+            parts=[
+                {
+                    "filename": "data.zip",
+                    "mimeType": "application/zip",
+                    "body": {"attachmentId": "att001", "size": 2048},
+                    "parts": [],
+                }
+            ]
         )
         result = _parse_message(msg)
         assert result["has_attachment"] is True
@@ -287,9 +327,11 @@ class TestParseMessage:
 # _extract_body tests
 # ---------------------------------------------------------------------------
 
+
 class TestExtractBody:
     def _encoded(self, text: str) -> str:
         import base64
+
         return base64.urlsafe_b64encode(text.encode()).decode()
 
     def test_plain_text_part(self):
@@ -358,8 +400,16 @@ class TestExtractBody:
             "mimeType": "multipart/mixed",
             "body": {},
             "parts": [
-                {"mimeType": "text/plain", "body": {"data": self._encoded(part1)}, "parts": []},
-                {"mimeType": "text/plain", "body": {"data": self._encoded(part2)}, "parts": []},
+                {
+                    "mimeType": "text/plain",
+                    "body": {"data": self._encoded(part1)},
+                    "parts": [],
+                },
+                {
+                    "mimeType": "text/plain",
+                    "body": {"data": self._encoded(part2)},
+                    "parts": [],
+                },
             ],
         }
         result = _extract_body(payload)

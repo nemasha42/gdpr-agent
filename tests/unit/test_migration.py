@@ -10,15 +10,19 @@ def _setup_legacy_data(root: Path):
     (root / "tokens" / "nemasha_at_gmail_com_readonly.json").write_text("{}")
     (root / "tokens" / "nemasha_at_gmail_com_send.json").write_text("{}")
 
-    (root / "reply_state.json").write_text(json.dumps({
-        "nemasha_at_gmail_com": {
-            "spotify.com": {"domain": "spotify.com", "company_name": "Spotify"}
-        }
-    }))
+    (root / "reply_state.json").write_text(
+        json.dumps(
+            {
+                "nemasha_at_gmail_com": {
+                    "spotify.com": {"domain": "spotify.com", "company_name": "Spotify"}
+                }
+            }
+        )
+    )
 
-    (root / "sent_letters.json").write_text(json.dumps([
-        {"company_name": "Spotify", "to_email": "privacy@spotify.com"}
-    ]))
+    (root / "sent_letters.json").write_text(
+        json.dumps([{"company_name": "Spotify", "to_email": "privacy@spotify.com"}])
+    )
 
     (root / "subprocessor_requests.json").write_text("[]")
     (root / "subprocessor_reply_state.json").write_text("{}")

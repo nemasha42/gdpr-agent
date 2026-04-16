@@ -1,0 +1,29 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.0
+    hooks:
+      - id: ruff
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: no-placeholders
+        name: Check for placeholder code
+        entry: bash -c 'grep -rn "TODO\|FIXME\|NotImplementedError" --include="*.py" --exclude-dir=venv --exclude-dir=.venv --exclude-dir=node_modules --exclude-dir=.git . && echo "Found placeholders — fix before committing" && exit 1 || exit 0'
+        language: system
+        pass_filenames: false
+
+      - id: no-bare-except
+        name: Check for bare except clauses
+        entry: bash -c 'grep -rn "except:$\|except Exception:$" --include="*.py" --exclude-dir=venv --exclude-dir=.venv --exclude-dir=node_modules --exclude-dir=.git . && echo "Found bare except — add specific exception type" && exit 1 || exit 0'
+        language: system
+        pass_filenames: false

@@ -3,11 +3,13 @@
 import io
 import json
 import zipfile
-from pathlib import Path
 
-import pytest
 
-from reply_monitor.preprocessor import PreprocessResult, build_context_summary, preprocess
+from reply_monitor.preprocessor import (
+    PreprocessResult,
+    build_context_summary,
+    preprocess,
+)
 
 
 def _make_zip(files: dict[str, bytes]) -> bytes:
@@ -20,12 +22,14 @@ def _make_zip(files: dict[str, bytes]) -> bytes:
 
 class TestPreprocessZipFolderTree:
     def test_extracts_folder_structure(self, tmp_path):
-        zdata = _make_zip({
-            "profile/account.json": b'{"name": "Alice"}',
-            "profile/settings.json": b'{"theme": "dark"}',
-            "activity/search_history.csv": b"query,date\nfoo,2024-01-01",
-            "activity/watch_history.json": b'[{"title": "x"}]',
-        })
+        zdata = _make_zip(
+            {
+                "profile/account.json": b'{"name": "Alice"}',
+                "profile/settings.json": b'{"theme": "dark"}',
+                "activity/search_history.csv": b"query,date\nfoo,2024-01-01",
+                "activity/watch_history.json": b'[{"title": "x"}]',
+            }
+        )
         zpath = tmp_path / "data.zip"
         zpath.write_bytes(zdata)
 
@@ -40,10 +44,12 @@ class TestPreprocessZipFolderTree:
         assert len(result.folder_tree["activity"]) == 2
 
     def test_flat_zip_uses_root_folder(self, tmp_path):
-        zdata = _make_zip({
-            "data.json": b'{"x": 1}',
-            "readme.txt": b"hello",
-        })
+        zdata = _make_zip(
+            {
+                "data.json": b'{"x": 1}',
+                "readme.txt": b"hello",
+            }
+        )
         zpath = tmp_path / "flat.zip"
         zpath.write_bytes(zdata)
 
@@ -62,11 +68,13 @@ class TestPreprocessZipFolderTree:
 
 class TestJsonAnalysis:
     def test_json_object_extracts_keys(self, tmp_path):
-        data = json.dumps({
-            "name": "Alice",
-            "email": "alice@example.com",
-            "addresses": [{"city": "London"}, {"city": "Paris"}],
-        })
+        data = json.dumps(
+            {
+                "name": "Alice",
+                "email": "alice@example.com",
+                "addresses": [{"city": "London"}, {"city": "Paris"}],
+            }
+        )
         fpath = tmp_path / "profile.json"
         fpath.write_text(data)
         result = preprocess(fpath)
@@ -76,11 +84,13 @@ class TestJsonAnalysis:
         assert "addresses" in result.file_metas[0].json_keys
 
     def test_json_array_counts_records(self, tmp_path):
-        data = json.dumps([
-            {"track": "Song A", "artist": "Band", "msPlayed": 12000},
-            {"track": "Song B", "artist": "Other", "msPlayed": 45000},
-            {"track": "Song C", "artist": "Band", "msPlayed": 8000},
-        ])
+        data = json.dumps(
+            [
+                {"track": "Song A", "artist": "Band", "msPlayed": 12000},
+                {"track": "Song B", "artist": "Other", "msPlayed": 45000},
+                {"track": "Song C", "artist": "Band", "msPlayed": 8000},
+            ]
+        )
         fpath = tmp_path / "streaming_history.json"
         fpath.write_text(data)
         result = preprocess(fpath)
@@ -102,10 +112,12 @@ class TestJsonAnalysis:
         assert result.file_samples[0]["content"].startswith("[")
 
     def test_zip_with_json_extracts_structure(self, tmp_path):
-        zdata = _make_zip({
-            "profile.json": json.dumps({"name": "Alice", "age": 30}).encode(),
-            "history.json": json.dumps([{"q": "foo"}, {"q": "bar"}]).encode(),
-        })
+        zdata = _make_zip(
+            {
+                "profile.json": json.dumps({"name": "Alice", "age": 30}).encode(),
+                "history.json": json.dumps([{"q": "foo"}, {"q": "bar"}]).encode(),
+            }
+        )
         zpath = tmp_path / "export.zip"
         zpath.write_bytes(zdata)
         result = preprocess(zpath)
@@ -147,10 +159,12 @@ class TestCsvAnalysis:
 
 class TestBuildContextSummary:
     def test_includes_folder_tree(self, tmp_path):
-        zdata = _make_zip({
-            "profile/account.json": json.dumps({"name": "Alice"}).encode(),
-            "history/searches.csv": b"query,date\nfoo,2024-01-01",
-        })
+        zdata = _make_zip(
+            {
+                "profile/account.json": json.dumps({"name": "Alice"}).encode(),
+                "history/searches.csv": b"query,date\nfoo,2024-01-01",
+            }
+        )
         zpath = tmp_path / "export.zip"
         zpath.write_bytes(zdata)
         result = preprocess(zpath)
@@ -177,11 +191,13 @@ class TestBuildContextSummary:
         assert "email" in summary
 
     def test_includes_stats(self, tmp_path):
-        zdata = _make_zip({
-            "a.json": b'{"x": 1}',
-            "b.csv": b"col1\nval1",
-            "c.txt": b"hello",
-        })
+        zdata = _make_zip(
+            {
+                "a.json": b'{"x": 1}',
+                "b.csv": b"col1\nval1",
+                "c.txt": b"hello",
+            }
+        )
         zpath = tmp_path / "data.zip"
         zpath.write_bytes(zdata)
         result = preprocess(zpath)

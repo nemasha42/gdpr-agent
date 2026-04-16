@@ -84,9 +84,7 @@ _cache_lock = threading.Lock()
 _CACHE_TTL = 300  # 5 minutes
 
 
-def _cache_get(
-    email: str, scope: str, tokens_dir: Path
-) -> tuple[Any, str] | None:
+def _cache_get(email: str, scope: str, tokens_dir: Path) -> tuple[Any, str] | None:
     key = (email, scope, str(tokens_dir))
     with _cache_lock:
         entry = _service_cache.get(key)
@@ -130,7 +128,7 @@ def _token_files_to_emails(paths: list[Path]) -> list[str]:
     """Convert *_readonly.json token filenames back to email addresses."""
     emails = []
     for p in sorted(paths):
-        name = p.stem.replace("_readonly", "")   # trader1620_at_gmail_com
+        name = p.stem.replace("_readonly", "")  # trader1620_at_gmail_com
         # reverse _safe_email: first _at_ → @, remaining _ → .
         if "_at_" in name:
             local, domain = name.split("_at_", 1)
@@ -220,7 +218,9 @@ def get_gmail_service(
             print("Multiple Gmail accounts found:")
             for i, a in enumerate(known, 1):
                 print(f"  [{i}] {a}")
-            choice = input("\n  Which account to scan? Enter number or full email: ").strip()
+            choice = input(
+                "\n  Which account to scan? Enter number or full email: "
+            ).strip()
             if choice.isdigit() and 1 <= int(choice) <= len(known):
                 email_hint = known[int(choice) - 1]
             elif choice in known:
@@ -233,7 +233,8 @@ def get_gmail_service(
             # No tokens yet — ask which account to connect
             email_hint = input("  Enter Gmail address to scan: ").strip() or None
             token_path = tokens_dir / (
-                f"{_safe_email(email_hint)}_readonly.json" if email_hint
+                f"{_safe_email(email_hint)}_readonly.json"
+                if email_hint
                 else "_pending_readonly.json"
             )
 

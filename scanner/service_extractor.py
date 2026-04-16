@@ -147,7 +147,5 @@ def extract_services(
                 record["last_seen"] = date_iso
 
     results = list(seen.values())
-    results.sort(
-        key=lambda r: (-_CONFIDENCE_RANK[r["confidence"]], r["domain"])
-    )
+    results.sort(key=lambda r: (-_CONFIDENCE_RANK[r["confidence"]], r["domain"]))
     return results

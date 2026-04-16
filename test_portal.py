@@ -39,7 +39,9 @@ def main() -> None:
     print(f"Platform: {detect_platform(record.contact.gdpr_portal_url)}")
 
     if record.contact.preferred_method != "portal":
-        print(f"\nNote: {args.domain} uses method={record.contact.preferred_method}, not portal.")
+        print(
+            f"\nNote: {args.domain} uses method={record.contact.preferred_method}, not portal."
+        )
         if not args.force:
             print("Use --force to test anyway.")
             return
@@ -48,14 +50,16 @@ def main() -> None:
 
     if args.dry_run:
         from portal_submitter import submit_portal
+
         result = submit_portal(letter, scan_email=args.gmail or "", dry_run=True)
         print(f"\nDry run result: {result}")
         return
 
     from portal_submitter import submit_portal
+
     print(f"\nSubmitting to {record.contact.gdpr_portal_url}...")
     result = submit_portal(letter, scan_email=args.gmail or "")
-    print(f"\nResult:")
+    print("\nResult:")
     print(f"  Success: {result.success}")
     print(f"  Status: {result.portal_status}")
     print(f"  Confirmation: {result.confirmation_ref}")
@@ -98,9 +102,15 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Test portal submission")
     parser.add_argument("--domain", help="Domain to test")
     parser.add_argument("--dry-run", action="store_true", help="Analyze form only")
-    parser.add_argument("--list-portals", action="store_true", help="List portal companies")
+    parser.add_argument(
+        "--list-portals", action="store_true", help="List portal companies"
+    )
     parser.add_argument("--gmail", help="Gmail account for OTP monitoring")
-    parser.add_argument("--force", action="store_true", help="Force portal test even if method != portal")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force portal test even if method != portal",
+    )
     return parser.parse_args()
 
 

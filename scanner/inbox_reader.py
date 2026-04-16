@@ -161,12 +161,14 @@ def fetch_new_emails(
                 h["name"]: h["value"]
                 for h in detail.get("payload", {}).get("headers", [])
             }
-            new_emails.append({
-                "message_id": detail["id"],
-                "sender": headers.get("From", ""),
-                "subject": headers.get("Subject", ""),
-                "date": headers.get("Date", ""),
-            })
+            new_emails.append(
+                {
+                    "message_id": detail["id"],
+                    "sender": headers.get("From", ""),
+                    "subject": headers.get("Subject", ""),
+                    "date": headers.get("Date", ""),
+                }
+            )
             if progress_callback:
                 progress_callback(len(new_emails))
 

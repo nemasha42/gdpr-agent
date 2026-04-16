@@ -1,7 +1,6 @@
 """Tests for data_dir parameter on load_state / save_state."""
 
 import json
-from pathlib import Path
 
 
 def test_load_state_from_data_dir(tmp_path):
@@ -14,7 +13,7 @@ def test_load_state_from_data_dir(tmp_path):
 
 
 def test_save_state_to_data_dir(tmp_path):
-    from reply_monitor.state_manager import save_state, load_state
+    from reply_monitor.state_manager import save_state
     from reply_monitor.models import CompanyState
 
     state = CompanyState(

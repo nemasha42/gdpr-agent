@@ -80,11 +80,15 @@ def test_extract_emails_finds_legal_email() -> None:
 
 
 def test_extract_emails_finds_dataprotection_email() -> None:
-    assert _extract_emails("dataprotection@example.com") == ["dataprotection@example.com"]
+    assert _extract_emails("dataprotection@example.com") == [
+        "dataprotection@example.com"
+    ]
 
 
 def test_extract_emails_finds_data_protection_hyphen() -> None:
-    assert _extract_emails("data-protection@example.com") == ["data-protection@example.com"]
+    assert _extract_emails("data-protection@example.com") == [
+        "data-protection@example.com"
+    ]
 
 
 def test_extract_emails_finds_dataprivacy_email() -> None:

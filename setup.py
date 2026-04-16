@@ -64,7 +64,9 @@ def main() -> None:
     _step(1, total, "Create a Google Cloud project")
     print("  Name it anything, e.g.  gdpr-agent")
     _open("https://console.cloud.google.com/projectcreate")
-    project_id = _prompt("Paste the Project ID shown after creation (e.g. gdpr-agent-123456)")
+    project_id = _prompt(
+        "Paste the Project ID shown after creation (e.g. gdpr-agent-123456)"
+    )
     if not project_id:
         print("Project ID cannot be empty. Re-run and paste the ID.")
         return
@@ -72,7 +74,9 @@ def main() -> None:
     # ── Step 2: Enable Gmail API ─────────────────────────────────────────────
     _step(2, total, "Enable the Gmail API")
     print("  Click the blue  Enable  button on the page that opens.")
-    _open(f"https://console.cloud.google.com/apis/library/gmail.googleapis.com?project={project_id}")
+    _open(
+        f"https://console.cloud.google.com/apis/library/gmail.googleapis.com?project={project_id}"
+    )
     _prompt("Press Enter once the Gmail API shows as  Enabled")
 
     # ── Step 3: Configure OAuth consent screen ───────────────────────────────
@@ -84,7 +88,9 @@ def main() -> None:
         "    3. Scroll down, fill in  Developer contact email\n"
         "    4. Click  Save and Continue  through all screens until  Back to Dashboard"
     )
-    _open(f"https://console.cloud.google.com/apis/credentials/consent?project={project_id}")
+    _open(
+        f"https://console.cloud.google.com/apis/credentials/consent?project={project_id}"
+    )
     _prompt("Press Enter once you're back at the Dashboard")
 
     # ── Step 4: Create OAuth Desktop client ─────────────────────────────────
@@ -98,7 +104,9 @@ def main() -> None:
         f"    5. Move the downloaded file to this folder and rename it  credentials.json\n"
         f"       ({_PROJECT_ROOT})"
     )
-    _open(f"https://console.cloud.google.com/apis/credentials/oauthclient?project={project_id}")
+    _open(
+        f"https://console.cloud.google.com/apis/credentials/oauthclient?project={project_id}"
+    )
 
     # ── Step 5: Wait for credentials.json ────────────────────────────────────
     _step(5, total, "Waiting for credentials.json...")
@@ -109,7 +117,9 @@ def main() -> None:
             break
         time.sleep(2)
     else:
-        print("\nTimed out waiting. Move credentials.json to the project root and re-run.")
+        print(
+            "\nTimed out waiting. Move credentials.json to the project root and re-run."
+        )
         return
 
     # Validate it looks right
@@ -118,7 +128,9 @@ def main() -> None:
         assert "installed" in data
         _ok("credentials.json is valid.")
     except Exception:
-        print("\ncredentials.json doesn't look right. Download it again from the Console.")
+        print(
+            "\ncredentials.json doesn't look right. Download it again from the Console."
+        )
         return
 
     print(

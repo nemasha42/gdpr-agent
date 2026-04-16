@@ -103,7 +103,7 @@ def test_extract_services_all_fixture_domains_present() -> None:
         "netflix.com",
         "spotify.com",
         "amazon.co.uk",
-        "microsoft.com",   # linkedin.com canonicalises to microsoft.com
+        "microsoft.com",  # linkedin.com canonicalises to microsoft.com
         "twitter.com",
         "deliveroo.co.uk",
         "monzo.com",
@@ -256,8 +256,18 @@ def test_deduplication_tracks_date_range() -> None:
 
 def test_sender_without_at_symbol_is_skipped() -> None:
     emails = [
-        {"message_id": "x", "sender": "not-an-email", "subject": "Hi", "date": "Mon, 10 Mar 2025 09:00:00 +0000"},
-        {"message_id": "y", "sender": "real@service.com", "subject": "Hi", "date": "Mon, 10 Mar 2025 09:00:00 +0000"},
+        {
+            "message_id": "x",
+            "sender": "not-an-email",
+            "subject": "Hi",
+            "date": "Mon, 10 Mar 2025 09:00:00 +0000",
+        },
+        {
+            "message_id": "y",
+            "sender": "real@service.com",
+            "subject": "Hi",
+            "date": "Mon, 10 Mar 2025 09:00:00 +0000",
+        },
     ]
     results = extract_services(emails)
     assert len(results) == 1
@@ -278,7 +288,14 @@ def test_required_fields_present_in_output() -> None:
         }
     ]
     result = extract_services(emails)[0]
-    for field in ("domain", "company_name_raw", "confidence", "signal_type", "first_seen", "last_seen"):
+    for field in (
+        "domain",
+        "company_name_raw",
+        "confidence",
+        "signal_type",
+        "first_seen",
+        "last_seen",
+    ):
         assert field in result, f"Missing field: {field}"
 
 
@@ -288,7 +305,12 @@ def test_required_fields_present_in_output() -> None:
 
 
 def _email(sender: str, subject: str = "Hello") -> dict[str, str]:
-    return {"message_id": sender, "sender": sender, "subject": subject, "date": "Mon, 10 Mar 2025 09:00:00 +0000"}
+    return {
+        "message_id": sender,
+        "sender": sender,
+        "subject": subject,
+        "date": "Mon, 10 Mar 2025 09:00:00 +0000",
+    }
 
 
 def test_dedup_subdomain_same_company() -> None:

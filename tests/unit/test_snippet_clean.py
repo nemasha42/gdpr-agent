@@ -1,24 +1,28 @@
 from dashboard.app import _clean_snippet, _dedup_reply_rows, _is_human_friendly
 
 MESSY_INPUTS = [
-    ("Hello=20World",       "Hello World"),    # QP space
-    ("AT&amp;T",            "AT&T"),           # HTML entity
-    ("click%20here",        "click here"),     # URL encoding
-    ("50%",                 "50%"),            # legitimate % — should not change
-    ("don\u200bt reply",    "dont reply"),     # zero-width
-    ("reply=3Dnow",         "reply=now"),      # QP equals
+    ("Hello=20World", "Hello World"),  # QP space
+    ("AT&amp;T", "AT&T"),  # HTML entity
+    ("click%20here", "click here"),  # URL encoding
+    ("50%", "50%"),  # legitimate % — should not change
+    ("don\u200bt reply", "dont reply"),  # zero-width
+    ("reply=3Dnow", "reply=now"),  # QP equals
 ]
 
 
 def test_clean_snippet_decodes_artifacts():
     for raw, expected in MESSY_INPUTS:
-        assert _clean_snippet(raw) == expected, f"Input {raw!r}: expected {expected!r}, got {_clean_snippet(raw)!r}"
+        assert (
+            _clean_snippet(raw) == expected
+        ), f"Input {raw!r}: expected {expected!r}, got {_clean_snippet(raw)!r}"
 
 
 def test_clean_snippet_output_is_human_friendly():
     for raw, _ in MESSY_INPUTS:
         result = _clean_snippet(raw)
-        assert _is_human_friendly(result), f"Not human-friendly after cleaning {raw!r}: {result!r}"
+        assert _is_human_friendly(
+            result
+        ), f"Not human-friendly after cleaning {raw!r}: {result!r}"
 
 
 def test_legitimate_percent_unchanged():
@@ -41,6 +45,7 @@ def test_empty_string():
 # _dedup_reply_rows
 # ---------------------------------------------------------------------------
 
+
 def _row(msg_id: str) -> dict:
     return {"gmail_message_id": msg_id, "subject": "Re: SAR"}
 
@@ -60,19 +65,19 @@ class TestDedupReplyRows:
         twice. The fix removes duplicates from reply_rows, keeping them only in sp_reply_rows.
         """
         sar = [_row("shared1"), _row("sar-only"), _row("shared2")]
-        sp  = [_row("shared1"), _row("shared2"), _row("sp-only")]
+        sp = [_row("shared1"), _row("shared2"), _row("sp-only")]
         result = _dedup_reply_rows(sar, sp)
         ids = [r["gmail_message_id"] for r in result]
         assert ids == ["sar-only"]
 
     def test_no_overlap_returns_sar_unchanged(self):
         sar = [_row("a"), _row("b")]
-        sp  = [_row("c"), _row("d")]
+        sp = [_row("c"), _row("d")]
         assert _dedup_reply_rows(sar, sp) == sar
 
     def test_all_sar_rows_are_sp_rows_returns_empty(self):
         sar = [_row("x"), _row("y")]
-        sp  = [_row("x"), _row("y")]
+        sp = [_row("x"), _row("y")]
         assert _dedup_reply_rows(sar, sp) == []
 
     def test_empty_sar_returns_empty(self):

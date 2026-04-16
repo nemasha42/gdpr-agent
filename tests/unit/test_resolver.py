@@ -12,7 +12,6 @@ from contact_resolver.models import (
     CompanyRecord,
     Contact,
     PostalAddress,
-    RequestNotes,
 )
 from contact_resolver.resolver import (
     ContactResolver,
@@ -58,7 +57,11 @@ _DATAOWNERS_SPOTIFY: dict = {
             },
             "preferred_method": "email",
         },
-        "flags": {"portal_only": False, "email_accepted": True, "auto_send_possible": False},
+        "flags": {
+            "portal_only": False,
+            "email_accepted": True,
+            "auto_send_possible": False,
+        },
         "request_notes": {
             "special_instructions": "",
             "identity_verification_required": False,
@@ -282,7 +285,9 @@ def test_resolve_skips_stale_cache_and_continues(tmp_path: Path) -> None:
     """Stale cache → falls through to next steps (dataowners → datarequests)."""
     mock_http = _mock_http_datarequests(["spotify.json"], _DR_ENTRY)
     resolver = _make_resolver(tmp_path, http_get=mock_http)
-    _seed_db(resolver, "spotify.com", _stale_record(source="datarequests", days_old=200))
+    _seed_db(
+        resolver, "spotify.com", _stale_record(source="datarequests", days_old=200)
+    )
 
     result = resolver.resolve("spotify.com", "Spotify")
 
@@ -432,7 +437,9 @@ def test_resolve_llm_low_confidence_returns_none(tmp_path: Path) -> None:
         source_confidence="low",
         last_verified=TODAY,
     )
-    resolver = _make_resolver(tmp_path, http_get=mock_http, llm_search=MagicMock(return_value=low))
+    resolver = _make_resolver(
+        tmp_path, http_get=mock_http, llm_search=MagicMock(return_value=low)
+    )
 
     assert resolver.resolve("x.com", "X") is None
 
@@ -477,7 +484,10 @@ def test_is_stale_per_source(
 def test_is_stale_empty_last_verified(tmp_path: Path) -> None:
     resolver = _make_resolver(tmp_path)
     record = CompanyRecord(
-        company_name="X", source="llm_search", source_confidence="high", last_verified=""
+        company_name="X",
+        source="llm_search",
+        source_confidence="high",
+        last_verified="",
     )
     assert resolver._is_stale(record) is True
 
@@ -553,7 +563,9 @@ def test_resolve_privacy_page_result_persisted(tmp_path: Path) -> None:
         contact=Contact(privacy_email="privacy@acme.com"),
     )
     resolver = _make_resolver(
-        tmp_path, http_get=mock_http, privacy_scrape=MagicMock(return_value=scrape_record)
+        tmp_path,
+        http_get=mock_http,
+        privacy_scrape=MagicMock(return_value=scrape_record),
     )
     resolver.resolve("acme.com", "Acme")
 

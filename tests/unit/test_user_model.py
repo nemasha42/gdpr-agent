@@ -1,8 +1,5 @@
 """Tests for dashboard.user_model — User class, persistence, invite tokens."""
 
-import json
-from pathlib import Path
-
 import pytest
 
 from dashboard.user_model import (

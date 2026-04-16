@@ -5,7 +5,6 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 import anthropic
-import pytest
 
 from contact_resolver import cost_tracker
 from contact_resolver.llm_searcher import (
@@ -48,7 +47,9 @@ _VALID_PAYLOAD: dict = {
 }
 
 
-def _make_text_response(text: str, input_tokens: int = 500, output_tokens: int = 200) -> MagicMock:
+def _make_text_response(
+    text: str, input_tokens: int = 500, output_tokens: int = 200
+) -> MagicMock:
     """Build a mock Anthropic API response whose content has one text block."""
     block = MagicMock()
     block.text = text
@@ -184,8 +185,11 @@ def test_validate_and_build_portal_only_accepted() -> None:
 # search_company (integration of all helpers)
 # ---------------------------------------------------------------------------
 
+
 def test_search_company_success() -> None:
-    api_response = _make_text_response(json.dumps(_VALID_PAYLOAD), input_tokens=643, output_tokens=250)
+    api_response = _make_text_response(
+        json.dumps(_VALID_PAYLOAD), input_tokens=643, output_tokens=250
+    )
     cost_tracker.reset()
 
     with patch("contact_resolver.llm_searcher.anthropic.Anthropic") as MockClient:

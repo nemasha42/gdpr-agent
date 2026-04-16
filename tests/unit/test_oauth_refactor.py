@@ -13,17 +13,22 @@ def test_get_gmail_service_uses_tokens_dir(tmp_path):
     tokens_dir.mkdir()
     safe = _safe_email("alice@gmail.com")
     token_file = tokens_dir / f"{safe}_readonly.json"
-    token_file.write_text(json.dumps({
-        "token": "fake-token",
-        "refresh_token": "fake-refresh",
-        "client_id": "fake-client",
-        "client_secret": "fake-secret",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
-    }))
+    token_file.write_text(
+        json.dumps(
+            {
+                "token": "fake-token",
+                "refresh_token": "fake-refresh",
+                "client_id": "fake-client",
+                "client_secret": "fake-secret",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+            }
+        )
+    )
 
-    with patch("auth.gmail_oauth.build") as mock_build, \
-         patch("auth.gmail_oauth.Credentials") as mock_creds_cls:
+    with patch("auth.gmail_oauth.build") as mock_build, patch(
+        "auth.gmail_oauth.Credentials"
+    ) as mock_creds_cls:
         mock_creds = MagicMock()
         mock_creds.valid = True
         mock_creds.expired = False
@@ -47,14 +52,18 @@ def test_check_send_token_valid_uses_tokens_dir(tmp_path):
     tokens_dir.mkdir()
     safe = _safe_email("bob@gmail.com")
     token_file = tokens_dir / f"{safe}_send.json"
-    token_file.write_text(json.dumps({
-        "token": "fake-token",
-        "refresh_token": "fake-refresh",
-        "client_id": "fake-client",
-        "client_secret": "fake-secret",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "scopes": ["https://www.googleapis.com/auth/gmail.send"],
-    }))
+    token_file.write_text(
+        json.dumps(
+            {
+                "token": "fake-token",
+                "refresh_token": "fake-refresh",
+                "client_id": "fake-client",
+                "client_secret": "fake-secret",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/gmail.send"],
+            }
+        )
+    )
 
     with patch("auth.gmail_oauth.Credentials") as mock_creds_cls:
         mock_creds = MagicMock()
@@ -89,17 +98,22 @@ def test_get_gmail_send_service_uses_tokens_dir(tmp_path):
     tokens_dir.mkdir()
     safe = _safe_email("carol@gmail.com")
     token_file = tokens_dir / f"{safe}_send.json"
-    token_file.write_text(json.dumps({
-        "token": "fake-token",
-        "refresh_token": "fake-refresh",
-        "client_id": "fake-client",
-        "client_secret": "fake-secret",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "scopes": ["https://www.googleapis.com/auth/gmail.send"],
-    }))
+    token_file.write_text(
+        json.dumps(
+            {
+                "token": "fake-token",
+                "refresh_token": "fake-refresh",
+                "client_id": "fake-client",
+                "client_secret": "fake-secret",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/gmail.send"],
+            }
+        )
+    )
 
-    with patch("auth.gmail_oauth.build") as mock_build, \
-         patch("auth.gmail_oauth.Credentials") as mock_creds_cls:
+    with patch("auth.gmail_oauth.build") as mock_build, patch(
+        "auth.gmail_oauth.Credentials"
+    ) as mock_creds_cls:
         mock_creds = MagicMock()
         mock_creds.valid = True
         mock_creds.expired = False
@@ -134,6 +148,7 @@ def test_default_tokens_dir_unchanged():
 def _clear_cache():
     """Clear the service cache before and after each test."""
     from auth.gmail_oauth import clear_service_cache
+
     clear_service_cache()
     yield
     clear_service_cache()
@@ -147,17 +162,22 @@ def test_cache_hit_skips_disk_load(tmp_path):
     tokens_dir.mkdir()
     safe = _safe_email("alice@gmail.com")
     token_file = tokens_dir / f"{safe}_readonly.json"
-    token_file.write_text(json.dumps({
-        "token": "fake-token",
-        "refresh_token": "fake-refresh",
-        "client_id": "fake-client",
-        "client_secret": "fake-secret",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
-    }))
+    token_file.write_text(
+        json.dumps(
+            {
+                "token": "fake-token",
+                "refresh_token": "fake-refresh",
+                "client_id": "fake-client",
+                "client_secret": "fake-secret",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+            }
+        )
+    )
 
-    with patch("auth.gmail_oauth.build") as mock_build, \
-         patch("auth.gmail_oauth.Credentials") as mock_creds_cls:
+    with patch("auth.gmail_oauth.build") as mock_build, patch(
+        "auth.gmail_oauth.Credentials"
+    ) as mock_creds_cls:
         mock_creds = MagicMock()
         mock_creds.valid = True
         mock_creds.expired = False
@@ -165,10 +185,14 @@ def test_cache_hit_skips_disk_load(tmp_path):
         mock_creds_cls.from_authorized_user_file.return_value = mock_creds
 
         # First call — populates cache
-        svc1, email1 = get_gmail_service(email_hint="alice@gmail.com", tokens_dir=tokens_dir)
+        svc1, email1 = get_gmail_service(
+            email_hint="alice@gmail.com", tokens_dir=tokens_dir
+        )
 
         # Second call — should hit cache
-        svc2, email2 = get_gmail_service(email_hint="alice@gmail.com", tokens_dir=tokens_dir)
+        svc2, email2 = get_gmail_service(
+            email_hint="alice@gmail.com", tokens_dir=tokens_dir
+        )
 
         assert svc1 is svc2
         assert email1 == email2
@@ -185,17 +209,22 @@ def test_cache_miss_different_email(tmp_path):
     for addr in ("alice@gmail.com", "bob@gmail.com"):
         safe = _safe_email(addr)
         token_file = tokens_dir / f"{safe}_readonly.json"
-        token_file.write_text(json.dumps({
-            "token": "fake-token",
-            "refresh_token": "fake-refresh",
-            "client_id": "fake-client",
-            "client_secret": "fake-secret",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
-        }))
+        token_file.write_text(
+            json.dumps(
+                {
+                    "token": "fake-token",
+                    "refresh_token": "fake-refresh",
+                    "client_id": "fake-client",
+                    "client_secret": "fake-secret",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+                }
+            )
+        )
 
-    with patch("auth.gmail_oauth.build") as mock_build, \
-         patch("auth.gmail_oauth.Credentials") as mock_creds_cls:
+    with patch("auth.gmail_oauth.build") as mock_build, patch(
+        "auth.gmail_oauth.Credentials"
+    ) as mock_creds_cls:
         mock_creds = MagicMock()
         mock_creds.valid = True
         mock_creds.expired = False
@@ -227,25 +256,31 @@ def test_skip_get_profile_when_email_hint_and_cached_creds(tmp_path):
     tokens_dir.mkdir()
     safe = _safe_email("user@gmail.com")
     token_file = tokens_dir / f"{safe}_readonly.json"
-    token_file.write_text(json.dumps({
-        "token": "fake-token",
-        "refresh_token": "fake-refresh",
-        "client_id": "fake-client",
-        "client_secret": "fake-secret",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
-    }))
+    token_file.write_text(
+        json.dumps(
+            {
+                "token": "fake-token",
+                "refresh_token": "fake-refresh",
+                "client_id": "fake-client",
+                "client_secret": "fake-secret",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+            }
+        )
+    )
 
-    with patch("auth.gmail_oauth.build") as mock_build, \
-         patch("auth.gmail_oauth.Credentials") as mock_creds_cls, \
-         patch("auth.gmail_oauth._get_account_email") as mock_get_email:
+    with patch("auth.gmail_oauth.build") as mock_build, patch(
+        "auth.gmail_oauth.Credentials"
+    ) as mock_creds_cls, patch("auth.gmail_oauth._get_account_email") as mock_get_email:
         mock_creds = MagicMock()
         mock_creds.valid = True
         mock_creds.expired = False
         mock_creds.to_json.return_value = '{"token": "refreshed"}'
         mock_creds_cls.from_authorized_user_file.return_value = mock_creds
 
-        service, email = get_gmail_service(email_hint="user@gmail.com", tokens_dir=tokens_dir)
+        service, email = get_gmail_service(
+            email_hint="user@gmail.com", tokens_dir=tokens_dir
+        )
 
         # _get_account_email should NOT be called — we trust the email_hint
         mock_get_email.assert_not_called()
@@ -260,8 +295,8 @@ def test_skip_get_profile_when_email_hint_and_cached_creds(tmp_path):
 def test_oauth_log_written(tmp_path):
     """OAuth calls produce a log entry in the log file."""
     from auth.gmail_oauth import (
-        get_gmail_service, _safe_email, _LOG_PATH,
-        _log_lock, _service_cache,
+        get_gmail_service,
+        _safe_email,
     )
     import auth.gmail_oauth as oauth_mod
 
@@ -269,22 +304,26 @@ def test_oauth_log_written(tmp_path):
     tokens_dir.mkdir()
     safe = _safe_email("logger@gmail.com")
     token_file = tokens_dir / f"{safe}_readonly.json"
-    token_file.write_text(json.dumps({
-        "token": "fake-token",
-        "refresh_token": "fake-refresh",
-        "client_id": "fake-client",
-        "client_secret": "fake-secret",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
-    }))
+    token_file.write_text(
+        json.dumps(
+            {
+                "token": "fake-token",
+                "refresh_token": "fake-refresh",
+                "client_id": "fake-client",
+                "client_secret": "fake-secret",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+            }
+        )
+    )
 
     log_file = tmp_path / "oauth_calls.log"
 
-    with patch("auth.gmail_oauth.build") as mock_build, \
-         patch("auth.gmail_oauth.Credentials") as mock_creds_cls, \
-         patch.object(oauth_mod, "_LOG_PATH", log_file), \
-         patch.object(oauth_mod, "_counter_loaded", False), \
-         patch.object(oauth_mod, "_call_counter", 0):
+    with patch("auth.gmail_oauth.build") as mock_build, patch(
+        "auth.gmail_oauth.Credentials"
+    ) as mock_creds_cls, patch.object(oauth_mod, "_LOG_PATH", log_file), patch.object(
+        oauth_mod, "_counter_loaded", False
+    ), patch.object(oauth_mod, "_call_counter", 0):
         mock_creds = MagicMock()
         mock_creds.valid = True
         mock_creds.expired = False
@@ -310,17 +349,22 @@ def test_send_cache_hit(tmp_path):
     tokens_dir.mkdir()
     safe = _safe_email("sender@gmail.com")
     token_file = tokens_dir / f"{safe}_send.json"
-    token_file.write_text(json.dumps({
-        "token": "fake-token",
-        "refresh_token": "fake-refresh",
-        "client_id": "fake-client",
-        "client_secret": "fake-secret",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "scopes": ["https://www.googleapis.com/auth/gmail.send"],
-    }))
+    token_file.write_text(
+        json.dumps(
+            {
+                "token": "fake-token",
+                "refresh_token": "fake-refresh",
+                "client_id": "fake-client",
+                "client_secret": "fake-secret",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/gmail.send"],
+            }
+        )
+    )
 
-    with patch("auth.gmail_oauth.build") as mock_build, \
-         patch("auth.gmail_oauth.Credentials") as mock_creds_cls:
+    with patch("auth.gmail_oauth.build") as mock_build, patch(
+        "auth.gmail_oauth.Credentials"
+    ) as mock_creds_cls:
         mock_creds = MagicMock()
         mock_creds.valid = True
         mock_creds.expired = False

@@ -8,11 +8,11 @@ from contact_resolver.models import PortalFieldMapping
 _CAPTCHA_SELECTORS = [
     'iframe[src*="recaptcha"]',
     'iframe[src*="hcaptcha"]',
-    '.g-recaptcha',
-    '#captcha',
-    '[data-sitekey]',
+    ".g-recaptcha",
+    "#captcha",
+    "[data-sitekey]",
     'iframe[src*="challenges.cloudflare.com"]',
-    '.grecaptcha-badge',  # invisible reCAPTCHA v3 badge
+    ".grecaptcha-badge",  # invisible reCAPTCHA v3 badge
 ]
 
 # Stealth script to reduce automation detection (same as link_downloader.py)
@@ -43,7 +43,9 @@ def detect_captcha_type(page: Any) -> str:
     """
     has_badge = bool(page.query_selector(".grecaptcha-badge"))
     has_visible_iframe = False
-    for iframe in page.query_selector_all('iframe[src*="recaptcha"], iframe[src*="hcaptcha"]'):
+    for iframe in page.query_selector_all(
+        'iframe[src*="recaptcha"], iframe[src*="hcaptcha"]'
+    ):
         try:
             if iframe.is_visible():
                 has_visible_iframe = True

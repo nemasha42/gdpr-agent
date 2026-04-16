@@ -1,9 +1,8 @@
 """Unit tests for run.py orchestration logic."""
 
 from datetime import date
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 from contact_resolver.models import (
     CompanyRecord,
@@ -28,7 +27,11 @@ _RECORD = CompanyRecord(
 
 _SERVICES = [
     {"domain": "spotify.com", "company_name_raw": "Spotify", "confidence": "HIGH"},
-    {"domain": "unknown.example", "company_name_raw": "Unknown Co", "confidence": "LOW"},
+    {
+        "domain": "unknown.example",
+        "company_name_raw": "Unknown Co",
+        "confidence": "LOW",
+    },
 ]
 
 
@@ -47,11 +50,15 @@ def test_run_skips_company_when_resolver_returns_none(capsys):
     with patch("run.ContactResolver", return_value=mock_resolver):
         with patch("run.fetch_emails", return_value=[]):
             with patch("run.extract_services", return_value=_SERVICES[:1]):
-                with patch("run.get_gmail_service", return_value=(MagicMock(), "test@gmail.com")):
+                with patch(
+                    "run.get_gmail_service",
+                    return_value=(MagicMock(), "test@gmail.com"),
+                ):
                     with patch("run.preview_and_send", return_value=False):
                         with patch("run.cost_tracker.print_cost_summary"):
                             with patch("run.cost_tracker.set_llm_limit"):
                                 import sys
+
                                 with patch.object(sys, "argv", ["run.py", "--dry-run"]):
                                     run.main()
 
@@ -73,11 +80,15 @@ def test_run_reports_sent_and_skipped_counts(capsys):
     with patch("run.ContactResolver", return_value=mock_resolver):
         with patch("run.fetch_emails", return_value=[]):
             with patch("run.extract_services", return_value=_SERVICES):
-                with patch("run.get_gmail_service", return_value=(MagicMock(), "test@gmail.com")):
+                with patch(
+                    "run.get_gmail_service",
+                    return_value=(MagicMock(), "test@gmail.com"),
+                ):
                     with patch("run.compose", return_value=mock_letter):
                         with patch("run.preview_and_send", return_value=True):
                             with patch("run.cost_tracker.print_cost_summary"):
                                 import sys
+
                                 with patch.object(sys, "argv", ["run.py", "--dry-run"]):
                                     run.main()
 
@@ -95,11 +106,19 @@ def test_run_max_llm_calls_flag_sets_limit():
     with patch("run.ContactResolver", return_value=mock_resolver):
         with patch("run.fetch_emails", return_value=[]):
             with patch("run.extract_services", return_value=[]):
-                with patch("run.get_gmail_service", return_value=(MagicMock(), "test@gmail.com")):
+                with patch(
+                    "run.get_gmail_service",
+                    return_value=(MagicMock(), "test@gmail.com"),
+                ):
                     with patch("run.cost_tracker.print_cost_summary"):
                         with patch("run.cost_tracker.set_llm_limit") as mock_limit:
                             import sys
-                            with patch.object(sys, "argv", ["run.py", "--dry-run", "--max-llm-calls", "5"]):
+
+                            with patch.object(
+                                sys,
+                                "argv",
+                                ["run.py", "--dry-run", "--max-llm-calls", "5"],
+                            ):
                                 run.main()
 
     mock_limit.assert_called_once_with(5)
@@ -111,8 +130,11 @@ def test_run_no_services_exits_cleanly(capsys):
 
     with patch("run.fetch_emails", return_value=[]):
         with patch("run.extract_services", return_value=[]):
-            with patch("run.get_gmail_service", return_value=(MagicMock(), "test@gmail.com")):
+            with patch(
+                "run.get_gmail_service", return_value=(MagicMock(), "test@gmail.com")
+            ):
                 import sys
+
                 with patch.object(sys, "argv", ["run.py", "--dry-run"]):
                     run.main()
 

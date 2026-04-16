@@ -30,13 +30,18 @@ def request_solve(
         screenshot_path=str(screenshot_path),
     )
     challenge_path = _challenge_path(domain, base_dir)
-    challenge_path.write_text(json.dumps({
-        "domain": challenge.domain,
-        "portal_url": challenge.portal_url,
-        "created_at": challenge.created_at,
-        "status": challenge.status,
-        "solution": challenge.solution,
-    }, indent=2))
+    challenge_path.write_text(
+        json.dumps(
+            {
+                "domain": challenge.domain,
+                "portal_url": challenge.portal_url,
+                "created_at": challenge.created_at,
+                "status": challenge.status,
+                "solution": challenge.solution,
+            },
+            indent=2,
+        )
+    )
 
     return challenge
 

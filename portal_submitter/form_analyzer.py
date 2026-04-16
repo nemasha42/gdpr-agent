@@ -2,7 +2,7 @@
 
 import json
 import re
-from datetime import date, timedelta
+from datetime import date
 from typing import Any, Callable
 
 from config.settings import settings
@@ -11,7 +11,14 @@ from letter_engine.models import SARLetter
 
 _CACHE_TTL_DAYS = 90
 
-_INTERACTIVE_ROLES = {"textbox", "combobox", "checkbox", "radio", "spinbutton", "searchbox"}
+_INTERACTIVE_ROLES = {
+    "textbox",
+    "combobox",
+    "checkbox",
+    "radio",
+    "spinbutton",
+    "searchbox",
+}
 _BUTTON_ROLES = {"button", "link"}
 
 _FIELD_MAPPING_PROMPT = """You are mapping a web form's fields to user data for a GDPR Subject Access Request.
@@ -108,7 +115,9 @@ def _is_cache_fresh(cached_at: str) -> bool:
         return False
 
 
-def _extract_interactive_elements(node: dict, results: list | None = None) -> list[dict]:
+def _extract_interactive_elements(
+    node: dict, results: list | None = None
+) -> list[dict]:
     """Extract from old JSON accessibility tree (legacy, kept for tests)."""
     if results is None:
         results = []
@@ -157,11 +166,13 @@ def _parse_mapping_response(raw: str) -> PortalFieldMapping:
 
     fields = []
     for f in data.get("fields", []):
-        fields.append(PortalFormField(
-            name=f.get("name", ""),
-            value_key=f.get("value_key", ""),
-            role=f.get("role", "textbox"),
-        ))
+        fields.append(
+            PortalFormField(
+                name=f.get("name", ""),
+                value_key=f.get("value_key", ""),
+                role=f.get("role", "textbox"),
+            )
+        )
 
     return PortalFieldMapping(
         cached_at=date.today().isoformat(),

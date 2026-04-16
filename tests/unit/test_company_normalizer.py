@@ -1,7 +1,5 @@
 """Unit tests for scanner/company_normalizer.py."""
 
-import pytest
-
 from scanner.company_normalizer import canonical_domain, normalize_domain
 
 

@@ -55,11 +55,15 @@ def fetch_replies_for_sar(
         # Thread-based lookup is authoritative: only messages in our SAR's Gmail
         # thread are genuine replies. Do NOT also search by domain — that picks up
         # newsletters, marketing mail, and other unrelated emails from the same sender.
-        thread_msgs = _fetch_by_thread(service, thread_id, user_email, seen_ids, verbose)
+        thread_msgs = _fetch_by_thread(
+            service, thread_id, user_email, seen_ids, verbose
+        )
         messages.extend(thread_msgs)
     else:
         # No thread_id: legacy record or portal/postal SAR — fall back to domain search.
-        search_msgs = _fetch_by_search(service, sent_record, user_email, seen_ids, verbose)
+        search_msgs = _fetch_by_search(
+            service, sent_record, user_email, seen_ids, verbose
+        )
         messages.extend(search_msgs)
 
     return messages
@@ -78,11 +82,16 @@ def _fetch_by_thread(
     verbose: bool = False,
 ) -> list[dict]:
     try:
-        thread = service.users().threads().get(
-            userId="me",
-            id=thread_id,
-            format="full",
-        ).execute()
+        thread = (
+            service.users()
+            .threads()
+            .get(
+                userId="me",
+                id=thread_id,
+                format="full",
+            )
+            .execute()
+        )
     except Exception:
         return []
 
@@ -151,11 +160,16 @@ def _fetch_by_search(
                 continue
             seen_ids.add(ref["id"])
             try:
-                msg = service.users().messages().get(
-                    userId="me",
-                    id=ref["id"],
-                    format="full",
-                ).execute()
+                msg = (
+                    service.users()
+                    .messages()
+                    .get(
+                        userId="me",
+                        id=ref["id"],
+                        format="full",
+                    )
+                    .execute()
+                )
             except Exception:
                 continue
             from_header = _get_header(msg, "From")
@@ -173,7 +187,11 @@ def _paginated_search(service: Any, query: str, max_results: int = 200) -> list[
     refs: list[dict] = []
     page_token = None
     while True:
-        kwargs: dict = {"userId": "me", "q": query, "maxResults": min(100, max_results - len(refs))}
+        kwargs: dict = {
+            "userId": "me",
+            "q": query,
+            "maxResults": min(100, max_results - len(refs)),
+        }
         if page_token:
             kwargs["pageToken"] = page_token
         try:
@@ -237,13 +255,17 @@ def _extract_body(payload: dict) -> str:
         if not data:
             return ""
         try:
-            return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
+            return base64.urlsafe_b64decode(data + "==").decode(
+                "utf-8", errors="replace"
+            )
         except Exception:
             return ""
 
     def _strip_html(text: str) -> str:
         # Remove style/script/head blocks entirely (content is not useful plain text)
-        text = _re.sub(r"<(style|script|head)[^>]*>.*?</\1>", " ", text, flags=_re.I | _re.S)
+        text = _re.sub(
+            r"<(style|script|head)[^>]*>.*?</\1>", " ", text, flags=_re.I | _re.S
+        )
         # Preserve href URLs before stripping tags — download links live in <a href="...">
         # Insert the URL as plain text next to the anchor text so regexes can find it.
         text = _re.sub(
@@ -257,10 +279,10 @@ def _extract_body(payload: dict) -> str:
         def _clean(t: str) -> str:
             # 1. Strip zero-width / invisible Unicode chars used as email padding
             t = _re.sub(
-                r'[\u00ad\u034f\u115f\u1160\u17b4\u17b5'
-                r'\u180b-\u180e\u200b-\u200f\u202a-\u202e'
-                r'\u2060-\u2064\u2066-\u206f\u3164\ufeff\uffa0]+',
-                '',
+                r"[\u00ad\u034f\u115f\u1160\u17b4\u17b5"
+                r"\u180b-\u180e\u200b-\u200f\u202a-\u202e"
+                r"\u2060-\u2064\u2066-\u206f\u3164\ufeff\uffa0]+",
+                "",
                 t,
             )
             # 2. Normalize each line (strip leading/trailing whitespace)
@@ -273,7 +295,7 @@ def _extract_body(payload: dict) -> str:
                     deduped.append(line)
                     prev = line
             # 4. Collapse 3+ consecutive blank lines to a single blank line
-            result = _re.sub(r'\n{3,}', '\n\n', '\n'.join(deduped))
+            result = _re.sub(r"\n{3,}", "\n\n", "\n".join(deduped))
             return result.strip()
 
         return _clean(_html.unescape(text))
@@ -328,12 +350,14 @@ def _collect_attachment_parts(part: dict, out: list[dict]) -> None:
     filename = part.get("filename", "")
     body = part.get("body", {})
     if filename and body.get("attachmentId"):
-        out.append({
-            "filename": filename,
-            "mimeType": part.get("mimeType", ""),
-            "attachmentId": body["attachmentId"],
-            "size": body.get("size", 0),
-        })
+        out.append(
+            {
+                "filename": filename,
+                "mimeType": part.get("mimeType", ""),
+                "attachmentId": body["attachmentId"],
+                "size": body.get("size", 0),
+            }
+        )
     for sub in part.get("parts", []):
         _collect_attachment_parts(sub, out)
 
@@ -344,7 +368,12 @@ def _parse_date(date_str: str) -> str:
         return datetime.now(timezone.utc).isoformat(timespec="seconds")
     try:
         from email.utils import parsedate_to_datetime
+
         dt = parsedate_to_datetime(date_str)
-        return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        return (
+            dt.astimezone(timezone.utc)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
+        )
     except Exception:
         return datetime.now(timezone.utc).isoformat(timespec="seconds")

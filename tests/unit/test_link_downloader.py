@@ -2,7 +2,6 @@
 
 import io
 import zipfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -47,6 +46,7 @@ def _mock_requests_response(status: int, content: bytes, headers: dict | None = 
 
 def test_download_result_ok_when_catalog_set():
     from reply_monitor.models import AttachmentCatalog
+
     cat = AttachmentCatalog(path="/tmp/data.zip", size_bytes=100, file_type="zip")
     r = DownloadResult(catalog=cat)
     assert r.ok is True
@@ -86,13 +86,18 @@ def test_safe_filename_truncates_long_names():
 def test_filename_from_content_disposition():
     resp = MagicMock()
     resp.headers = {"Content-Disposition": 'attachment; filename="data_export.zip"'}
-    assert _filename_from_response(resp, "https://example.com/download") == "data_export.zip"
+    assert (
+        _filename_from_response(resp, "https://example.com/download")
+        == "data_export.zip"
+    )
 
 
 def test_filename_from_url_segment():
     resp = MagicMock()
     resp.headers = {}
-    name = _filename_from_response(resp, "https://example.com/export/mydata.zip?token=abc")
+    name = _filename_from_response(
+        resp, "https://example.com/export/mydata.zip?token=abc"
+    )
     assert name == "mydata.zip"
 
 
@@ -140,7 +145,9 @@ def test_catalog_file_missing(tmp_path):
 
 def test_download_requests_success(tmp_path):
     zdata = _make_zip({"a.json": b"{}"})
-    mock_resp = _mock_requests_response(200, zdata, {"Content-Disposition": 'attachment; filename="export.zip"'})
+    mock_resp = _mock_requests_response(
+        200, zdata, {"Content-Disposition": 'attachment; filename="export.zip"'}
+    )
 
     with patch("requests.get", return_value=mock_resp):
         result = _download_requests("https://example.com/export", tmp_path)
@@ -193,19 +200,22 @@ def test_download_data_link_playwright_not_installed(tmp_path):
 
 
 @pytest.mark.skipif(
-    __import__("importlib.util", fromlist=["find_spec"]).find_spec("playwright") is None,
+    __import__("importlib.util", fromlist=["find_spec"]).find_spec("playwright")
+    is None,
     reason="playwright not installed",
 )
-def test_download_data_link_playwright_binary_missing_gives_helpful_error(tmp_path, capsys):
+def test_download_data_link_playwright_binary_missing_gives_helpful_error(
+    tmp_path, capsys
+):
     """Missing Playwright binaries should print a hint about 'playwright install'."""
     with patch("reply_monitor.link_downloader._download_playwright") as mock_pw:
         mock_pw.return_value = DownloadResult(
             error="Playwright browser binaries not found. Run: python -m playwright install chromium"
         )
         with patch("reply_monitor.link_downloader._download_requests") as mock_req:
-            mock_req.return_value = DownloadResult(error="requests fallback also failed")
+            mock_req.return_value = DownloadResult(
+                error="requests fallback also failed"
+            )
             result = download_data_link("https://example.com/data", "example.com")
 
     assert "playwright" in result.error.lower() or "install" in result.error.lower()
-
-

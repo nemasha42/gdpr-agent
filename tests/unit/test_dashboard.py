@@ -3,7 +3,7 @@
 import json
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -57,7 +57,9 @@ def client(tmp_path):
     cost_path.write_text(json.dumps(cost_data))
 
     # Create admin user
-    admin = User(email="test@example.com", name="Test", role="admin", data_root=tmp_path)
+    admin = User(
+        email="test@example.com", name="Test", role="admin", data_root=tmp_path
+    )
     save_user(admin, path=tmp_path / "users.json")
 
     import dashboard.app as app_module
@@ -113,7 +115,9 @@ def test_refresh_calls_monitor_and_redirects(client):
 
 def test_refresh_monitor_exception_does_not_crash(client):
     """Monitor errors should be caught; route still redirects."""
-    with patch("dashboard.app._run_monitor_for_account", side_effect=RuntimeError("boom")):
+    with patch(
+        "dashboard.app._run_monitor_for_account", side_effect=RuntimeError("boom")
+    ):
         with patch("dashboard.app._reextract_missing_links", return_value=0):
             resp = client.get("/refresh?account=test@example.com")
             assert resp.status_code == 302

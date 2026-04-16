@@ -2,10 +2,8 @@
 
 import json
 from datetime import date, timedelta
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from portal_submitter.models import PortalResult, CaptchaChallenge
 from portal_submitter.platform_hints import detect_platform, otp_sender_hints
@@ -41,7 +39,9 @@ class TestPortalResult:
 
 class TestCaptchaChallenge:
     def test_creation(self):
-        c = CaptchaChallenge(domain="example.com", portal_url="https://example.com/privacy")
+        c = CaptchaChallenge(
+            domain="example.com", portal_url="https://example.com/privacy"
+        )
         assert c.status == "pending"
         assert c.solution == ""
         assert c.domain == "example.com"
@@ -49,22 +49,36 @@ class TestCaptchaChallenge:
 
 class TestPlatformDetection:
     def test_onetrust_by_domain(self):
-        assert detect_platform("https://privacyportal.onetrust.com/webform/abc-123") == "onetrust"
+        assert (
+            detect_platform("https://privacyportal.onetrust.com/webform/abc-123")
+            == "onetrust"
+        )
 
     def test_onetrust_by_privacyportal(self):
-        assert detect_platform("https://company.my.onetrust.com/webform/xyz") == "onetrust"
+        assert (
+            detect_platform("https://company.my.onetrust.com/webform/xyz") == "onetrust"
+        )
 
     def test_trustarc(self):
-        assert detect_platform("https://submit-irm.trustarc.com/services/validation/abc") == "trustarc"
+        assert (
+            detect_platform("https://submit-irm.trustarc.com/services/validation/abc")
+            == "trustarc"
+        )
 
     def test_trustarc_by_keyword(self):
         assert detect_platform("https://privacy.trustarc.com/form/abc") == "trustarc"
 
     def test_salesforce(self):
-        assert detect_platform("https://help.glassdoor.com/s/privacyrequest") == "salesforce"
+        assert (
+            detect_platform("https://help.glassdoor.com/s/privacyrequest")
+            == "salesforce"
+        )
 
     def test_login_required_google(self):
-        assert detect_platform("https://myaccount.google.com/data-and-privacy") == "login_required"
+        assert (
+            detect_platform("https://myaccount.google.com/data-and-privacy")
+            == "login_required"
+        )
 
     def test_login_required_apple(self):
         assert detect_platform("https://privacy.apple.com") == "login_required"
@@ -89,11 +103,11 @@ class TestPlatformDetection:
         assert detect_platform("https://zendesk.es/", html=html) == "ketch"
 
     def test_ketch_html_window_semaphore(self):
-        html = '<script>window.semaphore = window.semaphore || [];</script>'
+        html = "<script>window.semaphore = window.semaphore || [];</script>"
         assert detect_platform("https://company.com/privacy", html=html) == "ketch"
 
     def test_non_ketch_html_returns_unknown(self):
-        html = '<html><body>Regular page</body></html>'
+        html = "<html><body>Regular page</body></html>"
         assert detect_platform("https://example.com/privacy", html=html) == "unknown"
 
     def test_ketch_otp_hints(self):
@@ -157,14 +171,20 @@ class TestAnalyzeForm:
         fake_page = MagicMock()
         fake_page.locator.return_value.aria_snapshot.return_value = fake_aria_snapshot
 
-        llm_response = json.dumps({
-            "fields": [
-                {"name": "First Name", "value_key": "first_name", "role": "textbox"},
-                {"name": "Email Address", "value_key": "email", "role": "textbox"},
-                {"name": "Country", "value_key": "country", "role": "combobox"},
-            ],
-            "submit_button": "Submit",
-        })
+        llm_response = json.dumps(
+            {
+                "fields": [
+                    {
+                        "name": "First Name",
+                        "value_key": "first_name",
+                        "role": "textbox",
+                    },
+                    {"name": "Email Address", "value_key": "email", "role": "textbox"},
+                    {"name": "Country", "value_key": "country", "role": "combobox"},
+                ],
+                "submit_button": "Submit",
+            }
+        )
 
         def mock_llm_call(prompt: str) -> str:
             return llm_response
@@ -184,6 +204,7 @@ class TestAnalyzeForm:
         )
 
         call_count = 0
+
         def mock_llm_call(prompt: str) -> str:
             nonlocal call_count
             call_count += 1
@@ -207,12 +228,15 @@ class TestAnalyzeForm:
         fake_page = MagicMock()
         fake_page.locator.return_value.aria_snapshot.return_value = fake_aria_snapshot
 
-        llm_response = json.dumps({
-            "fields": [{"name": "Email", "value_key": "email", "role": "textbox"}],
-            "submit_button": "Submit",
-        })
+        llm_response = json.dumps(
+            {
+                "fields": [{"name": "Email", "value_key": "email", "role": "textbox"}],
+                "submit_button": "Submit",
+            }
+        )
 
         call_count = 0
+
         def mock_llm_call(prompt: str) -> str:
             nonlocal call_count
             call_count += 1
@@ -258,7 +282,9 @@ class TestFillAndSubmit:
         mapping = PortalFieldMapping(
             cached_at=date.today().isoformat(),
             fields=[
-                PortalFormField(name="First Name", value_key="first_name", role="textbox"),
+                PortalFormField(
+                    name="First Name", value_key="first_name", role="textbox"
+                ),
                 PortalFormField(name="Email", value_key="email", role="textbox"),
             ],
             submit_button="Submit",
@@ -311,14 +337,18 @@ class TestCaptchaRelay:
         }
         (tmp_path / "example.com.json").write_text(json.dumps(challenge_data))
 
-        solution = poll_solution("example.com", base_dir=tmp_path, timeout=1, poll_interval=0.1)
+        solution = poll_solution(
+            "example.com", base_dir=tmp_path, timeout=1, poll_interval=0.1
+        )
         assert solution == "abc123"
 
     def test_poll_solution_timeout(self, tmp_path):
         challenge_data = {"domain": "example.com", "status": "pending", "solution": ""}
         (tmp_path / "example.com.json").write_text(json.dumps(challenge_data))
 
-        solution = poll_solution("example.com", base_dir=tmp_path, timeout=0.3, poll_interval=0.1)
+        solution = poll_solution(
+            "example.com", base_dir=tmp_path, timeout=0.3, poll_interval=0.1
+        )
         assert solution is None
 
     def test_challenge_path(self, tmp_path):
@@ -401,7 +431,9 @@ class TestSubmitPortal:
         letter.body = "SAR body"
         letter.company_name = "Google"
 
-        result = submit_portal(letter, scan_email="user@gmail.com", browser_launcher=MagicMock())
+        result = submit_portal(
+            letter, scan_email="user@gmail.com", browser_launcher=MagicMock()
+        )
         assert result.needs_manual is True
         assert result.success is False
         assert result.error == "login_required"
@@ -434,17 +466,21 @@ class TestSubmitPortal:
 
         def mock_launcher():
             return MagicMock(
-                __enter__=MagicMock(return_value=MagicMock(
-                    chromium=MagicMock(launch=MagicMock(return_value=mock_browser))
-                )),
+                __enter__=MagicMock(
+                    return_value=MagicMock(
+                        chromium=MagicMock(launch=MagicMock(return_value=mock_browser))
+                    )
+                ),
                 __exit__=MagicMock(return_value=False),
             )
 
         # Mock LLM
-        llm_response = json.dumps({
-            "fields": [{"name": "Email", "value_key": "email", "role": "textbox"}],
-            "submit_button": "Submit",
-        })
+        llm_response = json.dumps(
+            {
+                "fields": [{"name": "Email", "value_key": "email", "role": "textbox"}],
+                "submit_button": "Submit",
+            }
+        )
 
         result = submit_portal(
             letter,
@@ -498,10 +534,15 @@ class TestNavigatorIntegration:
         mock_context.new_page.return_value = mock_page
 
         with patch("portal_submitter.submitter.detect_platform", return_value="ketch"):
-            with patch("portal_submitter.submitter.navigate_to_form", return_value=False) as mock_nav:
-                with patch("portal_submitter.submitter.page_has_form", return_value=False):
+            with patch(
+                "portal_submitter.submitter.navigate_to_form", return_value=False
+            ) as mock_nav:
+                with patch(
+                    "portal_submitter.submitter.page_has_form", return_value=False
+                ):
                     result = submit_portal(
-                        letter, "test@example.com",
+                        letter,
+                        "test@example.com",
                         browser_launcher=lambda: mock_pw,
                     )
 
@@ -525,7 +566,12 @@ class TestPortalTracking:
             portal_url="https://help.glassdoor.com/s/privacyrequest",
             postal_address="",
         )
-        tracker.record_sent(letter, path=path, portal_status="submitted", portal_confirmation_ref="TICKET-123")
+        tracker.record_sent(
+            letter,
+            path=path,
+            portal_status="submitted",
+            portal_confirmation_ref="TICKET-123",
+        )
 
         log = tracker.get_log(path=path)
         assert len(log) == 1

@@ -7,9 +7,14 @@ from dashboard.user_model import User, save_user, load_user
 
 @pytest.fixture
 def app(tmp_path):
-    app = Flask(__name__, template_folder=str(
-        __import__("pathlib").Path(__file__).parent.parent.parent / "dashboard" / "templates"
-    ))
+    app = Flask(
+        __name__,
+        template_folder=str(
+            __import__("pathlib").Path(__file__).parent.parent.parent
+            / "dashboard"
+            / "templates"
+        ),
+    )
     app.config["SECRET_KEY"] = "test-secret"
     app.config["TESTING"] = True
     app.config["USERS_PATH"] = tmp_path / "users.json"
@@ -25,11 +30,14 @@ def app(tmp_path):
 
     @login_manager.user_loader
     def load(email):
-        return load_user(email, path=app.config["USERS_PATH"],
-                        data_root=app.config["USER_DATA_ROOT"])
+        return load_user(
+            email, path=app.config["USERS_PATH"], data_root=app.config["USER_DATA_ROOT"]
+        )
 
     # Create admin user
-    admin = User(email="admin@gmail.com", name="Admin", role="admin", data_root=tmp_path)
+    admin = User(
+        email="admin@gmail.com", name="Admin", role="admin", data_root=tmp_path
+    )
     save_user(admin, path=tmp_path / "users.json")
     (tmp_path / "admin_at_gmail_com").mkdir()
 

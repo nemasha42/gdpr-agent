@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
 
 try:
     import anthropic
@@ -32,221 +31,395 @@ from reply_monitor.models import ClassificationResult
 # (tag, [(field, pattern), ...])  — field: "from" | "subject" | "snippet" | "text"
 # "text" = subject + " " + snippet combined
 _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
-    ("BOUNCE_PERMANENT", [
-        ("from",    re.compile(r"mailer-daemon@|postmaster@", re.I)),
-        ("subject", re.compile(r"delivery status notification|undeliverable|mail delivery|failure notice|returned mail", re.I)),
-        ("snippet", re.compile(
-            r"550[\s.]|5\.1\.1|email account does not exist"
-            r"|group you tried to contact|may not exist or you may not have permission"
-            r"|address not found|no such user",
-            re.I)),
-    ]),
-    ("BOUNCE_TEMPORARY", [
-        # Distinguished from BOUNCE_PERMANENT by snippet content: 4xx codes or transient signals
-        ("snippet", re.compile(r"\b4\d\d\b|try again later|temporarily unavailable|service temporarily", re.I)),
-    ]),
-    ("OUT_OF_OFFICE", [
-        ("subject", re.compile(r"out of office|away|automatic reply|auto[\s-]?reply|vacation|on leave"
-                               r"|abwesenheitsnotiz|abwesend", re.I)),
-        ("snippet", re.compile(r"out of office|i am away|on annual leave|back on \d|ooo\b|automatic reply"
-                               r"|abwesenheitsnotiz|abwesend|urlaub.{0,20}r[uü]ckkehr|nicht im b[uü]ro", re.I)),
-    ]),
-    ("AUTO_ACKNOWLEDGE", [
-        ("subject", re.compile(
-            r"\[[\w]+-[\w]+\]"                 # [TICKET-123456]
-            r"|\[\d{1,2}-\d{10,}\]"            # [5-9110000040081]
-            r"|request received|we received your"
-            r"|your (request|inquiry|case) has been",
-            re.I)),
-        ("snippet", re.compile(
-            r"received your (request|email|message)|we will process|has been logged"
-            r"|case number|ticket number|reference number"
-            r"|\[\d{1,2}-\d{10,}\]"            # Google ticket format
-            r"|your (request|inquiry) has been received"
-            r"|thank you for (contacting|reaching out).{0,80}(request|privacy|gdpr|data)"
-            r"|representative will be in touch|will be in touch as soon"
-            r"|a (member|representative|specialist|agent).{0,60}(will contact|will respond|will be in touch|will reach out)"
-            r"|someone (from our team|will be in touch|will contact)"
-            r"|automatisch generiert[ea]\s+(e-?mail|nachricht)"
-            r"|wir haben (ihre|deine) (anfrage|e-?mail|nachricht) erhalten"
-            r"|vielen dank.{0,50}(anfrage|kontakt)",
-            re.I)),
-    ]),
-    ("PORTAL_VERIFICATION", [
-        ("snippet", re.compile(
-            r"(sent|sending) you an? (email )?verification"
-            r"|email verification request"
-            r"|verify your (email|identity).{0,60}(link|email|respond)"
-            r"|must respond within \d+ days or your request will expire"
-            r"|verify.{0,30}email.{0,30}confirm.{0,30}identity",
-            re.I)),
-        ("subject", re.compile(
-            r"email verification|verify your email|verification request",
-            re.I)),
-    ]),
-    ("CONFIRMATION_REQUIRED", [
-        ("subject", re.compile(r"confirm (your )?request|verify (your )?request", re.I)),
-        ("snippet", re.compile(
-            r"will not begin processing.{0,40}until you have confirmed"
-            r"|confirm.{0,20}request.{0,20}button"
-            r"|confirm request"
-            r"|hrtechprivacy\.com/confirm"
-            r"|click.{0,30}confirm",
-            re.I)),
-    ]),
-    ("IDENTITY_REQUIRED", [
-        ("snippet", re.compile(
-            r"proof of identity|verify your identity|copy of.{0,20}passport"
-            r"|photo id|government[\s-]issued|id verification"
-            r"|identity verification|verify.{0,20}identity",
-            re.I)),
-    ]),
-    ("MORE_INFO_REQUIRED", [
-        ("snippet", re.compile(
-            r"please clarify|cannot identify|unable to locate.{0,20}record"
-            r"|not clear which|additional information.{0,20}required"
-            r"|need more information|require.{0,20}clarification",
-            re.I)),
-    ]),
-    ("WRONG_CHANNEL", [
-        ("snippet", re.compile(
-            # Unmonitored inbox signals
-            r"no longer monitored|won.t receive a response"
-            r"|nicht gelesen|not read.{0,20}this mailbox"
-            r"|use.{0,20}support form|this address is not monitored"
-            r"|this mailbox is not monitored"
-            # Portal/form redirect signals (merged from former REDIRECT_TO_PORTAL)
-            r"|please submit via|privacy portal|dsar portal"
-            r"|online form at|submit your request at"
-            r"|requests\.hrtechprivacy\.com"
-            r"|use our (online|web) (form|portal|tool)"
-            # Self-service deflection — company telling user to manage data themselves
-            r"|via our self-service|self-service portal|self-service tool"
-            r"|can do so directly via"
-            r"|via your (account|profile|dashboard)"
-            # Channel mismatch — company says this request can't be handled here
-            r"|not able to process.{0,60}(request|this).{0,60}(over chat|chat|this (channel|address|inbox))"
-            r"|unable to process.{0,60}(request|this).{0,60}(over chat|chat|this (channel|address|inbox))"
-            r"|this type of request.{0,60}(over chat|chat|email|this channel)"
-            r"|pursue this (further|request).{0,40}(through|via)"
-            # Premature ticket closure — company resolved/closed ticket without providing data
-            r"|ticket.{0,20}(set to |is )?(solved|resolved|closed)"
-            r"|request.{0,20}(has been |been )?(closed|resolved|marked as (solved|resolved))"
-            r"|case.{0,20}(has been |been )?(closed|resolved)"
-            r"|marked as (solved|resolved|closed)",
-            re.I)),
-        ("subject", re.compile(
-            r"set to Solved|marked as (solved|resolved|closed)",
-            re.I)),
-    ]),
-    ("REQUEST_ACCEPTED", [
-        ("subject", re.compile(r"start of your request|confirmed|processing your request", re.I)),
-        ("snippet", re.compile(
-            r"confirmed your request and will begin"
-            r"|begin gathering your data"
-            r"|happy to make the privacy request on your behalf"
-            r"|processing your subject access request"
-            r"|will begin processing your (sar|subject access)",
-            re.I)),
-    ]),
-    ("EXTENDED", [
-        ("snippet", re.compile(
-            r"require more time|three months|90 days"
-            r"|extended the period|complex request.{0,30}additional time"
-            r"|additional period of.{0,20}two months",
-            re.I)),
-    ]),
-    ("IN_PROGRESS", [
-        ("snippet", re.compile(
-            r"currently processing|working on your request|in progress"
-            r"|your request is being processed",
-            re.I)),
-    ]),
-    ("DATA_PROVIDED_LINK", [
-        ("subject", re.compile(
-            r"download your.{0,30}personal data|data.{0,20}available|personal data.{0,20}complete"
-            r"|your.{0,20}(data )?export.{0,20}ready|export.{0,20}(is )?ready"
-            r"|data (request|export).{0,20}complete|your data.{0,20}ready"
-            r"|data export|personal data export",
-            re.I)),
-        ("snippet", re.compile(
-            r"data file is now available for download"
-            r"|download your.{0,30}personal data"
-            r"|download link will expire"
-            r"|glassdoor\.com/dyd/download\?token="
-            r"|access your.{0,20}data.{0,20}link"
-            r"|your data is ready"
-            r"|your.{0,20}export.{0,20}(is )?ready"
-            r"|export.{0,20}available.{0,20}(for )?download"
-            r"|download.{0,30}your.{0,30}export"
-            r"|data export.{0,20}(is )?ready"
-            r"|export.{0,20}complete.{0,20}download"
-            r"|i.{0,5}(ve|have) attached.{0,50}(export|data|file|information)"
-            r"|attached.{0,50}(export|personal data|information you requested)",
-            re.I)),
-    ]),
-    ("DATA_PROVIDED_PORTAL", [
-        ("snippet", re.compile(
-            r"self-service account management page"
-            r"|view.{0,20}download.{0,20}delete.{0,20}personal data"
-            r"|access your data.{0,20}account"
-            r"|manage your data.{0,20}settings"
-            r"|account page.{0,30}download",
-            re.I)),
-    ]),
-    ("REQUEST_DENIED", [
-        ("snippet", re.compile(
-            r"unable to comply|cannot fulfil|decline your request"
-            r"|excessive|manifestly unfounded|cannot process your request",
-            re.I)),
-    ]),
-    ("NO_DATA_HELD", [
-        ("snippet", re.compile(
-            r"no records.{0,20}about you|cannot locate.{0,20}your.{0,20}data"
-            r"|not in our systems|no data held|unable to identify you"
-            r"|no account.{0,20}associated"
-            r"|do not hold.{0,30}data|not hold.{0,30}records"
-            r"|hold no.{0,20}(data|information|records).{0,20}about you",
-            re.I)),
-    ]),
-    ("NOT_GDPR_APPLICABLE", [
-        ("snippet", re.compile(
-            r"gdpr does not apply|not subject to gdpr"
-            r"|outside the scope of gdpr|not.{0,20}eu.{0,10}uk.{0,10}resident"
-            r"|not applicable under gdpr",
-            re.I)),
-    ]),
+    (
+        "BOUNCE_PERMANENT",
+        [
+            ("from", re.compile(r"mailer-daemon@|postmaster@", re.I)),
+            (
+                "subject",
+                re.compile(
+                    r"delivery status notification|undeliverable|mail delivery|failure notice|returned mail",
+                    re.I,
+                ),
+            ),
+            (
+                "snippet",
+                re.compile(
+                    r"550[\s.]|5\.1\.1|email account does not exist"
+                    r"|group you tried to contact|may not exist or you may not have permission"
+                    r"|address not found|no such user",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "BOUNCE_TEMPORARY",
+        [
+            # Distinguished from BOUNCE_PERMANENT by snippet content: 4xx codes or transient signals
+            (
+                "snippet",
+                re.compile(
+                    r"\b4\d\d\b|try again later|temporarily unavailable|service temporarily",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "OUT_OF_OFFICE",
+        [
+            (
+                "subject",
+                re.compile(
+                    r"out of office|away|automatic reply|auto[\s-]?reply|vacation|on leave"
+                    r"|abwesenheitsnotiz|abwesend",
+                    re.I,
+                ),
+            ),
+            (
+                "snippet",
+                re.compile(
+                    r"out of office|i am away|on annual leave|back on \d|ooo\b|automatic reply"
+                    r"|abwesenheitsnotiz|abwesend|urlaub.{0,20}r[uü]ckkehr|nicht im b[uü]ro",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "AUTO_ACKNOWLEDGE",
+        [
+            (
+                "subject",
+                re.compile(
+                    r"\[[\w]+-[\w]+\]"  # [TICKET-123456]
+                    r"|\[\d{1,2}-\d{10,}\]"  # [5-9110000040081]
+                    r"|request received|we received your"
+                    r"|your (request|inquiry|case) has been",
+                    re.I,
+                ),
+            ),
+            (
+                "snippet",
+                re.compile(
+                    r"received your (request|email|message)|we will process|has been logged"
+                    r"|case number|ticket number|reference number"
+                    r"|\[\d{1,2}-\d{10,}\]"  # Google ticket format
+                    r"|your (request|inquiry) has been received"
+                    r"|thank you for (contacting|reaching out).{0,80}(request|privacy|gdpr|data)"
+                    r"|representative will be in touch|will be in touch as soon"
+                    r"|a (member|representative|specialist|agent).{0,60}(will contact|will respond|will be in touch|will reach out)"
+                    r"|someone (from our team|will be in touch|will contact)"
+                    r"|automatisch generiert[ea]\s+(e-?mail|nachricht)"
+                    r"|wir haben (ihre|deine) (anfrage|e-?mail|nachricht) erhalten"
+                    r"|vielen dank.{0,50}(anfrage|kontakt)",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "PORTAL_VERIFICATION",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"(sent|sending) you an? (email )?verification"
+                    r"|email verification request"
+                    r"|verify your (email|identity).{0,60}(link|email|respond)"
+                    r"|must respond within \d+ days or your request will expire"
+                    r"|verify.{0,30}email.{0,30}confirm.{0,30}identity",
+                    re.I,
+                ),
+            ),
+            (
+                "subject",
+                re.compile(
+                    r"email verification|verify your email|verification request", re.I
+                ),
+            ),
+        ],
+    ),
+    (
+        "CONFIRMATION_REQUIRED",
+        [
+            (
+                "subject",
+                re.compile(r"confirm (your )?request|verify (your )?request", re.I),
+            ),
+            (
+                "snippet",
+                re.compile(
+                    r"will not begin processing.{0,40}until you have confirmed"
+                    r"|confirm.{0,20}request.{0,20}button"
+                    r"|confirm request"
+                    r"|hrtechprivacy\.com/confirm"
+                    r"|click.{0,30}confirm",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "IDENTITY_REQUIRED",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"proof of identity|verify your identity|copy of.{0,20}passport"
+                    r"|photo id|government[\s-]issued|id verification"
+                    r"|identity verification|verify.{0,20}identity",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "MORE_INFO_REQUIRED",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"please clarify|cannot identify|unable to locate.{0,20}record"
+                    r"|not clear which|additional information.{0,20}required"
+                    r"|need more information|require.{0,20}clarification",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "WRONG_CHANNEL",
+        [
+            (
+                "snippet",
+                re.compile(
+                    # Unmonitored inbox signals
+                    r"no longer monitored|won.t receive a response"
+                    r"|nicht gelesen|not read.{0,20}this mailbox"
+                    r"|use.{0,20}support form|this address is not monitored"
+                    r"|this mailbox is not monitored"
+                    # Portal/form redirect signals (merged from former REDIRECT_TO_PORTAL)
+                    r"|please submit via|privacy portal|dsar portal"
+                    r"|online form at|submit your request at"
+                    r"|requests\.hrtechprivacy\.com"
+                    r"|use our (online|web) (form|portal|tool)"
+                    # Self-service deflection — company telling user to manage data themselves
+                    r"|via our self-service|self-service portal|self-service tool"
+                    r"|can do so directly via"
+                    r"|via your (account|profile|dashboard)"
+                    # Channel mismatch — company says this request can't be handled here
+                    r"|not able to process.{0,60}(request|this).{0,60}(over chat|chat|this (channel|address|inbox))"
+                    r"|unable to process.{0,60}(request|this).{0,60}(over chat|chat|this (channel|address|inbox))"
+                    r"|this type of request.{0,60}(over chat|chat|email|this channel)"
+                    r"|pursue this (further|request).{0,40}(through|via)"
+                    # Premature ticket closure — company resolved/closed ticket without providing data
+                    r"|ticket.{0,20}(set to |is )?(solved|resolved|closed)"
+                    r"|request.{0,20}(has been |been )?(closed|resolved|marked as (solved|resolved))"
+                    r"|case.{0,20}(has been |been )?(closed|resolved)"
+                    r"|marked as (solved|resolved|closed)",
+                    re.I,
+                ),
+            ),
+            (
+                "subject",
+                re.compile(r"set to Solved|marked as (solved|resolved|closed)", re.I),
+            ),
+        ],
+    ),
+    (
+        "REQUEST_ACCEPTED",
+        [
+            (
+                "subject",
+                re.compile(
+                    r"start of your request|confirmed|processing your request", re.I
+                ),
+            ),
+            (
+                "snippet",
+                re.compile(
+                    r"confirmed your request and will begin"
+                    r"|begin gathering your data"
+                    r"|happy to make the privacy request on your behalf"
+                    r"|processing your subject access request"
+                    r"|will begin processing your (sar|subject access)",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "EXTENDED",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"require more time|three months|90 days"
+                    r"|extended the period|complex request.{0,30}additional time"
+                    r"|additional period of.{0,20}two months",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "IN_PROGRESS",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"currently processing|working on your request|in progress"
+                    r"|your request is being processed",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "DATA_PROVIDED_LINK",
+        [
+            (
+                "subject",
+                re.compile(
+                    r"download your.{0,30}personal data|data.{0,20}available|personal data.{0,20}complete"
+                    r"|your.{0,20}(data )?export.{0,20}ready|export.{0,20}(is )?ready"
+                    r"|data (request|export).{0,20}complete|your data.{0,20}ready"
+                    r"|data export|personal data export",
+                    re.I,
+                ),
+            ),
+            (
+                "snippet",
+                re.compile(
+                    r"data file is now available for download"
+                    r"|download your.{0,30}personal data"
+                    r"|download link will expire"
+                    r"|glassdoor\.com/dyd/download\?token="
+                    r"|access your.{0,20}data.{0,20}link"
+                    r"|your data is ready"
+                    r"|your.{0,20}export.{0,20}(is )?ready"
+                    r"|export.{0,20}available.{0,20}(for )?download"
+                    r"|download.{0,30}your.{0,30}export"
+                    r"|data export.{0,20}(is )?ready"
+                    r"|export.{0,20}complete.{0,20}download"
+                    r"|i.{0,5}(ve|have) attached.{0,50}(export|data|file|information)"
+                    r"|attached.{0,50}(export|personal data|information you requested)",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "DATA_PROVIDED_PORTAL",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"self-service account management page"
+                    r"|view.{0,20}download.{0,20}delete.{0,20}personal data"
+                    r"|access your data.{0,20}account"
+                    r"|manage your data.{0,20}settings"
+                    r"|account page.{0,30}download",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "REQUEST_DENIED",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"unable to comply|cannot fulfil|decline your request"
+                    r"|excessive|manifestly unfounded|cannot process your request",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "NO_DATA_HELD",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"no records.{0,20}about you|cannot locate.{0,20}your.{0,20}data"
+                    r"|not in our systems|no data held|unable to identify you"
+                    r"|no account.{0,20}associated"
+                    r"|do not hold.{0,30}data|not hold.{0,30}records"
+                    r"|hold no.{0,20}(data|information|records).{0,20}about you",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "NOT_GDPR_APPLICABLE",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"gdpr does not apply|not subject to gdpr"
+                    r"|outside the scope of gdpr|not.{0,20}eu.{0,10}uk.{0,10}resident"
+                    r"|not applicable under gdpr",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
     # Google security/account notifications that land in SAR threads but are unrelated to the SAR
-    ("NON_GDPR", [
-        ("snippet", re.compile(
-            r"account.{0,20}(recovered|recovery|has been recovered)"
-            r"|google account.{0,30}(was|has been).{0,20}(accessed|recovered|changed|used)"
-            r"|recent (security |account )?activity.{0,40}account"
-            r"|someone (just )?signed in|new sign[\s-]?in",
-            re.I)),
-    ]),
-    ("FULFILLED_DELETION", [
-        ("snippet", re.compile(
-            r"data has been deleted|account.{0,20}removed"
-            r"|erasure.{0,20}complete|right to erasure.{0,20}fulfilled"
-            r"|your data has been erased",
-            re.I)),
-    ]),
+    (
+        "NON_GDPR",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"account.{0,20}(recovered|recovery|has been recovered)"
+                    r"|google account.{0,30}(was|has been).{0,20}(accessed|recovered|changed|used)"
+                    r"|recent (security |account )?activity.{0,40}account"
+                    r"|someone (just )?signed in|new sign[\s-]?in",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
+    (
+        "FULFILLED_DELETION",
+        [
+            (
+                "snippet",
+                re.compile(
+                    r"data has been deleted|account.{0,20}removed"
+                    r"|erasure.{0,20}complete|right to erasure.{0,20}fulfilled"
+                    r"|your data has been erased",
+                    re.I,
+                ),
+            ),
+        ],
+    ),
 ]
 
 # ---------------------------------------------------------------------------
 # Extraction regexes (applied after tagging)
 # ---------------------------------------------------------------------------
 
-_RE_REF_ZENDESK  = re.compile(r"\[[\w]+-[\d]+\]")
-_RE_REF_GOOGLE   = re.compile(r"\[\d{1,2}-\d{10,}\]")
-_RE_REF_TICKET   = re.compile(r"TICKET-\d{6}-\d+", re.I)
-_RE_REF_UUID     = re.compile(r"Request ID\s+(?:is\s+)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", re.I)
-_RE_REF_GENERIC  = re.compile(r"Ref(?:erence)?[:#\s]\s*([\w-]+)", re.I)
-_RE_CONFIRM_URL  = re.compile(r"https://requests\.hrtechprivacy\.com/confirm/[\w/-]+", re.I)
+_RE_REF_ZENDESK = re.compile(r"\[[\w]+-[\d]+\]")
+_RE_REF_GOOGLE = re.compile(r"\[\d{1,2}-\d{10,}\]")
+_RE_REF_TICKET = re.compile(r"TICKET-\d{6}-\d+", re.I)
+_RE_REF_UUID = re.compile(
+    r"Request ID\s+(?:is\s+)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+    re.I,
+)
+_RE_REF_GENERIC = re.compile(r"Ref(?:erence)?[:#\s]\s*([\w-]+)", re.I)
+_RE_CONFIRM_URL = re.compile(
+    r"https://requests\.hrtechprivacy\.com/confirm/[\w/-]+", re.I
+)
 _RE_DOWNLOAD_URL = re.compile(
-    r"https://\S+/dyd/download\?token=[^\s\u201c\u201d\"'<>]+"             # Glassdoor
-    r"|https?://\S+(?:download|export)/[^\s\u201c\u201d\"'<>]{8,}"         # path-based export
+    r"https://\S+/dyd/download\?token=[^\s\u201c\u201d\"'<>]+"  # Glassdoor
+    r"|https?://\S+(?:download|export)/[^\s\u201c\u201d\"'<>]{8,}"  # path-based export
     r"|https?://\S+(?:[?&])(?:token|key|export_id|download_id)=[^\s\u201c\u201d\"'<>]+",  # token param
     re.I,
     # Note: /attachments/token/ URLs (Zendesk/Substack) are handled by _RE_ZENDESK_ATTACHMENT_A
@@ -319,7 +492,7 @@ _RE_BODY_INLINE_DATA = re.compile(
     re.I | re.S,
 )
 
-_RE_PORTAL_URL   = re.compile(r"https?://\S+", re.I)  # fallback URL near portal keywords
+_RE_PORTAL_URL = re.compile(r"https?://\S+", re.I)  # fallback URL near portal keywords
 
 # Tags considered "not yet useful" — LLM is called only when regex produced nothing at all.
 # AUTO_ACKNOWLEDGE alone is intentionally excluded: regex/body-level detection is reliable
@@ -372,6 +545,7 @@ def _is_non_gdpr(from_addr: str, subject: str, snippet: str) -> bool:
     Threshold: >= 2 required to avoid false positives on noreply@ GDPR emails.
     """
     from email.utils import parseaddr
+
     _display, email_addr = parseaddr(from_addr)
     local = email_addr.split("@")[0] if "@" in email_addr else ""
 
@@ -397,9 +571,9 @@ def _is_non_gdpr(from_addr: str, subject: str, snippet: str) -> bool:
 
 
 _RE_DATA_URL = re.compile(
-    r"\.(zip|json|csv|tar\.gz|gz)(\?|$)"           # file extension in URL
+    r"\.(zip|json|csv|tar\.gz|gz)(\?|$)"  # file extension in URL
     r"|/(download|export|dsar|sar|data[-_]request|attachments/token)/"  # path indicators
-    r"|[?&](token|export_id|download_id|file)=",   # query param indicators
+    r"|[?&](token|export_id|download_id|file)=",  # query param indicators
     re.I,
 )
 
@@ -420,15 +594,15 @@ def _is_data_url(url: str) -> bool:
 
 # URLs that should never be extracted as data_link or portal_url
 _RE_JUNK_URL = re.compile(
-    r"/hc/[a-z-]+/requests/\d+"          # Zendesk help center ticket pages
-    r"|/hc/[a-z-]+/survey_responses/"     # Zendesk/CSAT surveys
-    r"|/hc/[a-z-]+/articles/"             # Help center knowledge base articles
-    r"|/satisfaction/"                      # CSAT survey endpoints
-    r"|/feedback/"                          # Feedback forms
-    r"|/survey[_-]?responses?/"            # Generic survey response URLs
-    r"|/requests/\d+"                      # Bare support ticket paths
-    r"|/support/tickets/"                  # Generic support ticket paths
-    r"|/help/",                            # Help center root pages
+    r"/hc/[a-z-]+/requests/\d+"  # Zendesk help center ticket pages
+    r"|/hc/[a-z-]+/survey_responses/"  # Zendesk/CSAT surveys
+    r"|/hc/[a-z-]+/articles/"  # Help center knowledge base articles
+    r"|/satisfaction/"  # CSAT survey endpoints
+    r"|/feedback/"  # Feedback forms
+    r"|/survey[_-]?responses?/"  # Generic survey response URLs
+    r"|/requests/\d+"  # Bare support ticket paths
+    r"|/support/tickets/"  # Generic support ticket paths
+    r"|/help/",  # Help center root pages
     re.I,
 )
 
@@ -453,9 +627,9 @@ def classify(
         ClassificationResult with tags, extracted info, and llm_used flag
     """
     from_addr = message.get("from", "")
-    subject   = message.get("subject", "")
-    snippet   = message.get("snippet", "")
-    body      = message.get("body", "")
+    subject = message.get("subject", "")
+    snippet = message.get("snippet", "")
+    body = message.get("body", "")
     has_attachment = message.get("has_attachment", False)
 
     # --- Pass 0: NON_GDPR pre-pass ---
@@ -471,7 +645,9 @@ def classify(
     # --- Pass 1: regex ---
     for tag, rules in _RULES:
         for field, pattern in rules:
-            text = {"from": from_addr, "subject": subject, "snippet": snippet}.get(field, "")
+            text = {"from": from_addr, "subject": subject, "snippet": snippet}.get(
+                field, ""
+            )
             if pattern.search(text):
                 tags.append(tag)
                 break  # one match per tag is enough
@@ -531,8 +707,13 @@ def classify(
     # If WRONG_CHANNEL was triggered by a closure pattern ("solved", "resolved", "closed")
     # and a terminal data tag is also present, remove WRONG_CHANNEL — the company actually
     # delivered data alongside closing the ticket.
-    _TERMINAL_DATA_TAGS = {"DATA_PROVIDED_LINK", "DATA_PROVIDED_ATTACHMENT",
-                           "DATA_PROVIDED_INLINE", "DATA_PROVIDED_PORTAL", "FULFILLED_DELETION"}
+    _TERMINAL_DATA_TAGS = {
+        "DATA_PROVIDED_LINK",
+        "DATA_PROVIDED_ATTACHMENT",
+        "DATA_PROVIDED_INLINE",
+        "DATA_PROVIDED_PORTAL",
+        "FULFILLED_DELETION",
+    }
     if "WRONG_CHANNEL" in tags and (set(tags) & _TERMINAL_DATA_TAGS):
         tags = [t for t in tags if t != "WRONG_CHANNEL"]
 
@@ -547,7 +728,9 @@ def classify(
             _llm_cache[cache_key] = llm_result
         if llm_result:
             tags = llm_result.get("tags", tags)
-            extracted.update({k: v for k, v in llm_result.items() if k in extracted and v})
+            extracted.update(
+                {k: v for k, v in llm_result.items() if k in extracted and v}
+            )
             llm_used = True
             # HUMAN_REVIEW is a last-resort fallback — drop it if any substantive tag is present
             if "HUMAN_REVIEW" in tags and len(tags) > 1:
@@ -642,10 +825,13 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
     portal_context = re.search(
         r"(https?://\S+).{0,200}(portal|submit|form)|"
         r"(portal|submit|form).{0,200}(https?://\S+)",
-        full_text, re.I | re.S,
+        full_text,
+        re.I | re.S,
     )
     if portal_context:
-        url_match = re.search(r"https?://[^\s\u201c\u201d\"'<>]+", portal_context.group(0))
+        url_match = re.search(
+            r"https?://[^\s\u201c\u201d\"'<>]+", portal_context.group(0)
+        )
         if url_match:
             portal_url = _clean_url(url_match.group(0))
             if _is_junk_url(portal_url):
@@ -654,11 +840,11 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
     return {
         "reference_number": reference_number,
         "confirmation_url": confirmation_url,
-        "data_link": data_link,          # first URL (backward compat)
-        "data_links": data_links,        # all URLs (e.g. Substack sends 2 zips)
+        "data_link": data_link,  # first URL (backward compat)
+        "data_links": data_links,  # all URLs (e.g. Substack sends 2 zips)
         "portal_url": portal_url,
         "deadline_extension_days": None,
-        "summary": "",                   # filled by LLM fallback path only
+        "summary": "",  # filled by LLM fallback path only
     }
 
 
@@ -676,9 +862,9 @@ def reextract_data_links(reply_record_dict: dict, body: str) -> dict:
         Updated extracted dict. Caller must persist to state.
     """
     from_addr = reply_record_dict.get("from_addr", "")
-    subject   = reply_record_dict.get("subject", "")
-    snippet   = reply_record_dict.get("snippet", "")
-    existing  = dict(reply_record_dict.get("extracted", {}))
+    subject = reply_record_dict.get("subject", "")
+    snippet = reply_record_dict.get("snippet", "")
+    existing = dict(reply_record_dict.get("extracted", {}))
 
     new_extracted = _extract(from_addr, subject, snippet, body)
     # Only fill in missing fields — never overwrite non-empty values
@@ -688,18 +874,24 @@ def reextract_data_links(reply_record_dict: dict, body: str) -> dict:
     return existing
 
 
-_ACTION_DRAFT_TAGS: frozenset[str] = frozenset({
-    "WRONG_CHANNEL", "MORE_INFO_REQUIRED", "CONFIRMATION_REQUIRED",
-    "IDENTITY_REQUIRED", "HUMAN_REVIEW", "PORTAL_VERIFICATION",
-})
+_ACTION_DRAFT_TAGS: frozenset[str] = frozenset(
+    {
+        "WRONG_CHANNEL",
+        "MORE_INFO_REQUIRED",
+        "CONFIRMATION_REQUIRED",
+        "IDENTITY_REQUIRED",
+        "HUMAN_REVIEW",
+        "PORTAL_VERIFICATION",
+    }
+)
 
 _ACTION_DRAFT_TAG_LABELS: dict[str, str] = {
-    "WRONG_CHANNEL":         "company redirected to a different channel without specifying which",
-    "MORE_INFO_REQUIRED":    "company asked for more information",
+    "WRONG_CHANNEL": "company redirected to a different channel without specifying which",
+    "MORE_INFO_REQUIRED": "company asked for more information",
     "CONFIRMATION_REQUIRED": "company requires you to confirm the request",
-    "IDENTITY_REQUIRED":     "company requires identity verification",
-    "HUMAN_REVIEW":          "reply needs manual review — unclear response",
-    "PORTAL_VERIFICATION":   "company sent an email verification request — check your inbox and verify",
+    "IDENTITY_REQUIRED": "company requires identity verification",
+    "HUMAN_REVIEW": "reply needs manual review — unclear response",
+    "PORTAL_VERIFICATION": "company sent an email verification request — check your inbox and verify",
 }
 
 

@@ -2,7 +2,6 @@
 
 from unittest.mock import patch, MagicMock
 
-import pytest
 
 from reply_monitor.url_verifier import verify, CLASSIFICATION
 
@@ -10,7 +9,10 @@ from reply_monitor.url_verifier import verify, CLASSIFICATION
 class TestVerifyDeadLink:
     def test_timeout_returns_dead_link(self):
         import requests as req_lib
-        with patch("reply_monitor.url_verifier.requests.get", side_effect=req_lib.Timeout):
+
+        with patch(
+            "reply_monitor.url_verifier.requests.get", side_effect=req_lib.Timeout
+        ):
             result = verify("https://dead.example.com/privacy")
         assert result["classification"] == CLASSIFICATION.DEAD_LINK
         assert "timeout" in (result["error"] or "").lower()
@@ -37,7 +39,9 @@ class TestVerifyDeadLink:
 class TestVerifySurvey:
     def test_survey_url_pattern(self):
         """Survey URL path pattern detected before HTTP fetch."""
-        result = verify("https://society.zendesk.com/hc/en-us/survey_responses/01KM?access_token=abc")
+        result = verify(
+            "https://society.zendesk.com/hc/en-us/survey_responses/01KM?access_token=abc"
+        )
         assert result["classification"] == CLASSIFICATION.SURVEY
 
     def test_satisfaction_content(self):
@@ -104,7 +108,7 @@ class TestVerifyKetchPortal:
         mock_resp.url = "https://zendesk.es/"
         mock_resp.text = (
             '<html><head><script src="https://cdn.ketch.com/ketch-tag.js"></script></head>'
-            '<body><h1>Privacy Center</h1></body></html>'
+            "<body><h1>Privacy Center</h1></body></html>"
         )
         mock_resp.headers = {"content-type": "text/html"}
         with patch("reply_monitor.url_verifier.requests.get", return_value=mock_resp):
@@ -117,8 +121,8 @@ class TestVerifyKetchPortal:
         mock_resp.status_code = 200
         mock_resp.url = "https://privacy.company.com/"
         mock_resp.text = (
-            '<html><body><script>window.semaphore = window.semaphore || [];</script>'
-            '<div>Privacy Center</div></body></html>'
+            "<html><body><script>window.semaphore = window.semaphore || [];</script>"
+            "<div>Privacy Center</div></body></html>"
         )
         mock_resp.headers = {"content-type": "text/html"}
         with patch("reply_monitor.url_verifier.requests.get", return_value=mock_resp):
@@ -130,7 +134,7 @@ class TestVerifyKetchPortal:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.url = "https://example.com/privacy"
-        mock_resp.text = '<html><body><p>Our privacy policy</p></body></html>'
+        mock_resp.text = "<html><body><p>Our privacy policy</p></body></html>"
         mock_resp.headers = {"content-type": "text/html"}
         with patch("reply_monitor.url_verifier.requests.get", return_value=mock_resp):
             result = verify("https://example.com/privacy")
@@ -142,6 +146,7 @@ class TestVerifyIfNeeded:
         """If existing verification is fresh, return it without re-checking."""
         from reply_monitor.url_verifier import verify_if_needed
         from datetime import datetime, timezone
+
         existing = {
             "url": "https://example.com/portal",
             "classification": "gdpr_portal",
@@ -150,13 +155,16 @@ class TestVerifyIfNeeded:
             "page_title": "Privacy Portal",
         }
         now = datetime(2026, 4, 13, 10, 5, 0, tzinfo=timezone.utc)
-        result = verify_if_needed("https://example.com/portal", existing=existing, now=now)
+        result = verify_if_needed(
+            "https://example.com/portal", existing=existing, now=now
+        )
         assert result is existing  # same object, no re-fetch
 
     def test_stale_verification_re_checks(self):
         """If existing verification is older than TTL (7 days), re-verify."""
         from reply_monitor.url_verifier import verify_if_needed
         from datetime import datetime, timezone
+
         existing = {
             "url": "https://example.com/portal",
             "classification": "unknown",
@@ -171,5 +179,7 @@ class TestVerifyIfNeeded:
         mock_resp.text = "<html><title>Portal</title><body><form><input name='email'><button>Submit</button></form></body></html>"
         mock_resp.headers = {"content-type": "text/html"}
         with patch("reply_monitor.url_verifier.requests.get", return_value=mock_resp):
-            result = verify_if_needed("https://example.com/portal", existing=existing, now=now)
+            result = verify_if_needed(
+                "https://example.com/portal", existing=existing, now=now
+            )
         assert result is not existing  # fresh result

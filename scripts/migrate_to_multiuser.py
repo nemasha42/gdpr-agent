@@ -53,9 +53,7 @@ def migrate(
     old_state = user_data_root / "reply_state.json"
     if old_state.exists():
         data = json.loads(old_state.read_text())
-        (user_dir / "reply_state.json").write_text(
-            json.dumps(data, indent=2)
-        )
+        (user_dir / "reply_state.json").write_text(json.dumps(data, indent=2))
         old_state.unlink()
 
     # 4. Move received/
@@ -87,7 +85,9 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Migrate to multiuser layout")
-    parser.add_argument("--email", required=True, help="Your Gmail address (becomes admin)")
+    parser.add_argument(
+        "--email", required=True, help="Your Gmail address (becomes admin)"
+    )
     parser.add_argument("--name", required=True, help="Your full name")
     args = parser.parse_args()
 

@@ -7,12 +7,15 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
-from config.settings import settings
 from contact_resolver.models import PortalFieldMapping
 from letter_engine.models import SARLetter
 from portal_submitter.captcha_relay import poll_solution, request_solve
 from portal_submitter.form_analyzer import analyze_form, build_user_data
-from portal_submitter.form_filler import STEALTH_SCRIPT, detect_captcha_type, fill_and_submit
+from portal_submitter.form_filler import (
+    STEALTH_SCRIPT,
+    detect_captcha_type,
+    fill_and_submit,
+)
 from portal_submitter.models import PortalResult
 from portal_submitter.platform_hints import detect_platform, otp_sender_hints
 from portal_submitter.portal_navigator import navigate_to_form, page_has_form
@@ -163,7 +166,9 @@ def _browser_submit(
                     )
 
             # Analyze form
-            mapping = analyze_form(page, llm_call=llm_call, cached_mapping=cached_mapping)
+            mapping = analyze_form(
+                page, llm_call=llm_call, cached_mapping=cached_mapping
+            )
             if not mapping.fields:
                 screenshot_path = _take_screenshot(page, letter.company_name)
                 browser.close()
@@ -198,7 +203,9 @@ def _browser_submit(
             if captcha_type == "invisible_v3":
                 # Invisible reCAPTCHA v3 — try submitting (may pass with stealth),
                 # but report pre-filled + needs manual if it fails
-                submit_result = fill_and_submit(page, mapping, user_data, click_submit=True)
+                submit_result = fill_and_submit(
+                    page, mapping, user_data, click_submit=True
+                )
                 page.wait_for_timeout(3000)
 
                 # Check if submission was blocked by reCAPTCHA
@@ -214,7 +221,9 @@ def _browser_submit(
                     )
             else:
                 # No CAPTCHA or interactive CAPTCHA already solved — submit
-                submit_result = fill_and_submit(page, mapping, user_data, click_submit=True)
+                submit_result = fill_and_submit(
+                    page, mapping, user_data, click_submit=True
+                )
 
             # Take confirmation screenshot
             page.wait_for_timeout(2000)
@@ -227,9 +236,12 @@ def _browser_submit(
             sender_hints = otp_sender_hints(platform)
             if sender_hints:
                 from portal_submitter.otp_handler import wait_for_otp
+
                 otp_result = wait_for_otp(scan_email, sender_hints)
                 if otp_result and otp_result["type"] == "url":
-                    page.goto(otp_result["value"], wait_until="networkidle", timeout=15_000)
+                    page.goto(
+                        otp_result["value"], wait_until="networkidle", timeout=15_000
+                    )
                 elif otp_result and otp_result["type"] == "code":
                     try:
                         code_input = page.get_by_role("textbox", name="code").or_(
@@ -283,11 +295,15 @@ def _take_screenshot(page: Any, company_name: str) -> str:
 def _extract_confirmation(page: Any) -> str:
     """Try to extract a confirmation/reference number from the page text."""
     import re
+
     try:
         text = page.text_content("body") or ""
         patterns = [
             re.compile(r"(?:TICKET|REQ|CASE|REF)[- ]?[\w-]{4,}", re.I),
-            re.compile(r"(?:reference|confirmation|ticket|case)\s*(?:number|#|:)\s*([\w-]{4,})", re.I),
+            re.compile(
+                r"(?:reference|confirmation|ticket|case)\s*(?:number|#|:)\s*([\w-]{4,})",
+                re.I,
+            ),
         ]
         for pat in patterns:
             m = pat.search(text)
@@ -300,6 +316,7 @@ def _extract_confirmation(page: Any) -> str:
 
 def _domain_from_url(url: str) -> str:
     from urllib.parse import urlparse
+
     try:
         return urlparse(url).hostname or "unknown"
     except Exception:

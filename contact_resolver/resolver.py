@@ -81,7 +81,9 @@ class ContactResolver:
         self._db_path = db_path
         self._dataowners_path = dataowners_path
         self._http_get = http_get or http.get
-        self._privacy_scrape = privacy_scrape or privacy_page_scraper.scrape_privacy_page
+        self._privacy_scrape = (
+            privacy_scrape or privacy_page_scraper.scrape_privacy_page
+        )
         self._llm_search = llm_search or llm_searcher.search_company
         # Cached GitHub API directory listing for the current session
         self._dir_listing: list[dict] | None = None
@@ -125,7 +127,9 @@ class ContactResolver:
         if existing and not self._is_stale(existing):
             if _excluded(existing):
                 if verbose:
-                    print(f"[CACHE HIT] {domain} — cached email excluded (bounced), re-resolving")
+                    print(
+                        f"[CACHE HIT] {domain} — cached email excluded (bounced), re-resolving"
+                    )
                 # Fall through to re-search all sources
             else:
                 if verbose:
@@ -412,7 +416,9 @@ def _parse_postal_address(address_str: str) -> PostalAddress:
     )
 
 
-def write_subprocessors(domain: str, record: SubprocessorRecord, db_path: Path = _DEFAULT_DB_PATH) -> None:
+def write_subprocessors(
+    domain: str, record: SubprocessorRecord, db_path: Path = _DEFAULT_DB_PATH
+) -> None:
     """Persist a SubprocessorRecord for *domain* into companies.json."""
     try:
         text = db_path.read_text().strip() if db_path.exists() else ""

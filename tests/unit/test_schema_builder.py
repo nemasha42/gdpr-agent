@@ -3,10 +3,8 @@
 import io
 import json
 import zipfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from reply_monitor.schema_builder import build_schema
 from reply_monitor.models import AttachmentCatalog
@@ -65,11 +63,19 @@ def test_build_schema_returns_dict_on_success(tmp_path):
     f = tmp_path / "data.json"
     f.write_bytes(b'{"name": "Alice", "email": "alice@example.com"}')
 
-    schema_response = json.dumps({
-        "categories": [{"name": "Profile", "description": "User profile data", "fields": []}],
-        "services": [{"name": "Platform", "description": "Main service"}],
-        "export_meta": {"format": "JSON", "delivery": "Email", "timeline": "30 days"},
-    })
+    schema_response = json.dumps(
+        {
+            "categories": [
+                {"name": "Profile", "description": "User profile data", "fields": []}
+            ],
+            "services": [{"name": "Platform", "description": "Main service"}],
+            "export_meta": {
+                "format": "JSON",
+                "delivery": "Email",
+                "timeline": "30 days",
+            },
+        }
+    )
 
     mock_client = MagicMock()
     mock_client.messages.create.return_value = _mock_llm_response(schema_response)
@@ -84,7 +90,7 @@ def test_build_schema_returns_dict_on_success(tmp_path):
 def test_build_schema_no_recognizable_categories(tmp_path):
     """LLM returns valid JSON but empty categories — should return empty dict or valid dict."""
     f = tmp_path / "data.json"
-    f.write_bytes(b'{}')
+    f.write_bytes(b"{}")
 
     schema_response = json.dumps({"categories": [], "services": [], "export_meta": {}})
     mock_client = MagicMock()
@@ -102,7 +108,9 @@ def test_build_schema_llm_returns_malformed_json(tmp_path):
     f.write_bytes(b'{"name": "Alice"}')
 
     mock_client = MagicMock()
-    mock_client.messages.create.return_value = _mock_llm_response("Not valid JSON at all")
+    mock_client.messages.create.return_value = _mock_llm_response(
+        "Not valid JSON at all"
+    )
 
     with patch("anthropic.Anthropic", return_value=mock_client):
         result = build_schema(f, "fake_key")
@@ -150,21 +158,25 @@ class TestAttachmentCatalogNewFields:
             path="/tmp/data.zip",
             size_bytes=1024,
             file_type="zip",
-            schema=[{
-                "name": "Streaming History",
-                "description": "Music listening history",
-                "structure_type": "array",
-                "record_count": 12847,
-                "provenance": "observed",
-                "fields": [{
-                    "name": "trackName",
-                    "type": "string",
-                    "example": "Everything In Its Right Place",
-                    "description": "Name of the track played",
-                    "sensitive": False,
+            schema=[
+                {
+                    "name": "Streaming History",
+                    "description": "Music listening history",
+                    "structure_type": "array",
+                    "record_count": 12847,
                     "provenance": "observed",
-                }],
-            }],
+                    "fields": [
+                        {
+                            "name": "trackName",
+                            "type": "string",
+                            "example": "Everything In Its Right Place",
+                            "description": "Name of the track played",
+                            "sensitive": False,
+                            "provenance": "observed",
+                        }
+                    ],
+                }
+            ],
         )
         d = cat.to_dict()
         category = d["schema"][0]
@@ -179,11 +191,20 @@ class TestAttachmentCatalogNewFields:
             path="/tmp/data.zip",
             size_bytes=1024,
             file_type="zip",
-            schema=[{
-                "name": "Profile",
-                "description": "User profile",
-                "fields": [{"name": "email", "type": "string", "example": "a@b.com", "description": "Email"}],
-            }],
+            schema=[
+                {
+                    "name": "Profile",
+                    "description": "User profile",
+                    "fields": [
+                        {
+                            "name": "email",
+                            "type": "string",
+                            "example": "a@b.com",
+                            "description": "Email",
+                        }
+                    ],
+                }
+            ],
         )
         d = cat.to_dict()
         assert d["schema"][0]["name"] == "Profile"
@@ -197,37 +218,47 @@ class TestAttachmentCatalogNewFields:
 class TestEnrichedSchema:
     def test_build_schema_includes_new_fields(self, tmp_path):
         f = tmp_path / "data.json"
-        f.write_bytes(json.dumps([
-            {"name": "Alice", "email": "a@b.com", "created": "2024-01-01"},
-        ]).encode())
+        f.write_bytes(
+            json.dumps(
+                [
+                    {"name": "Alice", "email": "a@b.com", "created": "2024-01-01"},
+                ]
+            ).encode()
+        )
 
-        schema_response = json.dumps({
-            "categories": [{
-                "name": "User Accounts",
-                "description": "Registered user profile data",
-                "structure_type": "array",
-                "record_count": 1,
-                "provenance": "provided",
-                "fields": [{
-                    "name": "name",
-                    "type": "string",
-                    "example": "Alice",
-                    "description": "User's full name",
-                    "sensitive": False,
-                    "provenance": "provided",
-                }],
-            }],
-            "services": [{"name": "Platform", "description": "Main service"}],
-            "export_meta": {
-                "format": "JSON",
-                "formats_found": ["json"],
-                "delivery": "Email attachment",
-                "timeline": "30 days",
-                "structure": "Single JSON file with user records",
-                "total_files": 1,
-                "total_records_estimate": 1,
-            },
-        })
+        schema_response = json.dumps(
+            {
+                "categories": [
+                    {
+                        "name": "User Accounts",
+                        "description": "Registered user profile data",
+                        "structure_type": "array",
+                        "record_count": 1,
+                        "provenance": "provided",
+                        "fields": [
+                            {
+                                "name": "name",
+                                "type": "string",
+                                "example": "Alice",
+                                "description": "User's full name",
+                                "sensitive": False,
+                                "provenance": "provided",
+                            }
+                        ],
+                    }
+                ],
+                "services": [{"name": "Platform", "description": "Main service"}],
+                "export_meta": {
+                    "format": "JSON",
+                    "formats_found": ["json"],
+                    "delivery": "Email attachment",
+                    "timeline": "30 days",
+                    "structure": "Single JSON file with user records",
+                    "total_files": 1,
+                    "total_records_estimate": 1,
+                },
+            }
+        )
 
         mock_client = MagicMock()
         mock_resp = _mock_llm_response(schema_response)
@@ -242,10 +273,12 @@ class TestEnrichedSchema:
         assert result["export_meta"]["formats_found"] == ["json"]
 
     def test_prompt_includes_preprocessor_context(self, tmp_path):
-        zdata = _make_zip({
-            "profile/account.json": json.dumps({"name": "Alice"}).encode(),
-            "history/searches.csv": b"query,date\nfoo,2024-01-01",
-        })
+        zdata = _make_zip(
+            {
+                "profile/account.json": json.dumps({"name": "Alice"}).encode(),
+                "history/searches.csv": b"query,date\nfoo,2024-01-01",
+            }
+        )
         zpath = tmp_path / "export.zip"
         zpath.write_bytes(zdata)
 
@@ -279,64 +312,117 @@ class TestEnrichedSchema:
 class TestEndToEndEnrichment:
     def test_realistic_zip_produces_enriched_schema(self, tmp_path):
         """Full pipeline: ZIP with mixed formats → preprocessor → enriched LLM → schema."""
-        zdata = _make_zip({
-            "profile/account.json": json.dumps({
-                "name": "Alice Smith",
-                "email": "alice@example.com",
-                "created_at": "2020-03-15T10:30:00Z",
-                "plan": "premium",
-            }).encode(),
-            "activity/streaming_history.json": json.dumps([
-                {"trackName": "Song A", "artistName": "Band X", "endTime": "2024-01-15T23:45:00", "msPlayed": 251000},
-                {"trackName": "Song B", "artistName": "Band Y", "endTime": "2024-01-16T01:20:00", "msPlayed": 180000},
-            ]).encode(),
-            "activity/search_queries.csv": b"query,timestamp,platform\nfoo,2024-01-01,web\nbar,2024-01-02,mobile",
-        })
+        zdata = _make_zip(
+            {
+                "profile/account.json": json.dumps(
+                    {
+                        "name": "Alice Smith",
+                        "email": "alice@example.com",
+                        "created_at": "2020-03-15T10:30:00Z",
+                        "plan": "premium",
+                    }
+                ).encode(),
+                "activity/streaming_history.json": json.dumps(
+                    [
+                        {
+                            "trackName": "Song A",
+                            "artistName": "Band X",
+                            "endTime": "2024-01-15T23:45:00",
+                            "msPlayed": 251000,
+                        },
+                        {
+                            "trackName": "Song B",
+                            "artistName": "Band Y",
+                            "endTime": "2024-01-16T01:20:00",
+                            "msPlayed": 180000,
+                        },
+                    ]
+                ).encode(),
+                "activity/search_queries.csv": b"query,timestamp,platform\nfoo,2024-01-01,web\nbar,2024-01-02,mobile",
+            }
+        )
         zpath = tmp_path / "export.zip"
         zpath.write_bytes(zdata)
 
-        enriched_response = json.dumps({
-            "categories": [
-                {
-                    "name": "Account Profile",
-                    "description": "Core account and identity information",
-                    "structure_type": "object",
-                    "record_count": 1,
-                    "provenance": "provided",
-                    "fields": [
-                        {"name": "name", "type": "string", "example": "Alice Smith",
-                         "description": "Full name", "sensitive": False, "provenance": "provided"},
-                        {"name": "email", "type": "string/email", "example": "alice@example.com",
-                         "description": "Primary email", "sensitive": False, "provenance": "provided"},
-                        {"name": "created_at", "type": "string/date-time", "example": "2020-03-15T10:30:00Z",
-                         "description": "Account creation date", "sensitive": False, "provenance": "observed"},
-                    ],
+        enriched_response = json.dumps(
+            {
+                "categories": [
+                    {
+                        "name": "Account Profile",
+                        "description": "Core account and identity information",
+                        "structure_type": "object",
+                        "record_count": 1,
+                        "provenance": "provided",
+                        "fields": [
+                            {
+                                "name": "name",
+                                "type": "string",
+                                "example": "Alice Smith",
+                                "description": "Full name",
+                                "sensitive": False,
+                                "provenance": "provided",
+                            },
+                            {
+                                "name": "email",
+                                "type": "string/email",
+                                "example": "alice@example.com",
+                                "description": "Primary email",
+                                "sensitive": False,
+                                "provenance": "provided",
+                            },
+                            {
+                                "name": "created_at",
+                                "type": "string/date-time",
+                                "example": "2020-03-15T10:30:00Z",
+                                "description": "Account creation date",
+                                "sensitive": False,
+                                "provenance": "observed",
+                            },
+                        ],
+                    },
+                    {
+                        "name": "Streaming History",
+                        "description": "Music listening activity",
+                        "structure_type": "array",
+                        "record_count": 2,
+                        "provenance": "observed",
+                        "fields": [
+                            {
+                                "name": "trackName",
+                                "type": "string",
+                                "example": "Song A",
+                                "description": "Track title",
+                                "sensitive": False,
+                                "provenance": "observed",
+                            },
+                            {
+                                "name": "msPlayed",
+                                "type": "integer",
+                                "example": 251000,
+                                "description": "Milliseconds played",
+                                "sensitive": False,
+                                "provenance": "observed",
+                            },
+                        ],
+                    },
+                ],
+                "services": [
+                    {
+                        "name": "Music Streaming",
+                        "description": "Stream and discover music",
+                    }
+                ],
+                "export_meta": {
+                    "format": "ZIP",
+                    "formats_found": ["json", "csv"],
+                    "delivery": "Download link",
+                    "timeline": "30 days",
+                    "structure": "Organized by type: profile/ and activity/ folders",
+                    "total_files": 3,
+                    "total_records_estimate": 4,
                 },
-                {
-                    "name": "Streaming History",
-                    "description": "Music listening activity",
-                    "structure_type": "array",
-                    "record_count": 2,
-                    "provenance": "observed",
-                    "fields": [
-                        {"name": "trackName", "type": "string", "example": "Song A",
-                         "description": "Track title", "sensitive": False, "provenance": "observed"},
-                        {"name": "msPlayed", "type": "integer", "example": 251000,
-                         "description": "Milliseconds played", "sensitive": False, "provenance": "observed"},
-                    ],
-                },
-            ],
-            "services": [{"name": "Music Streaming", "description": "Stream and discover music"}],
-            "export_meta": {
-                "format": "ZIP",
-                "formats_found": ["json", "csv"],
-                "delivery": "Download link",
-                "timeline": "30 days",
-                "structure": "Organized by type: profile/ and activity/ folders",
-                "total_files": 3,
-                "total_records_estimate": 4,
-            },
-        })
+            }
+        )
 
         mock_client = MagicMock()
         mock_resp = _mock_llm_response(enriched_response)

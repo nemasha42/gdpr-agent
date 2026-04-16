@@ -6,12 +6,17 @@ from pathlib import Path
 from functools import wraps
 
 from flask import (
-    Blueprint, current_app, render_template, request, abort,
+    Blueprint,
+    current_app,
+    render_template,
+    request,
+    abort,
 )
 from flask_login import current_user, login_required
 
 from dashboard.user_model import (
-    generate_invite_token, load_users,
+    generate_invite_token,
+    load_users,
 )
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -28,6 +33,7 @@ def admin_required(f):
         if not current_user.is_admin:
             abort(403)
         return f(*args, **kwargs)
+
     return decorated
 
 

@@ -1,12 +1,12 @@
 """Unit tests for /api/body/<domain>/<message_id> in dashboard/app.py."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from dashboard.app import app
@@ -20,7 +20,9 @@ def client(tmp_path):
     user_dir.mkdir()
     (user_dir / "tokens").mkdir()
 
-    admin = User(email="test@example.com", name="Test", role="admin", data_root=tmp_path)
+    admin = User(
+        email="test@example.com", name="Test", role="admin", data_root=tmp_path
+    )
     save_user(admin, path=tmp_path / "users.json")
 
     app.config["TESTING"] = True
@@ -55,7 +57,9 @@ def test_gmail_invalid_grant_returns_friendly_message(client):
     """invalid_grant exception returns a user-friendly auth expired message."""
     with patch("dashboard.app._get_accounts", return_value=["test@example.com"]):
         with patch("auth.gmail_oauth.get_gmail_service") as mock_gs:
-            mock_gs.side_effect = Exception("invalid_grant: Token has been expired or revoked")
+            mock_gs.side_effect = Exception(
+                "invalid_grant: Token has been expired or revoked"
+            )
             res = client.get("/api/body/example.com/msg123?account=test@example.com")
     assert res.status_code == 500
     data = res.get_json()
@@ -85,7 +89,10 @@ def test_valid_request_returns_body(client):
         }
     }
     with patch("dashboard.app._get_accounts", return_value=["test@example.com"]):
-        with patch("auth.gmail_oauth.get_gmail_service", return_value=(mock_service, "test@example.com")):
+        with patch(
+            "auth.gmail_oauth.get_gmail_service",
+            return_value=(mock_service, "test@example.com"),
+        ):
             res = client.get("/api/body/example.com/msg123?account=test@example.com")
     assert res.status_code == 200
     data = res.get_json()

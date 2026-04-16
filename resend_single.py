@@ -20,9 +20,15 @@ _DB_PATH = Path(__file__).parent / "data" / "companies.json"
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Resend a SAR for a single domain")
-    parser.add_argument("domain", help="Domain key in companies.json (e.g. reflexivity.com)")
-    parser.add_argument("--dry-run", action="store_true", help="Preview only, do not send")
-    parser.add_argument("--gmail", metavar="EMAIL", default="", help="Gmail send account")
+    parser.add_argument(
+        "domain", help="Domain key in companies.json (e.g. reflexivity.com)"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Preview only, do not send"
+    )
+    parser.add_argument(
+        "--gmail", metavar="EMAIL", default="", help="Gmail send account"
+    )
     args = parser.parse_args()
 
     raw = json.loads(_DB_PATH.read_text())

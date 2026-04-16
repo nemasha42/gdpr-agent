@@ -21,20 +21,27 @@ def _load_all(path: Path = _SCAN_STATE_PATH) -> dict:
         return {}
 
 
-def load_scan_state(account: str, *, path: Path | None = None, data_dir: Path | None = None) -> dict:
+def load_scan_state(
+    account: str, *, path: Path | None = None, data_dir: Path | None = None
+) -> dict:
     """Return the scan state dict for *account*, or a fresh empty default."""
     if path is None:
         path = (data_dir / "scan_state.json") if data_dir else _SCAN_STATE_PATH
     all_data = _load_all(path)
     key = _safe_key(account)
-    return all_data.get(key, {
-        "last_scan_at": None,
-        "scanned_message_ids": [],
-        "discovered_companies": {},
-    })
+    return all_data.get(
+        key,
+        {
+            "last_scan_at": None,
+            "scanned_message_ids": [],
+            "discovered_companies": {},
+        },
+    )
 
 
-def save_scan_state(account: str, state: dict, *, path: Path | None = None, data_dir: Path | None = None) -> None:
+def save_scan_state(
+    account: str, state: dict, *, path: Path | None = None, data_dir: Path | None = None
+) -> None:
     """Persist *state* for *account*, merging with other accounts in the file."""
     if path is None:
         path = (data_dir / "scan_state.json") if data_dir else _SCAN_STATE_PATH

@@ -47,6 +47,7 @@ def main() -> None:
     # ── Step 1: Gmail connection ─────────────────────────────────────────────
     print("Connecting to Gmail...")
     from dashboard.user_model import user_data_dir, load_user
+
     service, email = get_gmail_service(email_hint=args.gmail)
     data_dir = user_data_dir(email)
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -57,6 +58,7 @@ def main() -> None:
     user = load_user(email)
     if user:
         from config.settings import settings
+
         user_identity = {
             "user_full_name": user.name,
             "user_email": email,
@@ -124,8 +126,13 @@ def main() -> None:
 
     sent = skipped = 0
     for letter in letters:
-        result = preview_and_send(letter, dry_run=args.dry_run, scan_email=email,
-                                    data_dir=data_dir, tokens_dir=tokens_dir)
+        result = preview_and_send(
+            letter,
+            dry_run=args.dry_run,
+            scan_email=email,
+            data_dir=data_dir,
+            tokens_dir=tokens_dir,
+        )
         if result:
             sent += 1
         else:
@@ -138,27 +145,39 @@ def main() -> None:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="GDPR SAR agent")
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Preview letters without sending",
     )
     parser.add_argument(
-        "--max-emails", type=int, default=500, metavar="N",
+        "--max-emails",
+        type=int,
+        default=500,
+        metavar="N",
         help="Max emails to scan (default 500)",
     )
     parser.add_argument(
-        "--min-confidence", choices=["HIGH", "MEDIUM", "LOW"], default="LOW",
+        "--min-confidence",
+        choices=["HIGH", "MEDIUM", "LOW"],
+        default="LOW",
         help="Minimum service detection confidence (default LOW)",
     )
     parser.add_argument(
-        "--gmail", metavar="EMAIL", default=None,
+        "--gmail",
+        metavar="EMAIL",
+        default=None,
         help="Gmail account to scan (e.g. user@gmail.com)",
     )
     parser.add_argument(
-        "--max-llm-calls", type=int, default=None, metavar="N",
+        "--max-llm-calls",
+        type=int,
+        default=None,
+        metavar="N",
         help="Cap LLM API calls this run (0 = block all LLM, omit for unlimited)",
     )
     parser.add_argument(
-        "--portal-only", action="store_true",
+        "--portal-only",
+        action="store_true",
         help="Only process portal-method companies",
     )
     return parser.parse_args()

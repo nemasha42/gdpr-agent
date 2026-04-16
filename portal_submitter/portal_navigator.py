@@ -7,7 +7,6 @@ Hybrid strategy:
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from typing import Any
@@ -161,22 +160,25 @@ def _llm_suggest_click(client: Any, page: Any) -> str:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=100,
-            messages=[{
-                "role": "user",
-                "content": (
-                    "This is a privacy/GDPR portal page. I need to reach the data access "
-                    "request form. Here is the page's accessibility tree:\n\n"
-                    f"{snapshot_text}\n\n"
-                    "Which ONE button or link should I click next to get to the GDPR data "
-                    "access request form? Return ONLY the exact accessible name of the "
-                    "element, nothing else. If no relevant element exists, return NONE."
-                ),
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "This is a privacy/GDPR portal page. I need to reach the data access "
+                        "request form. Here is the page's accessibility tree:\n\n"
+                        f"{snapshot_text}\n\n"
+                        "Which ONE button or link should I click next to get to the GDPR data "
+                        "access request form? Return ONLY the exact accessible name of the "
+                        "element, nothing else. If no relevant element exists, return NONE."
+                    ),
+                }
+            ],
         )
         element_name = response.content[0].text.strip()
 
         try:
             from contact_resolver.cost_tracker import record_llm_call
+
             record_llm_call(
                 company_name="portal_navigator",
                 input_tokens=response.usage.input_tokens,
@@ -204,6 +206,7 @@ def _get_anthropic_client(api_key: str | None = None) -> Any:
         return None
     try:
         import anthropic
+
         return anthropic.Anthropic(api_key=key)
     except ImportError:
         return None

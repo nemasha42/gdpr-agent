@@ -8,7 +8,7 @@ from pathlib import Path
 # Per-model pricing (input $/token, output $/token)
 _PRICING: dict[str, tuple[float, float]] = {
     "claude-haiku-4-5-20251001": (0.80 / 1_000_000, 4.00 / 1_000_000),
-    "claude-sonnet-4-6":         (3.00 / 1_000_000, 15.0 / 1_000_000),
+    "claude-sonnet-4-6": (3.00 / 1_000_000, 15.0 / 1_000_000),
 }
 _DEFAULT_PRICING: tuple[float, float] = (3.00 / 1_000_000, 15.0 / 1_000_000)
 
@@ -23,11 +23,15 @@ _W_RESULT = 8
 
 # Inner width = (12+2)+1+(8+2)+1+(8+2)+1+(14+2)+1+(8+2) = 65
 _INNER = (
-    (_W_COMPANY + 2) + 1 +
-    (_W_TOKENS + 2) + 1 +
-    (_W_TOKENS + 2) + 1 +
-    (_W_COST + 2) + 1 +
-    (_W_RESULT + 2)
+    (_W_COMPANY + 2)
+    + 1
+    + (_W_TOKENS + 2)
+    + 1
+    + (_W_TOKENS + 2)
+    + 1
+    + (_W_COST + 2)
+    + 1
+    + (_W_RESULT + 2)
 )
 
 
@@ -47,7 +51,13 @@ class _LLMCall:
 _session_log: list[_LLMCall] = []
 
 # Resolver stats for the current session
-_resolver_stats: dict[str, int] = {"total": 0, "cache": 0, "free": 0, "llm": 0, "not_found": 0}
+_resolver_stats: dict[str, int] = {
+    "total": 0,
+    "cache": 0,
+    "free": 0,
+    "llm": 0,
+    "not_found": 0,
+}
 
 # Optional LLM call cap (set via set_llm_limit())
 _llm_limit: int | None = None
@@ -157,7 +167,13 @@ def print_cost_summary() -> None:
         cum_out = sum(r.get("output_tokens", 0) for r in all_records)
         cum_cost = sum(r.get("cost_usd", 0.0) for r in all_records)
         lines.append(
-            row("CUMULATIVE", f"{cum_in:,}", f"{cum_out:,}", f"${cum_cost:.4f}", f"{len(all_records)} calls")
+            row(
+                "CUMULATIVE",
+                f"{cum_in:,}",
+                f"{cum_out:,}",
+                f"${cum_cost:.4f}",
+                f"{len(all_records)} calls",
+            )
         )
         lines.append(bot)
 
@@ -212,7 +228,9 @@ def is_llm_limit_reached() -> bool:
 def reset() -> None:
     """Clear the session log and resolver stats — used in tests."""
     _session_log.clear()
-    _resolver_stats.update({"total": 0, "cache": 0, "free": 0, "llm": 0, "not_found": 0})
+    _resolver_stats.update(
+        {"total": 0, "cache": 0, "free": 0, "llm": 0, "not_found": 0}
+    )
     global _llm_limit
     _llm_limit = None
 
@@ -230,22 +248,25 @@ def get_log() -> list[_LLMCall]:
 def _persist(call: _LLMCall, *, purpose: str = "") -> None:
     """Append a single call record to cost_log.json."""
     import os
+
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return  # never pollute the real log with test fixtures
     try:
         _COST_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         existing = load_persistent_log()
-        existing.append({
-            "timestamp": call.timestamp,
-            "source": call.source,
-            "purpose": purpose,
-            "company_name": call.company_name,
-            "model": call.model,
-            "input_tokens": call.input_tokens,
-            "output_tokens": call.output_tokens,
-            "cost_usd": call.cost_usd,
-            "found": call.found,
-        })
+        existing.append(
+            {
+                "timestamp": call.timestamp,
+                "source": call.source,
+                "purpose": purpose,
+                "company_name": call.company_name,
+                "model": call.model,
+                "input_tokens": call.input_tokens,
+                "output_tokens": call.output_tokens,
+                "cost_usd": call.cost_usd,
+                "found": call.found,
+            }
+        )
         # Rotate: keep only the most recent entries
         if len(existing) > _MAX_LOG_ENTRIES:
             existing = existing[-_MAX_LOG_ENTRIES:]

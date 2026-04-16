@@ -16,7 +16,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from auth.gmail_oauth import get_gmail_service
-from letter_engine.tracker import get_log, record_sent
+from letter_engine.tracker import get_log
 
 _TRACKER_PATH = Path(__file__).parent / "user_data" / "sent_letters.json"
 
@@ -26,10 +26,10 @@ _QUERIES = [
     'subject:"SAR Request" in:sent',
     'subject:"Data Subject Access Request" in:sent',
     'subject:"Right of Access" in:sent',
-    'to:privacy@ in:sent',
-    'to:dpo@ in:sent',
-    'to:gdpr@ in:sent',
-    'to:dataprotection@ in:sent',
+    "to:privacy@ in:sent",
+    "to:dpo@ in:sent",
+    "to:gdpr@ in:sent",
+    "to:dataprotection@ in:sent",
 ]
 
 
@@ -42,11 +42,16 @@ def _fetch_sent_sars(service, verbose: bool = False) -> list[dict]:
         if verbose:
             print(f"  Searching: {query}")
         try:
-            result = service.users().messages().list(
-                userId="me",
-                q=query,
-                maxResults=100,
-            ).execute()
+            result = (
+                service.users()
+                .messages()
+                .list(
+                    userId="me",
+                    q=query,
+                    maxResults=100,
+                )
+                .execute()
+            )
         except Exception as e:
             print(f"  Warning: query failed ({e}), skipping.")
             continue
@@ -63,12 +68,17 @@ def _fetch_sent_sars(service, verbose: bool = False) -> list[dict]:
 def _get_message_detail(service, message_id: str) -> dict | None:
     """Fetch full metadata for a single message."""
     try:
-        msg = service.users().messages().get(
-            userId="me",
-            id=message_id,
-            format="metadata",
-            metadataHeaders=["To", "Subject", "Date", "From"],
-        ).execute()
+        msg = (
+            service.users()
+            .messages()
+            .get(
+                userId="me",
+                id=message_id,
+                format="metadata",
+                metadataHeaders=["To", "Subject", "Date", "From"],
+            )
+            .execute()
+        )
         return msg
     except Exception as e:
         print(f"  Warning: could not fetch message {message_id}: {e}")
@@ -102,7 +112,16 @@ def _is_sar_subject(subject: str) -> bool:
 def _is_sar_recipient(to_addr: str) -> bool:
     """Check if recipient looks like a privacy/DPO address."""
     to_lower = to_addr.lower()
-    keywords = ["privacy", "dpo", "gdpr", "dataprotection", "data-protection", "legal", "compliance", "sar"]
+    keywords = [
+        "privacy",
+        "dpo",
+        "gdpr",
+        "dataprotection",
+        "data-protection",
+        "legal",
+        "compliance",
+        "sar",
+    ]
     return any(k in to_lower for k in keywords)
 
 
@@ -124,7 +143,9 @@ def main() -> None:
     existing_ids = {r["gmail_message_id"] for r in existing_valid}
     dropped = len(existing) - len(existing_valid)
     if dropped:
-        print(f"Dropping {dropped} existing entries with missing thread IDs (will re-recover from Gmail).")
+        print(
+            f"Dropping {dropped} existing entries with missing thread IDs (will re-recover from Gmail)."
+        )
     print(f"Existing tracked SARs (with thread IDs): {len(existing_valid)}")
 
     # Search Sent folder
@@ -167,7 +188,9 @@ def main() -> None:
             "gmail_thread_id": detail["threadId"],
         }
         recovered.append(entry)
-        print(f"  Recovered: {entry['company_name']:<30} {entry['sent_at']}  →  {to_addr}")
+        print(
+            f"  Recovered: {entry['company_name']:<30} {entry['sent_at']}  →  {to_addr}"
+        )
 
     if not recovered and not existing:
         print("\nNo SAR emails found in Sent folder.")
@@ -181,7 +204,9 @@ def main() -> None:
         _TRACKER_PATH.parent.mkdir(parents=True, exist_ok=True)
         _TRACKER_PATH.write_text(json.dumps(merged, indent=2))
         print(f"\nSaved {len(merged)} total SARs to user_data/sent_letters.json")
-        print(f"  (+{len(recovered)} recovered, {skipped_dup} already tracked, {skipped_non_sar} skipped non-SAR)")
+        print(
+            f"  (+{len(recovered)} recovered, {skipped_dup} already tracked, {skipped_non_sar} skipped non-SAR)"
+        )
     else:
         print(f"\nAll {len(existing_valid)} SARs already tracked — nothing new to add.")
 
@@ -221,13 +246,23 @@ def _guess_company(to_addr: str) -> str:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Recover sent_letters.json from Gmail and launch dashboard")
-    parser.add_argument("--account", metavar="EMAIL", default=None,
-                        help="Gmail account (e.g. traderm1620@gmail.com)")
-    parser.add_argument("--no-dashboard", action="store_true",
-                        help="Skip launching the dashboard after recovery")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Show each message being inspected")
+    parser = argparse.ArgumentParser(
+        description="Recover sent_letters.json from Gmail and launch dashboard"
+    )
+    parser.add_argument(
+        "--account",
+        metavar="EMAIL",
+        default=None,
+        help="Gmail account (e.g. traderm1620@gmail.com)",
+    )
+    parser.add_argument(
+        "--no-dashboard",
+        action="store_true",
+        help="Skip launching the dashboard after recovery",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Show each message being inspected"
+    )
     return parser.parse_args()
 
 

@@ -91,7 +91,9 @@ def fetch_subprocessors(
         for prefix in (f"https://{domain}", f"https://www.{domain}"):
             url = f"{prefix}{path}"
             try:
-                resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+                resp = requests.get(
+                    url, timeout=10, headers={"User-Agent": "Mozilla/5.0"}
+                )
                 if resp.status_code == 200:
                     content = _extract_page_content(resp.text)
                     if len(content) >= _MIN_PLAIN_TEXT:
@@ -144,7 +146,9 @@ def fetch_subprocessors(
         messages=[{"role": "user", "content": user_message}],
     )
     if not page_text:
-        create_kwargs["tools"] = [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}]
+        create_kwargs["tools"] = [
+            {"type": "web_search_20250305", "name": "web_search", "max_uses": 3}
+        ]
     try:
         response = client.messages.create(**create_kwargs)
     except anthropic.APIError as exc:
@@ -177,7 +181,12 @@ def is_stale(record: SubprocessorRecord, ttl_days: int = 30) -> bool:
         return True
     try:
         fetched = datetime.fromisoformat(record.fetched_at)
-        age = (datetime.now(timezone.utc) - fetched.replace(tzinfo=timezone.utc if fetched.tzinfo is None else fetched.tzinfo)).days
+        age = (
+            datetime.now(timezone.utc)
+            - fetched.replace(
+                tzinfo=timezone.utc if fetched.tzinfo is None else fetched.tzinfo
+            )
+        ).days
         return age > ttl_days
     except Exception:
         return True
@@ -236,12 +245,18 @@ def _extract_page_content(html: str) -> str:
 
     # Strategy 2: keyword window
     plain = _strip_html(html)
-    keywords = ["sub-processor", "subprocessor", "data processor", "third-party processor", "vendor"]
+    keywords = [
+        "sub-processor",
+        "subprocessor",
+        "data processor",
+        "third-party processor",
+        "vendor",
+    ]
     for kw in keywords:
         idx = plain.lower().find(kw)
         if idx != -1:
             start = max(0, idx - 200)
-            return re.sub(r"\s+", " ", plain[start:start + 50_000]).strip()
+            return re.sub(r"\s+", " ", plain[start : start + 50_000]).strip()
 
     # Strategy 3: full text
     return re.sub(r"\s+", " ", plain).strip()
@@ -271,7 +286,9 @@ def _fetch_page_playwright(url: str) -> str:
         return ""
 
 
-def _build_record(data: dict | None, domain: str, source_url: str) -> SubprocessorRecord:
+def _build_record(
+    data: dict | None, domain: str, source_url: str
+) -> SubprocessorRecord:
     now = datetime.now(timezone.utc).isoformat()
     if not data:
         return SubprocessorRecord(
@@ -297,25 +314,44 @@ def _build_record(data: dict | None, domain: str, source_url: str) -> Subprocess
         seen_domains.add(sp_domain)
 
         transfer_basis = item.get("transfer_basis", "unknown")
-        if transfer_basis not in ("adequacy_decision", "SCCs", "BCRs", "consent", "none", "unknown"):
+        if transfer_basis not in (
+            "adequacy_decision",
+            "SCCs",
+            "BCRs",
+            "consent",
+            "none",
+            "unknown",
+        ):
             transfer_basis = "unknown"
 
         sp_source = item.get("source", "llm_search")
-        if sp_source not in ("scrape_subprocessor_page", "scrape_privacy_policy", "llm_search"):
+        if sp_source not in (
+            "scrape_subprocessor_page",
+            "scrape_privacy_policy",
+            "llm_search",
+        ):
             sp_source = "llm_search"
 
-        subprocessors.append(Subprocessor(
-            domain=sp_domain,
-            company_name=str(item.get("company_name", sp_domain)),
-            hq_country=str(item.get("hq_country", "")),
-            hq_country_code=str(item.get("hq_country_code", "")).upper()[:2],
-            purposes=[str(p) for p in item.get("purposes", []) if isinstance(p, str)],
-            data_categories=[str(c) for c in item.get("data_categories", []) if isinstance(c, str)],
-            transfer_basis=transfer_basis,
-            source_url=str(item.get("source_url", detected_source_url)),
-            source=sp_source,
-            last_fetched=date.today().isoformat(),
-        ))
+        subprocessors.append(
+            Subprocessor(
+                domain=sp_domain,
+                company_name=str(item.get("company_name", sp_domain)),
+                hq_country=str(item.get("hq_country", "")),
+                hq_country_code=str(item.get("hq_country_code", "")).upper()[:2],
+                purposes=[
+                    str(p) for p in item.get("purposes", []) if isinstance(p, str)
+                ],
+                data_categories=[
+                    str(c)
+                    for c in item.get("data_categories", [])
+                    if isinstance(c, str)
+                ],
+                transfer_basis=transfer_basis,
+                source_url=str(item.get("source_url", detected_source_url)),
+                source=sp_source,
+                last_fetched=date.today().isoformat(),
+            )
+        )
 
     return SubprocessorRecord(
         fetched_at=now,

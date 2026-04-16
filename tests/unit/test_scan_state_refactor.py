@@ -1,7 +1,5 @@
 """Tests for data_dir parameter on scan_state load/save."""
 
-from pathlib import Path
-
 
 def test_load_scan_state_from_data_dir(tmp_path):
     from dashboard.scan_state import load_scan_state, save_scan_state

@@ -16,6 +16,7 @@ def _resolve_identity(user_identity: dict | None) -> dict:
     if user_identity is not None:
         return user_identity
     from config.settings import settings
+
     return {
         "user_full_name": settings.user_full_name,
         "user_email": settings.user_email,
@@ -79,14 +80,17 @@ def compose_subprocessor_request(
     Returns None if no usable email contact exists and method is not postal.
     """
     identity = _resolve_identity(user_identity)
-    to_email = record.contact.privacy_email or record.contact.dpo_email or to_email_override
+    to_email = (
+        record.contact.privacy_email or record.contact.dpo_email or to_email_override
+    )
     method = record.contact.preferred_method
 
     if method != "postal" and not to_email:
         return None
 
     template_name = (
-        "subprocessor_request_postal.txt" if method == "postal"
+        "subprocessor_request_postal.txt"
+        if method == "postal"
         else "subprocessor_request_email.txt"
     )
     template = (_TEMPLATES_DIR / template_name).read_text()

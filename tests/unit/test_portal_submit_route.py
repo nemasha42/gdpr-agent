@@ -5,7 +5,6 @@ preferred_method is not 'portal' (e.g. WRONG_CHANNEL redirects from email compan
 """
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,40 +16,50 @@ def state_dir(tmp_path):
     data_dir = tmp_path / "user_data"
     data_dir.mkdir()
     state_path = data_dir / "reply_state.json"
-    state_path.write_text(json.dumps({
-        "test_at_test_com": {
-            "zendesk.com": {
-                "domain": "zendesk.com",
-                "company_name": "Zendesk",
-                "sar_sent_at": "2026-04-01T00:00:00Z",
-                "to_email": "privacy@zendesk.com",
-                "subject": "Subject Access Request",
-                "gmail_thread_id": "thread_zd_1",
-                "deadline": "2026-05-01",
-                "replies": [{
-                    "gmail_message_id": "msg_1",
-                    "received_at": "2026-04-02T10:00:00Z",
-                    "from": "privacy@zendesk.com",
-                    "subject": "Re: SAR",
-                    "snippet": "Please use our portal",
-                    "tags": ["WRONG_CHANNEL"],
-                    "extracted": {"portal_url": "", "reference_number": "",
-                                  "confirmation_url": "", "data_link": "",
-                                  "data_links": [], "deadline_extension_days": None},
-                    "llm_used": False,
-                    "has_attachment": False,
-                    "attachment_catalog": None,
-                }],
+    state_path.write_text(
+        json.dumps(
+            {
+                "test_at_test_com": {
+                    "zendesk.com": {
+                        "domain": "zendesk.com",
+                        "company_name": "Zendesk",
+                        "sar_sent_at": "2026-04-01T00:00:00Z",
+                        "to_email": "privacy@zendesk.com",
+                        "subject": "Subject Access Request",
+                        "gmail_thread_id": "thread_zd_1",
+                        "deadline": "2026-05-01",
+                        "replies": [
+                            {
+                                "gmail_message_id": "msg_1",
+                                "received_at": "2026-04-02T10:00:00Z",
+                                "from": "privacy@zendesk.com",
+                                "subject": "Re: SAR",
+                                "snippet": "Please use our portal",
+                                "tags": ["WRONG_CHANNEL"],
+                                "extracted": {
+                                    "portal_url": "",
+                                    "reference_number": "",
+                                    "confirmation_url": "",
+                                    "data_link": "",
+                                    "data_links": [],
+                                    "deadline_extension_days": None,
+                                },
+                                "llm_used": False,
+                                "has_attachment": False,
+                                "attachment_catalog": None,
+                            }
+                        ],
+                    }
+                }
             }
-        }
-    }))
+        )
+    )
     return data_dir
 
 
 def test_portal_submit_accepts_portal_url_param(state_dir):
     """Route should accept portal_url query param for non-portal companies."""
     from contact_resolver.resolver import ContactResolver
-    from letter_engine.composer import compose
     from letter_engine.models import SARLetter
     from contact_resolver.models import CompanyRecord, Contact
 
@@ -74,12 +83,11 @@ def test_portal_submit_accepts_portal_url_param(state_dir):
         postal_address="",
     )
 
-    with patch.object(ContactResolver, "resolve", return_value=mock_record), \
-         patch("letter_engine.composer.compose", return_value=mock_letter) as mock_compose:
-
+    with patch.object(ContactResolver, "resolve", return_value=mock_record), patch(
+        "letter_engine.composer.compose", return_value=mock_letter
+    ) as mock_compose:
         # Import the app module — need to simulate route logic
         # Rather than spin up a full Flask test client (needs auth), test the logic directly
-        from dashboard.app import _lookup_company
 
         domain = "zendesk.com"
         portal_url_param = "https://www.zendesk.com/datasubjectrequest/"
@@ -115,10 +123,14 @@ def test_portal_submit_falls_back_to_overrides(state_dir):
     mock_record.contact.preferred_method = "email"
     mock_record.contact.gdpr_portal_url = ""
 
-    with patch.object(ContactResolver, "resolve", return_value=mock_record), \
-         patch("dashboard.app._lookup_company", return_value={
-             "contact": {"gdpr_portal_url": "https://www.zendesk.com/datasubjectrequest/"}
-         }):
+    with patch.object(ContactResolver, "resolve", return_value=mock_record), patch(
+        "dashboard.app._lookup_company",
+        return_value={
+            "contact": {
+                "gdpr_portal_url": "https://www.zendesk.com/datasubjectrequest/"
+            }
+        },
+    ):
         from dashboard.app import _lookup_company
 
         domain = "zendesk.com"
@@ -129,7 +141,9 @@ def test_portal_submit_falls_back_to_overrides(state_dir):
             effective_portal_url = mock_record.contact.gdpr_portal_url
         if not effective_portal_url:
             company_rec = _lookup_company(domain)
-            effective_portal_url = (company_rec.get("contact", {}) or {}).get("gdpr_portal_url", "")
+            effective_portal_url = (company_rec.get("contact", {}) or {}).get(
+                "gdpr_portal_url", ""
+            )
 
         assert effective_portal_url == "https://www.zendesk.com/datasubjectrequest/"
 
@@ -145,8 +159,9 @@ def test_portal_submit_rejects_no_url():
     mock_record.contact.preferred_method = "email"
     mock_record.contact.gdpr_portal_url = ""
 
-    with patch.object(ContactResolver, "resolve", return_value=mock_record), \
-         patch("dashboard.app._lookup_company", return_value={}):
+    with patch.object(ContactResolver, "resolve", return_value=mock_record), patch(
+        "dashboard.app._lookup_company", return_value={}
+    ):
         from dashboard.app import _lookup_company
 
         domain = "nocorp.com"
@@ -157,7 +172,9 @@ def test_portal_submit_rejects_no_url():
             effective_portal_url = mock_record.contact.gdpr_portal_url
         if not effective_portal_url:
             company_rec = _lookup_company(domain)
-            effective_portal_url = (company_rec.get("contact", {}) or {}).get("gdpr_portal_url", "")
+            effective_portal_url = (company_rec.get("contact", {}) or {}).get(
+                "gdpr_portal_url", ""
+            )
 
         assert effective_portal_url == ""
         # Route would return 400 here
@@ -167,25 +184,30 @@ def test_save_portal_submission_persists(tmp_path):
     """Verify save_portal_submission writes to reply_state.json correctly."""
     data_dir = tmp_path
     state_path = data_dir / "reply_state.json"
-    state_path.write_text(json.dumps({
-        "test_at_test_com": {
-            "example.com": {
-                "domain": "example.com",
-                "company_name": "Example",
-                "sar_sent_at": "2026-04-01T00:00:00Z",
-                "to_email": "dpo@example.com",
-                "subject": "SAR",
-                "gmail_thread_id": "thread1",
-                "deadline": "2026-05-01",
-                "replies": [],
+    state_path.write_text(
+        json.dumps(
+            {
+                "test_at_test_com": {
+                    "example.com": {
+                        "domain": "example.com",
+                        "company_name": "Example",
+                        "sar_sent_at": "2026-04-01T00:00:00Z",
+                        "to_email": "dpo@example.com",
+                        "subject": "SAR",
+                        "gmail_thread_id": "thread1",
+                        "deadline": "2026-05-01",
+                        "replies": [],
+                    }
+                }
             }
-        }
-    }))
+        )
+    )
 
     from reply_monitor.state_manager import save_portal_submission, load_state
 
     save_portal_submission(
-        "test@test.com", "example.com",
+        "test@test.com",
+        "example.com",
         status="submitted",
         portal_url="https://example.com/privacy",
         confirmation_ref="REF-123",
@@ -205,26 +227,31 @@ def test_save_portal_submission_manual(tmp_path):
     """Verify manual portal submission status is persisted."""
     data_dir = tmp_path
     state_path = data_dir / "reply_state.json"
-    state_path.write_text(json.dumps({
-        "user_at_gmail_com": {
-            "zendesk.com": {
-                "domain": "zendesk.com",
-                "company_name": "Zendesk",
-                "sar_sent_at": "2026-04-01T00:00:00Z",
-                "to_email": "privacy@zendesk.com",
-                "subject": "SAR",
-                "gmail_thread_id": "thread_zd",
-                "deadline": "2026-05-01",
-                "replies": [],
+    state_path.write_text(
+        json.dumps(
+            {
+                "user_at_gmail_com": {
+                    "zendesk.com": {
+                        "domain": "zendesk.com",
+                        "company_name": "Zendesk",
+                        "sar_sent_at": "2026-04-01T00:00:00Z",
+                        "to_email": "privacy@zendesk.com",
+                        "subject": "SAR",
+                        "gmail_thread_id": "thread_zd",
+                        "deadline": "2026-05-01",
+                        "replies": [],
+                    }
+                }
             }
-        }
-    }))
+        )
+    )
 
     from reply_monitor.state_manager import save_portal_submission, load_state
 
     # First save as "manual" (needs manual)
     save_portal_submission(
-        "user@gmail.com", "zendesk.com",
+        "user@gmail.com",
+        "zendesk.com",
         status="manual",
         portal_url="https://www.zendesk.com/datasubjectrequest/",
         error="recaptcha_v3_blocked",
@@ -236,7 +263,8 @@ def test_save_portal_submission_manual(tmp_path):
 
     # Then user marks it as submitted
     save_portal_submission(
-        "user@gmail.com", "zendesk.com",
+        "user@gmail.com",
+        "zendesk.com",
         status="submitted",
         portal_url="https://www.zendesk.com/datasubjectrequest/",
         confirmation_ref="ZD-649929",

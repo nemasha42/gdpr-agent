@@ -8,10 +8,9 @@ static asset.
 Run:
     .venv/bin/pytest tests/unit/test_ui_health.py -v
 """
+
 from __future__ import annotations
 
-import json
-import re
 from pathlib import Path
 
 import pytest
@@ -67,6 +66,7 @@ def test_service_module_exists(mod: str) -> None:
 
 # ── Graph integration health ───────────────────────────────────────────────
 
+
 def test_transfers_template_has_graph_container() -> None:
     """transfers.html must reference the graph SVG container."""
     html = (_TEMPLATES / "transfers.html").read_text()
@@ -85,7 +85,9 @@ def test_transfers_template_loads_d3() -> None:
 def test_transfers_template_loads_graph_js() -> None:
     """transfers.html must include transfer-graph.js."""
     html = (_TEMPLATES / "transfers.html").read_text()
-    assert "transfer-graph.js" in html, "transfers.html missing transfer-graph.js script"
+    assert (
+        "transfer-graph.js" in html
+    ), "transfers.html missing transfer-graph.js script"
 
 
 def test_graph_js_has_key_elements() -> None:
@@ -98,6 +100,7 @@ def test_graph_js_has_key_elements() -> None:
 
 
 # ── graph_data.py integrity ────────────────────────────────────────────────
+
 
 def test_build_graph_data_empty() -> None:
     """build_graph_data should handle empty input without crashing."""
@@ -188,6 +191,7 @@ def test_build_graph_data_respects_max_depth() -> None:
 
 # ── jurisdiction.py integrity ──────────────────────────────────────────────
 
+
 def test_jurisdiction_assess_risk() -> None:
     from dashboard.services.jurisdiction import assess_risk
 
@@ -211,6 +215,7 @@ def test_jurisdiction_infer_country() -> None:
 
 # ── Navbar integrity ───────────────────────────────────────────────────────
 
+
 def test_base_html_has_all_nav_links() -> None:
     """base.html must have links to all major dashboard pages."""
     html = (_TEMPLATES / "base.html").read_text()
@@ -225,6 +230,7 @@ def test_base_html_has_nav_extra_block() -> None:
 
 
 # ── Jinja2 syntax validation ─────────────────────────────────────────────
+
 
 def test_all_templates_parse_without_syntax_errors() -> None:
     """Every .html template must be valid Jinja2 — catches unclosed if/for blocks."""

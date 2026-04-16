@@ -1,9 +1,7 @@
 """Unit tests for portal_submitter/portal_navigator.py — multi-step portal navigation."""
 
-import re
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 from portal_submitter.portal_navigator import navigate_to_form, page_has_form
 
@@ -12,7 +10,9 @@ def _mock_page_with_visible_inputs(count):
     """Create a mock page where page_has_form returns True if count > 0."""
     page = MagicMock()
     if count > 0:
-        elements = [MagicMock(is_visible=MagicMock(return_value=True)) for _ in range(count)]
+        elements = [
+            MagicMock(is_visible=MagicMock(return_value=True)) for _ in range(count)
+        ]
     else:
         elements = []
     page.locator.return_value.all.return_value = elements
@@ -23,7 +23,9 @@ class TestPageHasForm:
     def test_page_with_inputs(self):
         page = _mock_page_with_visible_inputs(3)
         assert page_has_form(page) is True
-        page.locator.assert_called_once_with("input:not([type=hidden]), textarea, select")
+        page.locator.assert_called_once_with(
+            "input:not([type=hidden]), textarea, select"
+        )
 
     def test_page_without_inputs(self):
         page = _mock_page_with_visible_inputs(0)
@@ -32,7 +34,9 @@ class TestPageHasForm:
     def test_page_with_hidden_inputs_only(self):
         """Hidden inputs (e.g. cookie consent) should not count as form fields."""
         page = MagicMock()
-        elements = [MagicMock(is_visible=MagicMock(return_value=False)) for _ in range(5)]
+        elements = [
+            MagicMock(is_visible=MagicMock(return_value=False)) for _ in range(5)
+        ]
         page.locator.return_value.all.return_value = elements
         assert page_has_form(page) is False
 
@@ -43,7 +47,9 @@ class TestHintNavigation:
         page = MagicMock()
 
         # page_has_form returns False, False, then True (after second hint click)
-        visible_results = iter([[], [], [MagicMock(is_visible=MagicMock(return_value=True))]])
+        visible_results = iter(
+            [[], [], [MagicMock(is_visible=MagicMock(return_value=True))]]
+        )
         page.locator.return_value.all.side_effect = lambda: next(visible_results)
 
         link_locator = MagicMock()
@@ -75,9 +81,14 @@ class TestHintNavigation:
         mock_client = MagicMock()
         mock_client.messages.create.return_value = mock_response
 
-        page.locator.return_value.aria_snapshot.return_value = '- heading "Page" [level=1]'
+        page.locator.return_value.aria_snapshot.return_value = (
+            '- heading "Page" [level=1]'
+        )
 
-        with patch("portal_submitter.portal_navigator._get_anthropic_client", return_value=mock_client):
+        with patch(
+            "portal_submitter.portal_navigator._get_anthropic_client",
+            return_value=mock_client,
+        ):
             result = navigate_to_form(page, "ketch", api_key="test-key")
 
         assert result is False
@@ -90,10 +101,14 @@ class TestLLMNavigation:
         page = MagicMock()
 
         # First call: no form. Second call: form found (after LLM-guided click)
-        visible_results = iter([[], [MagicMock(is_visible=MagicMock(return_value=True))]])
+        visible_results = iter(
+            [[], [MagicMock(is_visible=MagicMock(return_value=True))]]
+        )
         page.locator.return_value.all.side_effect = lambda: next(visible_results)
 
-        page.locator.return_value.aria_snapshot.return_value = '- link "Access your data"'
+        page.locator.return_value.aria_snapshot.return_value = (
+            '- link "Access your data"'
+        )
 
         link_locator = MagicMock()
         link_locator.count.return_value = 1
@@ -106,7 +121,10 @@ class TestLLMNavigation:
         mock_client = MagicMock()
         mock_client.messages.create.return_value = mock_response
 
-        with patch("portal_submitter.portal_navigator._get_anthropic_client", return_value=mock_client):
+        with patch(
+            "portal_submitter.portal_navigator._get_anthropic_client",
+            return_value=mock_client,
+        ):
             result = navigate_to_form(page, "unknown", api_key="test-key")
 
         assert result is True
@@ -128,7 +146,10 @@ class TestLLMNavigation:
         mock_client = MagicMock()
         mock_client.messages.create.return_value = mock_response
 
-        with patch("portal_submitter.portal_navigator._get_anthropic_client", return_value=mock_client):
+        with patch(
+            "portal_submitter.portal_navigator._get_anthropic_client",
+            return_value=mock_client,
+        ):
             result = navigate_to_form(page, "unknown", api_key="test-key")
 
         assert result is False

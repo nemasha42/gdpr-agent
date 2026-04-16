@@ -206,10 +206,16 @@ def _download_requests(url: str, save_dir: Path) -> DownloadResult:
         return DownloadResult(error=f"requests: {exc}")
 
     if resp.status_code >= 400:
-        if resp.status_code == 403 and "text/html" in resp.headers.get("Content-Type", ""):
+        if resp.status_code == 403 and "text/html" in resp.headers.get(
+            "Content-Type", ""
+        ):
             return DownloadResult(error="browser_required")
-        return DownloadResult(expired=True if resp.status_code in (401, 403, 404, 410) else False,
-                              error="" if resp.status_code in (401, 403, 404, 410) else f"HTTP {resp.status_code}")
+        return DownloadResult(
+            expired=True if resp.status_code in (401, 403, 404, 410) else False,
+            error=""
+            if resp.status_code in (401, 403, 404, 410)
+            else f"HTTP {resp.status_code}",
+        )
 
     chunks, total = [], 0
     for chunk in resp.iter_content(chunk_size=256 * 1024):
@@ -251,7 +257,11 @@ def _catalog_file(file_path: Path) -> DownloadResult:
     elif ext == "csv":
         files, categories = _catalog_csv(data, file_path.name, len(data))
     else:
-        files = [FileEntry(filename=file_path.name, size_bytes=len(data), file_type=ext or "bin")]
+        files = [
+            FileEntry(
+                filename=file_path.name, size_bytes=len(data), file_type=ext or "bin"
+            )
+        ]
         categories = []
 
     catalog = AttachmentCatalog(
@@ -267,6 +277,7 @@ def _catalog_file(file_path: Path) -> DownloadResult:
 def _enrich_schema(catalog: AttachmentCatalog, api_key: str, domain: str = "") -> None:
     """Run LLM schema analysis on catalog.path and store result in catalog.schema."""
     from reply_monitor.schema_builder import build_schema
+
     try:
         result = build_schema(Path(catalog.path), api_key, company_name=domain)
         if result:
@@ -292,7 +303,15 @@ def _filename_from_response(resp: object, url: str) -> str:
     if segment and "." in segment:
         return _safe_filename(segment)
     ct = getattr(resp, "headers", {}).get("Content-Type", "")
-    ext = "zip" if "zip" in ct else "json" if "json" in ct else "csv" if "csv" in ct else "bin"
+    ext = (
+        "zip"
+        if "zip" in ct
+        else "json"
+        if "json" in ct
+        else "csv"
+        if "csv" in ct
+        else "bin"
+    )
     return f"data.{ext}"
 
 

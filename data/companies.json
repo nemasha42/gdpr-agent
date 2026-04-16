@@ -1,8 +1,8 @@
 {
   "meta": {
     "version": "1.0",
-    "last_updated": "2026-04-13",
-    "total_companies": 22
+    "last_updated": "2026-04-16",
+    "total_companies": 23
   },
   "companies": {
     "google.com": {
@@ -34,7 +34,7 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-04-13T14:25:28.751071+00:00",
+        "fetched_at": "2026-04-16T09:53:46.115661+00:00",
         "source_url": "https://google.com/third-parties",
         "subprocessors": [],
         "fetch_status": "not_found",
@@ -195,7 +195,7 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-04-13T14:26:09.056899+00:00",
+        "fetched_at": "2026-04-16T09:54:27.864068+00:00",
         "source_url": "https://paypal.com/legal/sub-processors",
         "subprocessors": [],
         "fetch_status": "not_found",
@@ -335,7 +335,7 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-03-28T08:51:37.592194+00:00",
+        "fetched_at": "2026-04-16T09:56:57.670169+00:00",
         "source_url": "",
         "subprocessors": [],
         "fetch_status": "not_found",
@@ -372,8 +372,8 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-03-28T08:51:46.628726+00:00",
-        "source_url": "",
+        "fetched_at": "2026-04-16T09:57:05.985529+00:00",
+        "source_url": "https://glassdoor.com/sub-processors",
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
@@ -409,7 +409,7 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-04-13T14:25:40.999586+00:00",
+        "fetched_at": "2026-04-16T09:53:59.972475+00:00",
         "source_url": "https://finalroundai.com/sub-processors",
         "subprocessors": [],
         "fetch_status": "not_found",
@@ -1141,7 +1141,7 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-03-28T08:52:32.386525+00:00",
+        "fetched_at": "2026-04-16T09:57:27.764704+00:00",
         "source_url": "https://whop.com/sub-processors",
         "subprocessors": [],
         "fetch_status": "not_found",
@@ -1317,7 +1317,7 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-04-13T14:25:03.627686+00:00",
+        "fetched_at": "2026-04-16T09:53:21.390839+00:00",
         "source_url": "https://qcex.com/sub-processors",
         "subprocessors": [],
         "fetch_status": "not_found",
@@ -1354,8 +1354,8 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-03-28T08:52:02.064288+00:00",
-        "source_url": "https://support.zendesk.com/hc/en-us/articles/4408883061530-Sub-processor-Policy",
+        "fetched_at": "2026-04-16T09:57:23.231354+00:00",
+        "source_url": "https://zendesk.com/sub-processors",
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""
@@ -1453,8 +1453,45 @@
         "known_response_time_days": 30
       },
       "subprocessors": {
-        "fetched_at": "2026-03-28T08:52:58.465155+00:00",
-        "source_url": "",
+        "fetched_at": "2026-04-16T09:57:40.575126+00:00",
+        "source_url": "https://avolta.net/sub-processors",
+        "subprocessors": [],
+        "fetch_status": "not_found",
+        "error_message": ""
+      },
+      "portal_field_mapping": null
+    },
+    "brave.com": {
+      "company_name": "brave.com",
+      "legal_entity_name": "",
+      "source": "llm_search",
+      "source_confidence": "low",
+      "last_verified": "2026-04-16",
+      "contact": {
+        "dpo_email": "",
+        "privacy_email": "",
+        "gdpr_portal_url": "",
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "postcode": "",
+          "country": ""
+        },
+        "preferred_method": "email"
+      },
+      "flags": {
+        "portal_only": false,
+        "email_accepted": true,
+        "auto_send_possible": false
+      },
+      "request_notes": {
+        "special_instructions": "",
+        "identity_verification_required": false,
+        "known_response_time_days": 30
+      },
+      "subprocessors": {
+        "fetched_at": "2026-04-16T09:57:53.217190+00:00",
+        "source_url": "https://brave.com/sub-processors",
         "subprocessors": [],
         "fetch_status": "not_found",
         "error_message": ""

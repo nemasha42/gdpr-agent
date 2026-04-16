@@ -1,6 +1,5 @@
 """Unit tests for letter_engine: composer, tracker, sender."""
 
-import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,6 +20,7 @@ from letter_engine import tracker
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_record(
     *,
@@ -63,6 +63,7 @@ _MOCK_SETTINGS = {
 # composer
 # ---------------------------------------------------------------------------
 
+
 class TestCompose:
     def test_email_method_sets_correct_fields(self) -> None:
         record = _make_record(dpo_email="dpo@acme.com", preferred_method="email")
@@ -77,7 +78,9 @@ class TestCompose:
 
     def test_email_prefers_privacy_over_dpo(self) -> None:
         # privacy@ is preferred for SAR sends; dpo@ is for regulatory/authority contact
-        record = _make_record(dpo_email="dpo@acme.com", privacy_email="privacy@acme.com")
+        record = _make_record(
+            dpo_email="dpo@acme.com", privacy_email="privacy@acme.com"
+        )
         letter = compose(record, user_identity=_MOCK_SETTINGS)
         assert letter.to_email == "privacy@acme.com"
 
@@ -114,7 +117,9 @@ class TestCompose:
         assert "1 Corp Street" in letter.body  # company address block
 
     def test_postal_address_formatted(self) -> None:
-        postal = PostalAddress(line1="5 Lane", city="Bristol", postcode="BS1", country="UK")
+        postal = PostalAddress(
+            line1="5 Lane", city="Bristol", postcode="BS1", country="UK"
+        )
         record = _make_record(preferred_method="postal", postal=postal)
         letter = compose(record, user_identity=_MOCK_SETTINGS)
         assert "5 Lane" in letter.postal_address
@@ -129,6 +134,7 @@ class TestCompose:
 # ---------------------------------------------------------------------------
 # tracker
 # ---------------------------------------------------------------------------
+
 
 class TestTracker:
     def test_empty_log_when_no_file(self, tmp_path: Path) -> None:
@@ -158,8 +164,13 @@ class TestTracker:
         path = tmp_path / "sent.json"
         for name in ("Alpha", "Beta", "Gamma"):
             letter = SARLetter(
-                company_name=name, method="email", to_email="x@x.com",
-                subject="SAR", body="...", portal_url="", postal_address="",
+                company_name=name,
+                method="email",
+                to_email="x@x.com",
+                subject="SAR",
+                body="...",
+                portal_url="",
+                postal_address="",
             )
             tracker.record_sent(letter, path=path)
 
@@ -176,6 +187,7 @@ class TestTracker:
 # sender
 # ---------------------------------------------------------------------------
 
+
 class TestSender:
     def _make_letter(self, method: str = "email") -> SARLetter:
         return SARLetter(
@@ -190,36 +202,42 @@ class TestSender:
 
     def test_returns_false_on_no(self, capsys: pytest.CaptureFixture) -> None:
         from letter_engine.sender import preview_and_send
+
         with patch("builtins.input", return_value="n"):
             result = preview_and_send(self._make_letter())
         assert result is False
 
     def test_returns_false_on_empty_input(self) -> None:
         from letter_engine.sender import preview_and_send
+
         with patch("builtins.input", return_value=""):
             result = preview_and_send(self._make_letter())
         assert result is False
 
     def test_dry_run_returns_true_without_sending(self) -> None:
         from letter_engine.sender import preview_and_send
+
         with patch("builtins.input", return_value="y"):
             result = preview_and_send(self._make_letter(), dry_run=True)
         assert result is True
 
     def test_eof_returns_false(self) -> None:
         from letter_engine.sender import preview_and_send
+
         with patch("builtins.input", side_effect=EOFError):
             result = preview_and_send(self._make_letter())
         assert result is False
 
     def test_portal_dry_run(self) -> None:
         from letter_engine.sender import preview_and_send
+
         with patch("builtins.input", return_value="y"):
             result = preview_and_send(self._make_letter("portal"), dry_run=True)
         assert result is True
 
     def test_postal_dry_run(self) -> None:
         from letter_engine.sender import preview_and_send
+
         with patch("builtins.input", return_value="y"):
             result = preview_and_send(self._make_letter("postal"), dry_run=True)
         assert result is True

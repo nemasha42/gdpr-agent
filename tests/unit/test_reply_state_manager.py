@@ -1,15 +1,10 @@
 """Unit tests for reply_monitor/state_manager.py."""
 
-import json
-import tempfile
 from datetime import date, timedelta
-from pathlib import Path
 
-import pytest
 
 from reply_monitor.models import CompanyState, ReplyRecord
 from reply_monitor.state_manager import (
-    _safe_email,
     compute_status,
     days_remaining,
     deadline_from_sent,
@@ -25,8 +20,14 @@ from reply_monitor.state_manager import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_state(domain="example.com", company_name="ExampleCo", replies=None,
-                sent_days_ago=5, deadline_days_from_now=25):
+
+def _make_state(
+    domain="example.com",
+    company_name="ExampleCo",
+    replies=None,
+    sent_days_ago=5,
+    deadline_days_from_now=25,
+):
     sent_at = (date.today() - timedelta(days=sent_days_ago)).isoformat() + "T00:00:00"
     dl = (date.today() + timedelta(days=deadline_days_from_now)).isoformat()
     return CompanyState(
@@ -41,9 +42,16 @@ def _make_state(domain="example.com", company_name="ExampleCo", replies=None,
     )
 
 
-def _make_reply(tags, msg_id="msg001", snippet="test snippet", received_at="2026-03-17T10:00:00Z",
-                suggested_reply="", reply_review_status="",
-                sent_reply_body="", sent_reply_at=""):
+def _make_reply(
+    tags,
+    msg_id="msg001",
+    snippet="test snippet",
+    received_at="2026-03-17T10:00:00Z",
+    suggested_reply="",
+    reply_review_status="",
+    sent_reply_body="",
+    sent_reply_at="",
+):
     return ReplyRecord(
         gmail_message_id=msg_id,
         received_at=received_at,
@@ -51,7 +59,13 @@ def _make_reply(tags, msg_id="msg001", snippet="test snippet", received_at="2026
         subject="Re: SAR",
         snippet=snippet,
         tags=tags,
-        extracted={"reference_number": "", "confirmation_url": "", "data_link": "", "portal_url": "", "deadline_extension_days": None},
+        extracted={
+            "reference_number": "",
+            "confirmation_url": "",
+            "data_link": "",
+            "portal_url": "",
+            "deadline_extension_days": None,
+        },
         llm_used=False,
         has_attachment=False,
         attachment_catalog=None,
@@ -65,6 +79,7 @@ def _make_reply(tags, msg_id="msg001", snippet="test snippet", received_at="2026
 # ---------------------------------------------------------------------------
 # Status derivation tests
 # ---------------------------------------------------------------------------
+
 
 class TestComputeStatus:
     def test_pending_no_replies(self):
@@ -84,7 +99,9 @@ class TestComputeStatus:
         assert compute_status(state) == "ACKNOWLEDGED"
 
     def test_action_required_identity(self):
-        state = _make_state(replies=[_make_reply(["AUTO_ACKNOWLEDGE", "IDENTITY_REQUIRED"])])
+        state = _make_state(
+            replies=[_make_reply(["AUTO_ACKNOWLEDGE", "IDENTITY_REQUIRED"])]
+        )
         assert compute_status(state) == "ACTION_REQUIRED"
 
     def test_action_required_confirmation(self):
@@ -143,38 +160,53 @@ class TestComputeStatus:
 
     def test_user_replied_when_all_action_replies_sent(self):
         # WRONG_CHANNEL reply, user replied → USER_REPLIED
-        state = _make_state(replies=[
-            _make_reply(["WRONG_CHANNEL"], reply_review_status="sent"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(["WRONG_CHANNEL"], reply_review_status="sent"),
+            ]
+        )
         assert compute_status(state) == "USER_REPLIED"
 
     def test_action_required_when_some_action_replies_not_sent(self):
         # Two action replies, only one replied to → still ACTION_REQUIRED
-        state = _make_state(replies=[
-            _make_reply(["IDENTITY_REQUIRED"], msg_id="msg001", reply_review_status="sent"),
-            _make_reply(["MORE_INFO_REQUIRED"], msg_id="msg002", reply_review_status=""),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(
+                    ["IDENTITY_REQUIRED"], msg_id="msg001", reply_review_status="sent"
+                ),
+                _make_reply(
+                    ["MORE_INFO_REQUIRED"], msg_id="msg002", reply_review_status=""
+                ),
+            ]
+        )
         assert compute_status(state) == "ACTION_REQUIRED"
 
     def test_action_required_when_reply_is_pending(self):
         # pending (draft ready but not sent) → ACTION_REQUIRED
-        state = _make_state(replies=[
-            _make_reply(["WRONG_CHANNEL"], reply_review_status="pending"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(["WRONG_CHANNEL"], reply_review_status="pending"),
+            ]
+        )
         assert compute_status(state) == "ACTION_REQUIRED"
 
     def test_user_replied_ignores_non_gdpr(self):
         # Action reply replied to + NON_GDPR reply → USER_REPLIED (NON_GDPR excluded)
-        state = _make_state(replies=[
-            _make_reply(["WRONG_CHANNEL"], msg_id="msg001", reply_review_status="sent"),
-            _make_reply(["NON_GDPR"], msg_id="msg002", reply_review_status=""),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(
+                    ["WRONG_CHANNEL"], msg_id="msg001", reply_review_status="sent"
+                ),
+                _make_reply(["NON_GDPR"], msg_id="msg002", reply_review_status=""),
+            ]
+        )
         assert compute_status(state) == "USER_REPLIED"
 
 
 # ---------------------------------------------------------------------------
 # Status priority tests
 # ---------------------------------------------------------------------------
+
 
 class TestStatusPriority:
     def test_bounced_above_overdue(self):
@@ -188,65 +220,96 @@ class TestStatusPriority:
         assert compute_status(state) == "BOUNCED"
 
     def test_action_above_extended(self):
-        state = _make_state(replies=[
-            _make_reply(["EXTENDED"]),
-            _make_reply(["IDENTITY_REQUIRED"], msg_id="msg002"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(["EXTENDED"]),
+                _make_reply(["IDENTITY_REQUIRED"], msg_id="msg002"),
+            ]
+        )
         assert compute_status(state) == "ACTION_REQUIRED"
 
     def test_sort_key_ordering(self):
-        keys = [status_sort_key(s) for s in ["PENDING", "ACKNOWLEDGED", "COMPLETED", "OVERDUE"]]
+        keys = [
+            status_sort_key(s)
+            for s in ["PENDING", "ACKNOWLEDGED", "COMPLETED", "OVERDUE"]
+        ]
         assert keys == sorted(keys)  # ascending by urgency in sort_key
 
     def test_terminal_overrides_unresolved_action(self):
         """FULFILLED_DELETION (terminal) should override unresolved HUMAN_REVIEW (action)."""
-        state = _make_state(replies=[
-            _make_reply(["HUMAN_REVIEW"], msg_id="msg001"),
-            _make_reply(["FULFILLED_DELETION"], msg_id="msg002"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(["HUMAN_REVIEW"], msg_id="msg001"),
+                _make_reply(["FULFILLED_DELETION"], msg_id="msg002"),
+            ]
+        )
         assert compute_status(state) == "COMPLETED"
 
     def test_terminal_overrides_unresolved_wrong_channel(self):
         """DATA_PROVIDED_LINK (terminal) should override unresolved WRONG_CHANNEL."""
-        state = _make_state(replies=[
-            _make_reply(["WRONG_CHANNEL"], msg_id="msg001"),
-            _make_reply(["DATA_PROVIDED_LINK"], msg_id="msg002"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(["WRONG_CHANNEL"], msg_id="msg001"),
+                _make_reply(["DATA_PROVIDED_LINK"], msg_id="msg002"),
+            ]
+        )
         assert compute_status(state) == "COMPLETED"
 
     def test_your_reply_resolves_action_required(self):
         """YOUR_REPLY after action-required reply should resolve to USER_REPLIED."""
-        state = _make_state(replies=[
-            _make_reply(["IDENTITY_REQUIRED"], msg_id="msg001",
-                        received_at="2026-03-20T10:00:00Z"),
-            _make_reply(["YOUR_REPLY"], msg_id="msg002",
-                        received_at="2026-03-21T10:00:00Z"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(
+                    ["IDENTITY_REQUIRED"],
+                    msg_id="msg001",
+                    received_at="2026-03-20T10:00:00Z",
+                ),
+                _make_reply(
+                    ["YOUR_REPLY"], msg_id="msg002", received_at="2026-03-21T10:00:00Z"
+                ),
+            ]
+        )
         assert compute_status(state) == "USER_REPLIED"
 
     def test_your_reply_before_action_does_not_resolve(self):
         """YOUR_REPLY before an action-required reply should not resolve it."""
-        state = _make_state(replies=[
-            _make_reply(["YOUR_REPLY"], msg_id="msg001",
-                        received_at="2026-03-19T10:00:00Z"),
-            _make_reply(["IDENTITY_REQUIRED"], msg_id="msg002",
-                        received_at="2026-03-20T10:00:00Z"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(
+                    ["YOUR_REPLY"], msg_id="msg001", received_at="2026-03-19T10:00:00Z"
+                ),
+                _make_reply(
+                    ["IDENTITY_REQUIRED"],
+                    msg_id="msg002",
+                    received_at="2026-03-20T10:00:00Z",
+                ),
+            ]
+        )
         assert compute_status(state) == "ACTION_REQUIRED"
 
     def test_dismissed_draft_resolves_action(self):
         """Dismissed drafts should resolve the action (user decided not to respond)."""
-        state = _make_state(replies=[
-            _make_reply(["WRONG_CHANNEL"], reply_review_status="dismissed"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(["WRONG_CHANNEL"], reply_review_status="dismissed"),
+            ]
+        )
         assert compute_status(state) == "USER_REPLIED"
 
     def test_mixed_sent_and_dismissed_resolves(self):
         """Mix of sent and dismissed action replies should resolve to USER_REPLIED."""
-        state = _make_state(replies=[
-            _make_reply(["WRONG_CHANNEL"], msg_id="msg001", reply_review_status="sent"),
-            _make_reply(["IDENTITY_REQUIRED"], msg_id="msg002", reply_review_status="dismissed"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(
+                    ["WRONG_CHANNEL"], msg_id="msg001", reply_review_status="sent"
+                ),
+                _make_reply(
+                    ["IDENTITY_REQUIRED"],
+                    msg_id="msg002",
+                    reply_review_status="dismissed",
+                ),
+            ]
+        )
         assert compute_status(state) == "USER_REPLIED"
 
     def test_completed_data_provided_inline(self):
@@ -259,44 +322,76 @@ class TestStatusPriority:
 # Bounce superseded / exhausted tests
 # ---------------------------------------------------------------------------
 
+
 class TestBounceSuperseded:
     def test_bounce_superseded_by_later_reply(self):
         # SAR bounced first, then we sent to a new address and got acknowledged.
         # Status should reflect the later reply, not the old bounce.
-        state = _make_state(replies=[
-            _make_reply(["BOUNCE_PERMANENT"], msg_id="msg001", received_at="2026-03-10T10:00:00Z"),
-            _make_reply(["REQUEST_ACCEPTED"], msg_id="msg002", received_at="2026-03-15T10:00:00Z"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(
+                    ["BOUNCE_PERMANENT"],
+                    msg_id="msg001",
+                    received_at="2026-03-10T10:00:00Z",
+                ),
+                _make_reply(
+                    ["REQUEST_ACCEPTED"],
+                    msg_id="msg002",
+                    received_at="2026-03-15T10:00:00Z",
+                ),
+            ]
+        )
         assert compute_status(state) == "ACKNOWLEDGED"
 
     def test_bounce_not_superseded_when_latest(self):
         # Only bounce reply — should still return BOUNCED.
-        state = _make_state(replies=[
-            _make_reply(["BOUNCE_PERMANENT"], msg_id="msg001"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(["BOUNCE_PERMANENT"], msg_id="msg001"),
+            ]
+        )
         assert compute_status(state) == "BOUNCED"
 
     def test_two_bounces_returns_bounced(self):
         # Two bounce replies — most recent event is still a bounce → BOUNCED.
         # (ACTION_REQUIRED / ADDRESS_NOT_FOUND only fires once address_exhausted=True.)
-        state = _make_state(replies=[
-            _make_reply(["BOUNCE_PERMANENT"], msg_id="msg001", received_at="2026-03-10T10:00:00Z"),
-            _make_reply(["BOUNCE_PERMANENT"], msg_id="msg002", received_at="2026-03-15T10:00:00Z"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(
+                    ["BOUNCE_PERMANENT"],
+                    msg_id="msg001",
+                    received_at="2026-03-10T10:00:00Z",
+                ),
+                _make_reply(
+                    ["BOUNCE_PERMANENT"],
+                    msg_id="msg002",
+                    received_at="2026-03-15T10:00:00Z",
+                ),
+            ]
+        )
         assert compute_status(state) == "BOUNCED"
 
     def test_bounce_superseded_non_gdpr_ignored(self):
         # NON_GDPR reply after bounce should not count as superseding it.
-        state = _make_state(replies=[
-            _make_reply(["BOUNCE_PERMANENT"], msg_id="msg001", received_at="2026-03-10T10:00:00Z"),
-            _make_reply(["NON_GDPR"], msg_id="msg002", received_at="2026-03-15T10:00:00Z"),
-        ])
+        state = _make_state(
+            replies=[
+                _make_reply(
+                    ["BOUNCE_PERMANENT"],
+                    msg_id="msg001",
+                    received_at="2026-03-10T10:00:00Z",
+                ),
+                _make_reply(
+                    ["NON_GDPR"], msg_id="msg002", received_at="2026-03-15T10:00:00Z"
+                ),
+            ]
+        )
         assert compute_status(state) == "BOUNCED"
 
 
 # ---------------------------------------------------------------------------
 # days_remaining / deadline_from_sent tests
 # ---------------------------------------------------------------------------
+
 
 class TestDeadline:
     def test_days_remaining_sent_today(self):
@@ -327,6 +422,7 @@ class TestDeadline:
 # update_state tests
 # ---------------------------------------------------------------------------
 
+
 class TestUpdateState:
     def test_new_replies_appended(self):
         state = _make_state()
@@ -351,6 +447,7 @@ class TestUpdateState:
 # ---------------------------------------------------------------------------
 # Load/save state tests
 # ---------------------------------------------------------------------------
+
 
 class TestPersistence:
     def test_save_and_load_roundtrip(self, tmp_path):
@@ -443,6 +540,7 @@ class TestPersistence:
 # ---------------------------------------------------------------------------
 # domain_from_sent_record tests
 # ---------------------------------------------------------------------------
+
 
 class TestDomainFromSentRecord:
     def test_extracts_from_email_domain(self):

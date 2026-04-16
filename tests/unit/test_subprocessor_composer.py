@@ -2,7 +2,6 @@
 
 from datetime import date, timedelta
 
-import pytest
 
 from contact_resolver.models import CompanyRecord, Contact, PostalAddress
 from letter_engine.composer import compose_subprocessor_request
@@ -11,6 +10,7 @@ from letter_engine.composer import compose_subprocessor_request
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_record(
     company_name: str = "Acme Corp",
@@ -47,6 +47,7 @@ _USER_IDENTITY = {
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_compose_returns_sar_letter_with_correct_subject():
     letter = compose_subprocessor_request(_make_record(), user_identity=_USER_IDENTITY)

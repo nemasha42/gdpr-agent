@@ -9,7 +9,9 @@ from pathlib import Path
 from reply_monitor.models import CompanyState, ReplyRecord
 
 _STATE_PATH = Path(__file__).parent.parent / "user_data" / "reply_state.json"
-_SUBPROCESSOR_STATE_PATH = Path(__file__).parent.parent / "user_data" / "subprocessor_reply_state.json"
+_SUBPROCESSOR_STATE_PATH = (
+    Path(__file__).parent.parent / "user_data" / "subprocessor_reply_state.json"
+)
 _SAR_DEADLINE_DAYS = 30
 
 # ---------------------------------------------------------------------------
@@ -17,32 +19,45 @@ _SAR_DEADLINE_DAYS = 30
 # Higher = more urgent
 # ---------------------------------------------------------------------------
 _STATUS_PRIORITY: dict[str, int] = {
-    "OVERDUE":              9,
-    "ACTION_REQUIRED":      8,
-    "ADDRESS_NOT_FOUND":    7,
-    "BOUNCED":              6,
-    "DENIED":               5,
-    "COMPLETED":            4,
-    "EXTENDED":             4,
-    "USER_REPLIED":         3,
-    "PORTAL_VERIFICATION":  3,
-    "ACKNOWLEDGED":         2,
-    "PORTAL_SUBMITTED":     2,
-    "PENDING":              1,
+    "OVERDUE": 9,
+    "ACTION_REQUIRED": 8,
+    "ADDRESS_NOT_FOUND": 7,
+    "BOUNCED": 6,
+    "DENIED": 5,
+    "COMPLETED": 4,
+    "EXTENDED": 4,
+    "USER_REPLIED": 3,
+    "PORTAL_VERIFICATION": 3,
+    "ACKNOWLEDGED": 2,
+    "PORTAL_SUBMITTED": 2,
+    "PENDING": 1,
 }
 
 # Tags that indicate a terminal / resolved state
-_TERMINAL_TAGS = frozenset({
-    "DATA_PROVIDED_LINK", "DATA_PROVIDED_ATTACHMENT", "DATA_PROVIDED_PORTAL",
-    "DATA_PROVIDED_INLINE", "FULFILLED_DELETION",
-    "REQUEST_DENIED", "NO_DATA_HELD", "NOT_GDPR_APPLICABLE",
-})
+_TERMINAL_TAGS = frozenset(
+    {
+        "DATA_PROVIDED_LINK",
+        "DATA_PROVIDED_ATTACHMENT",
+        "DATA_PROVIDED_PORTAL",
+        "DATA_PROVIDED_INLINE",
+        "FULFILLED_DELETION",
+        "REQUEST_DENIED",
+        "NO_DATA_HELD",
+        "NOT_GDPR_APPLICABLE",
+    }
+)
 
 # Tags that require user action
-_ACTION_TAGS = frozenset({
-    "CONFIRMATION_REQUIRED", "IDENTITY_REQUIRED", "MORE_INFO_REQUIRED",
-    "WRONG_CHANNEL", "HUMAN_REVIEW", "PORTAL_VERIFICATION",
-})
+_ACTION_TAGS = frozenset(
+    {
+        "CONFIRMATION_REQUIRED",
+        "IDENTITY_REQUIRED",
+        "MORE_INFO_REQUIRED",
+        "WRONG_CHANNEL",
+        "HUMAN_REVIEW",
+        "PORTAL_VERIFICATION",
+    }
+)
 
 # Tags that count as acknowledged (but not action required)
 _ACK_TAGS = frozenset({"AUTO_ACKNOWLEDGE", "REQUEST_ACCEPTED", "IN_PROGRESS"})
@@ -53,7 +68,9 @@ _ACK_TAGS = frozenset({"AUTO_ACKNOWLEDGE", "REQUEST_ACCEPTED", "IN_PROGRESS"})
 # ---------------------------------------------------------------------------
 
 
-def load_state(account_email: str, *, path: Path | None = None, data_dir: Path | None = None) -> dict[str, CompanyState]:
+def load_state(
+    account_email: str, *, path: Path | None = None, data_dir: Path | None = None
+) -> dict[str, CompanyState]:
     """Load per-domain states for account_email from reply_state.json.
 
     Returns empty dict if the file doesn't exist or has no data for this account.
@@ -120,7 +137,9 @@ def save_portal_submission(
         return
     state.portal_submission = {
         "status": status,
-        "submitted_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "submitted_at": datetime.now(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
         "portal_url": portal_url,
         "confirmation_ref": confirmation_ref,
         "error": error,
@@ -134,7 +153,9 @@ def update_state(state: CompanyState, new_replies: list[ReplyRecord]) -> Company
     for reply in new_replies:
         if reply.gmail_message_id not in existing_ids:
             state.replies.append(reply)
-    state.last_checked = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    state.last_checked = (
+        datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    )
     return state
 
 
@@ -158,10 +179,14 @@ def compute_status(state: CompanyState) -> str:
     # Also include DATA_PROVIDED/FULFILLED_DELETION tags from past attempts.
     # This preserves COMPLETED status when a new SAR was sent to a company after
     # data was already received (promote_latest_attempt would archive the old replies).
-    _DATA_TERMINAL = frozenset({
-        "DATA_PROVIDED_LINK", "DATA_PROVIDED_ATTACHMENT",
-        "DATA_PROVIDED_PORTAL", "FULFILLED_DELETION",
-    })
+    _DATA_TERMINAL = frozenset(
+        {
+            "DATA_PROVIDED_LINK",
+            "DATA_PROVIDED_ATTACHMENT",
+            "DATA_PROVIDED_PORTAL",
+            "FULFILLED_DELETION",
+        }
+    )
     for pa in state.past_attempts:
         for r in pa.get("replies", []):
             if "NON_GDPR" not in r.get("tags", []):
@@ -173,13 +198,19 @@ def compute_status(state: CompanyState) -> str:
         # Only treat as BOUNCED if the bounce is the most recent event.
         # If a non-bounce reply arrived after the bounce, the bounce is superseded.
         last_bounce = max(
-            (r.received_at for r in state.replies
-             if "NON_GDPR" not in r.tags and "BOUNCE_PERMANENT" in r.tags),
+            (
+                r.received_at
+                for r in state.replies
+                if "NON_GDPR" not in r.tags and "BOUNCE_PERMANENT" in r.tags
+            ),
             default="",
         )
         last_non_bounce = max(
-            (r.received_at for r in state.replies
-             if "NON_GDPR" not in r.tags and "BOUNCE_PERMANENT" not in r.tags),
+            (
+                r.received_at
+                for r in state.replies
+                if "NON_GDPR" not in r.tags and "BOUNCE_PERMANENT" not in r.tags
+            ),
             default="",
         )
         if last_bounce >= last_non_bounce:
@@ -205,8 +236,10 @@ def compute_status(state: CompanyState) -> str:
         return "COMPLETED"
 
     action_replies = [
-        r for r in state.replies
-        if "NON_GDPR" not in r.tags and "YOUR_REPLY" not in r.tags
+        r
+        for r in state.replies
+        if "NON_GDPR" not in r.tags
+        and "YOUR_REPLY" not in r.tags
         and bool(set(r.tags) & _ACTION_TAGS)
     ]
     if action_replies:
@@ -217,10 +250,11 @@ def compute_status(state: CompanyState) -> str:
         if not all_resolved:
             # Check if a YOUR_REPLY exists that postdates the latest action reply
             latest_action_at = max(r.received_at for r in action_replies)
-            your_replies = [
-                r for r in state.replies if "YOUR_REPLY" in r.tags
-            ]
-            if your_replies and max(r.received_at for r in your_replies) > latest_action_at:
+            your_replies = [r for r in state.replies if "YOUR_REPLY" in r.tags]
+            if (
+                your_replies
+                and max(r.received_at for r in your_replies) > latest_action_at
+            ):
                 all_resolved = True
         if all_resolved:
             return "USER_REPLIED"
@@ -271,16 +305,22 @@ def deadline_from_sent(sar_sent_at: str | None) -> str:
         return (date.today() + timedelta(days=_SAR_DEADLINE_DAYS)).isoformat()
 
 
-def log_status_transition(state: CompanyState, old_status: str, new_status: str, reason: str = "") -> None:
+def log_status_transition(
+    state: CompanyState, old_status: str, new_status: str, reason: str = ""
+) -> None:
     """Append a status transition entry to the state's log."""
     if old_status == new_status:
         return
-    state.status_log.append({
-        "from": old_status,
-        "to": new_status,
-        "at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
-        "reason": reason,
-    })
+    state.status_log.append(
+        {
+            "from": old_status,
+            "to": new_status,
+            "at": datetime.now(timezone.utc)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z"),
+            "reason": reason,
+        }
+    )
 
 
 def set_portal_status(
@@ -305,7 +345,9 @@ def set_portal_status(
 def verify_portal(state: CompanyState) -> CompanyState:
     """Mark portal verification as passed: restart deadline from now."""
     old = compute_status(state)
-    now_str = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now_str = (
+        datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    )
     state.portal_verified_at = now_str
     state.portal_status = "submitted"
     # Restart 30-day countdown from verification date
@@ -325,19 +367,21 @@ def status_sort_key(status: str) -> int:
 # ---------------------------------------------------------------------------
 
 _SAR_TERMINAL = frozenset({"COMPLETED", "DENIED"})
-_STALLED      = frozenset({"BOUNCED", "ADDRESS_NOT_FOUND"})
-_PROGRESS     = frozenset({"ACKNOWLEDGED", "EXTENDED", "PORTAL_SUBMITTED", "PORTAL_VERIFICATION"})
+_STALLED = frozenset({"BOUNCED", "ADDRESS_NOT_FOUND"})
+_PROGRESS = frozenset(
+    {"ACKNOWLEDGED", "EXTENDED", "PORTAL_SUBMITTED", "PORTAL_VERIFICATION"}
+)
 
 _COMPANY_STATUS_PRIORITY: dict[str, int] = {
-    "OVERDUE":          8,
-    "ACTION_REQUIRED":  7,
-    "STALLED":          6,
-    "USER_REPLIED":     5,
-    "DATA_RECEIVED":    4,
-    "FULLY_RESOLVED":   3,
-    "IN_PROGRESS":      2,
-    "SP_PENDING":       1,
-    "PENDING":          0,
+    "OVERDUE": 8,
+    "ACTION_REQUIRED": 7,
+    "STALLED": 6,
+    "USER_REPLIED": 5,
+    "DATA_RECEIVED": 4,
+    "FULLY_RESOLVED": 3,
+    "IN_PROGRESS": 2,
+    "SP_PENDING": 1,
+    "PENDING": 0,
 }
 
 
@@ -360,7 +404,7 @@ def compute_company_status(
     if sar_status in _SAR_TERMINAL:
         if not sp_sent or sp_status in _SAR_TERMINAL:
             return "FULLY_RESOLVED"
-        return "DATA_RECEIVED"   # SP sent but still open
+        return "DATA_RECEIVED"  # SP sent but still open
     if sar_status in _PROGRESS:
         return "IN_PROGRESS"
     if sar_status == "USER_REPLIED":
@@ -410,7 +454,9 @@ def promote_latest_attempt(
     if existing_state:
         active_thread = existing_state.gmail_thread_id
         if active_thread:
-            thread_replies[active_thread] = [r.to_dict() for r in existing_state.replies]
+            thread_replies[active_thread] = [
+                r.to_dict() for r in existing_state.replies
+            ]
         for pa in existing_state.past_attempts:
             t = pa.get("gmail_thread_id", "")
             if t:
@@ -420,16 +466,19 @@ def promote_latest_attempt(
     past_attempts = []
     for rec in older:
         t = rec.get("gmail_thread_id", "")
-        past_attempts.append({
-            "to_email": rec.get("to_email", ""),
-            "gmail_thread_id": t,
-            "sar_sent_at": rec.get("sent_at", ""),
-            "deadline": deadline_fn(rec.get("sent_at", "")),
-            "replies": thread_replies.get(t, []),
-        })
+        past_attempts.append(
+            {
+                "to_email": rec.get("to_email", ""),
+                "gmail_thread_id": t,
+                "sar_sent_at": rec.get("sent_at", ""),
+                "deadline": deadline_fn(rec.get("sent_at", "")),
+                "replies": thread_replies.get(t, []),
+            }
+        )
 
     # Active replies are those belonging to the latest thread
     from reply_monitor.models import ReplyRecord
+
     active_reply_dicts = thread_replies.get(latest_thread, [])
     active_replies = [ReplyRecord.from_dict(r) for r in active_reply_dicts]
 

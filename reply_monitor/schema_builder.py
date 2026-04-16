@@ -18,7 +18,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from reply_monitor.preprocessor import PreprocessResult, build_context_summary, preprocess
+from reply_monitor.preprocessor import (
+    PreprocessResult,
+    build_context_summary,
+    preprocess,
+)
 
 _MAX_CONTEXT_BYTES = 60_000
 
@@ -161,6 +165,7 @@ Rules:
 
             try:
                 from contact_resolver import cost_tracker
+
                 cost_tracker.record_llm_call(
                     company_name=company_name,
                     input_tokens=msg.usage.input_tokens,

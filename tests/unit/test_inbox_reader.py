@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
 from scanner.inbox_reader import fetch_emails
 
@@ -139,7 +138,10 @@ def test_fetch_emails_missing_headers() -> None:
     # Message with no headers at all
     def _get_side_effect(**kwargs: str) -> MagicMock:
         mock_req = MagicMock()
-        mock_req.execute.return_value = {"id": "msg_no_headers", "payload": {"headers": []}}
+        mock_req.execute.return_value = {
+            "id": "msg_no_headers",
+            "payload": {"headers": []},
+        }
         return mock_req
 
     service.users().messages().get.side_effect = _get_side_effect

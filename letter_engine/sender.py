@@ -10,8 +10,14 @@ from letter_engine.models import SARLetter
 _WIDTH = 62
 
 
-def preview_and_send(letter: SARLetter, *, dry_run: bool = False, scan_email: str = "",
-                     data_dir: Path | None = None, tokens_dir: Path | None = None) -> bool:
+def preview_and_send(
+    letter: SARLetter,
+    *,
+    dry_run: bool = False,
+    scan_email: str = "",
+    data_dir: Path | None = None,
+    tokens_dir: Path | None = None,
+) -> bool:
     """Print a formatted preview, ask Y/N, dispatch on approval.
 
     Args:
@@ -105,12 +111,15 @@ def _dispatch_portal(
     """Attempt automated portal submission, fall back to manual instructions."""
     try:
         from portal_submitter import submit_portal
+
         result = submit_portal(letter, scan_email)
 
         if result.needs_manual:
-            print(f"\n[PORTAL] {letter.company_name}: manual submission required ({result.error})")
+            print(
+                f"\n[PORTAL] {letter.company_name}: manual submission required ({result.error})"
+            )
             print(f"  URL: {letter.portal_url}")
-            print(f"  Copy the letter body above to paste into the portal form.")
+            print("  Copy the letter body above to paste into the portal form.")
             if record:
                 tracker.record_sent(letter, portal_status="manual")
             return True, "", ""
@@ -178,6 +187,7 @@ def send_thread_reply(
     """
     try:
         from auth.gmail_oauth import get_gmail_send_service
+
         service = get_gmail_send_service(scan_email, tokens_dir=tokens_dir)
         msg = MIMEText(body, "plain", "utf-8")
         msg["to"] = to_addr
@@ -185,17 +195,24 @@ def send_thread_reply(
         msg["In-Reply-To"] = thread_id
         msg["References"] = thread_id
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-        result = service.users().messages().send(
-            userId="me",
-            body={"raw": raw, "threadId": thread_id},
-        ).execute()
+        result = (
+            service.users()
+            .messages()
+            .send(
+                userId="me",
+                body={"raw": raw, "threadId": thread_id},
+            )
+            .execute()
+        )
         return True, result.get("id", ""), result.get("threadId", "")
     except Exception as exc:
         print(f"[send_thread_reply] failed: {exc}")
         return False, "", ""
 
 
-def _dispatch_email(letter: SARLetter, scan_email: str, *, tokens_dir: Path | None = None) -> tuple[str, str]:
+def _dispatch_email(
+    letter: SARLetter, scan_email: str, *, tokens_dir: Path | None = None
+) -> tuple[str, str]:
     """Send via Gmail API; fall back to printing instructions on failure.
 
     Returns:
@@ -203,12 +220,15 @@ def _dispatch_email(letter: SARLetter, scan_email: str, *, tokens_dir: Path | No
     """
     try:
         from auth.gmail_oauth import get_gmail_send_service
+
         service = get_gmail_send_service(scan_email, tokens_dir=tokens_dir)
-        msg = MIMEText(letter.body, 'plain', 'utf-8')
+        msg = MIMEText(letter.body, "plain", "utf-8")
         msg["to"] = letter.to_email
         msg["subject"] = letter.subject
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-        result = service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        result = (
+            service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        )
         print(f"\nEmail sent to {letter.to_email}")
         return result.get("id", ""), result.get("threadId", "")
     except Exception as exc:

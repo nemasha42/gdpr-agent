@@ -1,18 +1,32 @@
 """Transform subprocessor records into graph-ready JSON for D3.js."""
+
 from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
 
-from dashboard.services.jurisdiction import ADEQUATE_COUNTRIES, assess_risk, infer_country_code
+from dashboard.services.jurisdiction import (
+    ADEQUATE_COUNTRIES,
+    assess_risk,
+    infer_country_code,
+)
 
 # Purpose category keywords → category name (priority order, highest first)
 _PURPOSE_CATEGORIES: list[tuple[str, list[str]]] = [
     ("advertising", ["advertising", "marketing", "ads", "retargeting", "audience"]),
-    ("analytics", ["analytics", "tracking", "monitoring", "logging", "observability", "error"]),
+    (
+        "analytics",
+        ["analytics", "tracking", "monitoring", "logging", "observability", "error"],
+    ),
     ("payment", ["payment", "billing", "invoice", "subscription", "financial"]),
-    ("communication", ["email", "communication", "notification", "messaging", "support", "crm"]),
-    ("infrastructure", ["hosting", "infrastructure", "cloud", "storage", "cdn", "dns", "compute"]),
+    (
+        "communication",
+        ["email", "communication", "notification", "messaging", "support", "crm"],
+    ),
+    (
+        "infrastructure",
+        ["hosting", "infrastructure", "cloud", "storage", "cdn", "dns", "compute"],
+    ),
 ]
 
 # Display labels for service_category values (acronyms, special casing)
@@ -158,23 +172,27 @@ def _add_sp_edges(
 
         # Parent → Subprocessor edge
         purpose_cat = _classify_purpose(sp_purposes)
-        edges.append({
-            "source": parent_id,
-            "target": edge_target,
-            "type": "data_flow",
-            "purpose_category": purpose_cat,
-            "color": _PURPOSE_COLORS.get(purpose_cat, "#adb5bd"),
-            "thickness": _edge_thickness(len(sp_categories)),
-            "purposes": sp_purposes,
-            "data_categories": sp_categories,
-            "transfer_basis": sp_basis,
-            "source_url": sp_source_url,
-            "confirmed": is_confirmed,
-            "depth": edge_depth,
-        })
+        edges.append(
+            {
+                "source": parent_id,
+                "target": edge_target,
+                "type": "data_flow",
+                "purpose_category": purpose_cat,
+                "color": _PURPOSE_COLORS.get(purpose_cat, "#adb5bd"),
+                "thickness": _edge_thickness(len(sp_categories)),
+                "purposes": sp_purposes,
+                "data_categories": sp_categories,
+                "transfer_basis": sp_basis,
+                "source_url": sp_source_url,
+                "confirmed": is_confirmed,
+                "depth": edge_depth,
+            }
+        )
 
 
-def build_graph_data(rows: list[dict], companies_raw: dict | None = None, max_depth: int = 4) -> dict:
+def build_graph_data(
+    rows: list[dict], companies_raw: dict | None = None, max_depth: int = 4
+) -> dict:
     """Transform transfer page rows into {nodes, edges, stats} for D3.js.
 
     Args:
@@ -233,7 +251,9 @@ def build_graph_data(rows: list[dict], companies_raw: dict | None = None, max_de
         confirmed_sps = set(row.get("confirmed_subprocessors", []))
 
         # Compute staleness from subprocessor fetched_at
-        fetched_at = row.get("subprocessors", {}).get("fetched_at", "") if sp_record else ""
+        fetched_at = (
+            row.get("subprocessors", {}).get("fetched_at", "") if sp_record else ""
+        )
         is_stale = False
         if fetched_at:
             try:
@@ -248,39 +268,53 @@ def build_graph_data(rows: list[dict], companies_raw: dict | None = None, max_de
         # Company node — always depth 0
         company_id = f"company:{domain}"
         node_depths[domain] = 0
-        nodes.append({
-            "id": company_id,
-            "type": "company",
-            "label": company_name,
-            "domain": domain,
-            "fetched": sp_record is not None,
-            "fetch_status": fetch_status,
-            "subprocessor_count": len(sp_list),
-            "depth": 0,
-            "coverage": coverage,
-            "confirmed": False,
-            "stale": is_stale,
-            "fetched_at": fetched_at,
-        })
+        nodes.append(
+            {
+                "id": company_id,
+                "type": "company",
+                "label": company_name,
+                "domain": domain,
+                "fetched": sp_record is not None,
+                "fetch_status": fetch_status,
+                "subprocessor_count": len(sp_list),
+                "depth": 0,
+                "coverage": coverage,
+                "confirmed": False,
+                "stale": is_stale,
+                "fetched_at": fetched_at,
+            }
+        )
 
         # User → Company edge (structural, thin grey)
-        edges.append({
-            "source": "user",
-            "target": company_id,
-            "type": "structural",
-            "purpose_category": "other",
-            "color": "#adb5bd",
-            "thickness": 1,
-            "confirmed": True,
-            "depth": 0,
-        })
+        edges.append(
+            {
+                "source": "user",
+                "target": company_id,
+                "type": "structural",
+                "purpose_category": "other",
+                "color": "#adb5bd",
+                "thickness": 1,
+                "confirmed": True,
+                "depth": 0,
+            }
+        )
 
         # Subprocessor nodes and edges (depth 1)
         if max_depth >= 1:
             _add_sp_edges(
-                company_id, domain, sp_list, company_domains, sp_registry,
-                nodes, edges, all_sp_domains, country_set, non_adequate,
-                basis_counter, category_counter, unknown_basis_count_box,
+                company_id,
+                domain,
+                sp_list,
+                company_domains,
+                sp_registry,
+                nodes,
+                edges,
+                all_sp_domains,
+                country_set,
+                non_adequate,
+                basis_counter,
+                category_counter,
+                unknown_basis_count_box,
                 edge_depth=1,
                 confirmed_set=confirmed_sps,
                 node_depths=node_depths,
@@ -309,9 +343,19 @@ def build_graph_data(rows: list[dict], companies_raw: dict | None = None, max_de
                     parent_id = f"company:{sp_domain}"
                 before = len(sp_registry)
                 _add_sp_edges(
-                    parent_id, sp_domain, sub_list, company_domains, sp_registry,
-                    nodes, edges, all_sp_domains, country_set, non_adequate,
-                    basis_counter, category_counter, unknown_basis_count_box,
+                    parent_id,
+                    sp_domain,
+                    sub_list,
+                    company_domains,
+                    sp_registry,
+                    nodes,
+                    edges,
+                    all_sp_domains,
+                    country_set,
+                    non_adequate,
+                    basis_counter,
+                    category_counter,
+                    unknown_basis_count_box,
                     edge_depth=wave_depth,
                     node_depths=node_depths,
                     service_category_set=service_category_set,

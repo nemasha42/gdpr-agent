@@ -7,9 +7,14 @@ from dashboard.user_model import User, save_user, load_user
 
 @pytest.fixture
 def app(tmp_path):
-    app = Flask(__name__, template_folder=str(
-        __import__("pathlib").Path(__file__).parent.parent.parent / "dashboard" / "templates"
-    ))
+    app = Flask(
+        __name__,
+        template_folder=str(
+            __import__("pathlib").Path(__file__).parent.parent.parent
+            / "dashboard"
+            / "templates"
+        ),
+    )
     app.config["SECRET_KEY"] = "test-secret"
     app.config["TESTING"] = True
     app.config["USERS_PATH"] = tmp_path / "users.json"
@@ -23,8 +28,9 @@ def app(tmp_path):
 
     @login_manager.user_loader
     def load(email):
-        return load_user(email, path=app.config["USERS_PATH"],
-                        data_root=app.config["USER_DATA_ROOT"])
+        return load_user(
+            email, path=app.config["USERS_PATH"], data_root=app.config["USER_DATA_ROOT"]
+        )
 
     # Dummy dashboard route so url_for("dashboard") resolves in tests
     @app.route("/")
@@ -36,6 +42,7 @@ def app(tmp_path):
 
 def test_join_valid_token(app):
     from dashboard.user_model import generate_invite_token
+
     token = generate_invite_token("friend@gmail.com", secret_key="test-secret")
     with app.test_client() as client:
         resp = client.get(f"/join/{token}")
@@ -50,6 +57,7 @@ def test_join_invalid_token(app):
 
 def test_join_existing_user_redirects(app, tmp_path):
     from dashboard.user_model import generate_invite_token
+
     save_user(
         User(email="friend@gmail.com", name="Friend", role="user", data_root=tmp_path),
         path=tmp_path / "users.json",
@@ -68,7 +76,9 @@ def test_login_page_renders(app):
 
 
 def test_logout_redirects_to_login(app, tmp_path):
-    admin = User(email="admin@gmail.com", name="Admin", role="admin", data_root=tmp_path)
+    admin = User(
+        email="admin@gmail.com", name="Admin", role="admin", data_root=tmp_path
+    )
     save_user(admin, path=tmp_path / "users.json")
     (tmp_path / "admin_at_gmail_com").mkdir(exist_ok=True)
 
@@ -85,10 +95,16 @@ def test_login_google_redirects_to_oauth(app, tmp_path):
     from unittest.mock import patch, MagicMock
 
     mock_flow = MagicMock()
-    mock_flow.authorization_url.return_value = ("https://accounts.google.com/o/oauth2/auth?state=xyz", "xyz")
+    mock_flow.authorization_url.return_value = (
+        "https://accounts.google.com/o/oauth2/auth?state=xyz",
+        "xyz",
+    )
     mock_flow.code_verifier = "test-verifier-123"
 
-    with patch("google_auth_oauthlib.flow.Flow.from_client_secrets_file", return_value=mock_flow):
+    with patch(
+        "google_auth_oauthlib.flow.Flow.from_client_secrets_file",
+        return_value=mock_flow,
+    ):
         with app.test_client() as client:
             resp = client.get("/login/google")
             assert resp.status_code == 302
@@ -106,7 +122,9 @@ def test_oauth_callback_login_flow(app, tmp_path):
     from unittest.mock import patch, MagicMock
 
     # Pre-create the user
-    user = User(email="traderm1620@gmail.com", name="Maria", role="user", data_root=tmp_path)
+    user = User(
+        email="traderm1620@gmail.com", name="Maria", role="user", data_root=tmp_path
+    )
     save_user(user, path=tmp_path / "users.json")
     user_dir = tmp_path / "traderm1620_at_gmail_com" / "tokens"
     user_dir.mkdir(parents=True, exist_ok=True)
@@ -122,10 +140,12 @@ def test_oauth_callback_login_flow(app, tmp_path):
         "emailAddress": "traderm1620@gmail.com"
     }
 
-    with patch("google_auth_oauthlib.flow.Flow.from_client_secrets_file", return_value=mock_flow), \
-         patch("googleapiclient.discovery.build", return_value=mock_service), \
-         patch("auth.gmail_oauth._safe_email", return_value="traderm1620_at_gmail_com"):
-
+    with patch(
+        "google_auth_oauthlib.flow.Flow.from_client_secrets_file",
+        return_value=mock_flow,
+    ), patch("googleapiclient.discovery.build", return_value=mock_service), patch(
+        "auth.gmail_oauth._safe_email", return_value="traderm1620_at_gmail_com"
+    ):
         with app.test_client() as client:
             # Set up session as if /login/google was just called
             with client.session_transaction() as sess:
@@ -165,10 +185,12 @@ def test_oauth_callback_no_account_flashes_error(app, tmp_path):
         "emailAddress": "nobody@gmail.com"
     }
 
-    with patch("google_auth_oauthlib.flow.Flow.from_client_secrets_file", return_value=mock_flow), \
-         patch("googleapiclient.discovery.build", return_value=mock_service), \
-         patch("auth.gmail_oauth._safe_email", return_value="nobody_at_gmail_com"):
-
+    with patch(
+        "google_auth_oauthlib.flow.Flow.from_client_secrets_file",
+        return_value=mock_flow,
+    ), patch("googleapiclient.discovery.build", return_value=mock_service), patch(
+        "auth.gmail_oauth._safe_email", return_value="nobody_at_gmail_com"
+    ):
         with app.test_client() as client:
             with client.session_transaction() as sess:
                 sess["login_flow"] = True

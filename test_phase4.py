@@ -82,6 +82,7 @@ _POSTAL_RECORD = CompanyRecord(
 test_records = [_EMAIL_RECORD, _PORTAL_RECORD, _POSTAL_RECORD]
 
 import sys
+
 DRY_RUN = "--dry-run" in sys.argv
 
 for record in test_records:

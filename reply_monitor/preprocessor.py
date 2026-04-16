@@ -26,6 +26,7 @@ _RE_TWITTER_JS = re.compile(r"^window\.YTD\.\w+\.part\d+\s*=\s*", re.MULTILINE)
 @dataclass
 class FileMeta:
     """Metadata about one file in the export."""
+
     filename: str
     size_bytes: int
     file_type: str
@@ -38,6 +39,7 @@ class FileMeta:
 @dataclass
 class PreprocessResult:
     """Structural metadata extracted from an export without LLM."""
+
     total_files: int = 0
     formats_found: list[str] = field(default_factory=list)
     folder_tree: dict[str, list[str]] = field(default_factory=dict)
@@ -50,7 +52,7 @@ def _unwrap_twitter_js(content: str) -> str:
     """Strip Twitter JS wrapper if present, returning raw JSON."""
     m = _RE_TWITTER_JS.match(content)
     if m:
-        return content[m.end():]
+        return content[m.end() :]
     return content
 
 
@@ -207,10 +209,14 @@ def build_context_summary(result: PreprocessResult) -> str:
     lines: list[str] = []
 
     # Stats header
-    lines.append(f"EXPORT OVERVIEW: {result.total_files} files, "
-                 f"formats: {', '.join(result.formats_found) or 'unknown'}")
+    lines.append(
+        f"EXPORT OVERVIEW: {result.total_files} files, "
+        f"formats: {', '.join(result.formats_found) or 'unknown'}"
+    )
     if result.total_records_estimate > 0:
-        lines.append(f"Total data records (estimated): {result.total_records_estimate:,}")
+        lines.append(
+            f"Total data records (estimated): {result.total_records_estimate:,}"
+        )
     lines.append("")
 
     # Folder structure

@@ -19,21 +19,21 @@ _NON_DATA_EXTS = {"png", "jpg", "jpeg", "gif", "ico", "svg", "webp", "bmp", "pdf
 
 # Filename patterns → data category names
 _CATEGORY_HINTS: list[tuple[str, str]] = [
-    (r"location|geo|maps",          "Location"),
-    (r"search|query|browsi",        "Search History"),
+    (r"location|geo|maps", "Location"),
+    (r"search|query|browsi", "Search History"),
     (r"purchase|order|transaction|payment|buy", "Purchase History"),
-    (r"ad|advertis|targeting",      "Advertising"),
-    (r"watch|view|video|youtube",   "Watch History"),
-    (r"profile|account|user",       "Profile Data"),
-    (r"message|chat|mail|email",    "Communications"),
-    (r"contact",                    "Contacts"),
-    (r"activity|event|log",         "Activity Log"),
-    (r"device|hardware|sensor",     "Device Data"),
-    (r"app|application|install",    "App Usage"),
-    (r"social|friend|follow|like",  "Social Graph"),
-    (r"post|comment|review",        "Content"),
-    (r"health|fitness|step",        "Health Data"),
-    (r"financial|bank|card",        "Financial Data"),
+    (r"ad|advertis|targeting", "Advertising"),
+    (r"watch|view|video|youtube", "Watch History"),
+    (r"profile|account|user", "Profile Data"),
+    (r"message|chat|mail|email", "Communications"),
+    (r"contact", "Contacts"),
+    (r"activity|event|log", "Activity Log"),
+    (r"device|hardware|sensor", "Device Data"),
+    (r"app|application|install", "App Usage"),
+    (r"social|friend|follow|like", "Social Graph"),
+    (r"post|comment|review", "Content"),
+    (r"health|fitness|step", "Health Data"),
+    (r"financial|bank|card", "Financial Data"),
 ]
 
 
@@ -65,11 +65,17 @@ def handle_attachment(
 
     # Download raw bytes
     try:
-        resp = service.users().messages().attachments().get(
-            userId="me",
-            messageId=message_id,
-            id=attachment_id,
-        ).execute()
+        resp = (
+            service.users()
+            .messages()
+            .attachments()
+            .get(
+                userId="me",
+                messageId=message_id,
+                id=attachment_id,
+            )
+            .execute()
+        )
         data = base64.urlsafe_b64decode(resp["data"])
     except Exception:
         return None
@@ -118,27 +124,34 @@ def _catalog_zip(data: bytes, outer_filename: str) -> tuple[list[FileEntry], lis
                 if info.is_dir():
                     continue
                 ext = Path(info.filename).suffix.lstrip(".").lower()
-                files.append(FileEntry(
-                    filename=info.filename,
-                    size_bytes=info.file_size,
-                    file_type=ext,
-                ))
+                files.append(
+                    FileEntry(
+                        filename=info.filename,
+                        size_bytes=info.file_size,
+                        file_type=ext,
+                    )
+                )
                 categories.extend(_guess_categories_from_filename(info.filename))
     except zipfile.BadZipFile:
-        files = [FileEntry(filename=outer_filename, size_bytes=len(data), file_type="zip")]
+        files = [
+            FileEntry(filename=outer_filename, size_bytes=len(data), file_type="zip")
+        ]
     return files, categories
 
 
-def _catalog_json(data: bytes, filename: str, size: int) -> tuple[list[FileEntry], list[str]]:
+def _catalog_json(
+    data: bytes, filename: str, size: int
+) -> tuple[list[FileEntry], list[str]]:
     """Use top-level JSON keys as data category hints."""
     import re
+
     categories: list[str] = []
     try:
         text = data.decode("utf-8", errors="replace")
         # Unwrap Twitter JS wrapper if present
         m = re.match(r"^window\.YTD\.\w+\.part\d+\s*=\s*", text)
         if m:
-            text = text[m.end():]
+            text = text[m.end() :]
         parsed = json.loads(text)
         if isinstance(parsed, dict):
             for key in parsed.keys():
@@ -152,7 +165,9 @@ def _catalog_json(data: bytes, filename: str, size: int) -> tuple[list[FileEntry
     return [FileEntry(filename=filename, size_bytes=size, file_type=ext)], categories
 
 
-def _catalog_csv(data: bytes, filename: str, size: int) -> tuple[list[FileEntry], list[str]]:
+def _catalog_csv(
+    data: bytes, filename: str, size: int
+) -> tuple[list[FileEntry], list[str]]:
     """Use CSV column headers as data category hints."""
     categories: list[str] = _guess_categories_from_filename(filename)
     try:
@@ -175,6 +190,7 @@ def _catalog_csv(data: bytes, filename: str, size: int) -> tuple[list[FileEntry]
 def _guess_categories_from_filename(name: str) -> list[str]:
     """Return zero or more data category strings based on filename/key."""
     import re
+
     name_lower = name.lower()
     matched = []
     for pattern, category in _CATEGORY_HINTS:

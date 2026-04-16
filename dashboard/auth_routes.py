@@ -5,14 +5,23 @@ from __future__ import annotations
 from pathlib import Path
 
 from flask import (
-    Blueprint, current_app, flash, redirect, render_template,
-    request, session, url_for,
+    Blueprint,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
 )
 from flask_login import current_user, login_required, login_user, logout_user
 
 from dashboard.user_model import (
-    User, generate_invite_token, load_user, save_user,
-    validate_invite_token, user_data_dir,
+    User,
+    load_user,
+    save_user,
+    validate_invite_token,
+    user_data_dir,
 )
 
 auth_bp = Blueprint("auth", __name__)
@@ -32,9 +41,7 @@ def _user_data_root() -> Path:
 @auth_bp.route("/join/<token>")
 def join(token: str):
     """Invite link landing page."""
-    email = validate_invite_token(
-        token, secret_key=current_app.config["SECRET_KEY"]
-    )
+    email = validate_invite_token(token, secret_key=current_app.config["SECRET_KEY"])
     if email is None:
         return "Invalid or expired invite link.", 403
 
@@ -56,7 +63,9 @@ def onboarding_submit():
 
     name = request.form.get("name", "").strip()
     if not name:
-        return render_template("onboarding.html", email=email, error="Name is required.")
+        return render_template(
+            "onboarding.html", email=email, error="Name is required."
+        )
 
     user = User(email=email, name=name, role="user", data_root=_user_data_root())
     save_user(user, path=_users_path())
@@ -120,6 +129,7 @@ def oauth_callback():
     creds = flow.credentials
 
     from googleapiclient.discovery import build
+
     service = build("gmail", "v1", credentials=creds)
     profile = service.users().getProfile(userId="me").execute()
     gmail_email = profile["emailAddress"]
@@ -128,7 +138,10 @@ def oauth_callback():
     if session.pop("login_flow", False):
         user = load_user(gmail_email, path=_users_path())
         if user is None:
-            flash("No account found for this Google account. Ask your admin for an invite link.", "danger")
+            flash(
+                "No account found for this Google account. Ask your admin for an invite link.",
+                "danger",
+            )
             return redirect(url_for("auth.login"))
         login_user(user, remember=True)
         # Save/refresh the token
@@ -141,9 +154,7 @@ def oauth_callback():
 
     # Normal flow: user is already logged in, connecting a Gmail account
     safe = _safe_email(gmail_email)
-    tokens_dir = user_data_dir(
-        current_user.email, root=_user_data_root()
-    ) / "tokens"
+    tokens_dir = user_data_dir(current_user.email, root=_user_data_root()) / "tokens"
     tokens_dir.mkdir(parents=True, exist_ok=True)
     token_file = tokens_dir / f"{safe}_{scope_label}.json"
     token_file.write_text(creds.to_json())

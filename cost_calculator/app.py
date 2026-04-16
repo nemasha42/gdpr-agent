@@ -26,13 +26,15 @@ app = Flask(__name__)
 _SOURCE_LABELS: dict[str, str] = {
     "contact_resolver": "GDPR contact address lookup",
     "reply_classifier": "Reply email classification",
-    "schema_builder":   "Received data schema analysis",
+    "schema_builder": "Received data schema analysis",
 }
 
 
 def _purpose(record: dict) -> str:
     """Return a human-readable purpose string for a log record."""
-    return record.get("purpose") or _SOURCE_LABELS.get(record.get("source", ""), record.get("source", ""))
+    return record.get("purpose") or _SOURCE_LABELS.get(
+        record.get("source", ""), record.get("source", "")
+    )
 
 
 def _load() -> list[dict]:
@@ -52,9 +54,15 @@ def index():
     total_input = sum(r.get("input_tokens", 0) for r in calls)
     total_output = sum(r.get("output_tokens", 0) for r in calls)
 
-    resolver_cost = sum(r.get("cost_usd", 0.0) for r in calls if r.get("source") == "contact_resolver")
-    classifier_cost = sum(r.get("cost_usd", 0.0) for r in calls if r.get("source") == "reply_classifier")
-    schema_cost = sum(r.get("cost_usd", 0.0) for r in calls if r.get("source") == "schema_builder")
+    resolver_cost = sum(
+        r.get("cost_usd", 0.0) for r in calls if r.get("source") == "contact_resolver"
+    )
+    classifier_cost = sum(
+        r.get("cost_usd", 0.0) for r in calls if r.get("source") == "reply_classifier"
+    )
+    schema_cost = sum(
+        r.get("cost_usd", 0.0) for r in calls if r.get("source") == "schema_builder"
+    )
 
     stats = {
         "total_cost": total_cost,
@@ -73,13 +81,15 @@ def index():
 def by_company():
     calls = _load()
 
-    groups: dict[str, dict] = defaultdict(lambda: {
-        "calls": 0,
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "cost_usd": 0.0,
-        "sources": set(),
-    })
+    groups: dict[str, dict] = defaultdict(
+        lambda: {
+            "calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": 0.0,
+            "sources": set(),
+        }
+    )
 
     for r in calls:
         name = r.get("company_name") or "unknown"
@@ -102,7 +112,9 @@ def by_company():
             "cost_usd": g["cost_usd"],
             "sources": ", ".join(sorted(g["sources"])),
         }
-        for name, g in sorted(groups.items(), key=lambda x: x[1]["cost_usd"], reverse=True)
+        for name, g in sorted(
+            groups.items(), key=lambda x: x[1]["cost_usd"], reverse=True
+        )
     ]
 
     return render_template("by_company.html", rows=rows)
@@ -112,12 +124,14 @@ def by_company():
 def by_model():
     calls = _load()
 
-    groups: dict[str, dict] = defaultdict(lambda: {
-        "calls": 0,
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "cost_usd": 0.0,
-    })
+    groups: dict[str, dict] = defaultdict(
+        lambda: {
+            "calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": 0.0,
+        }
+    )
 
     for r in calls:
         model = r.get("model") or "unknown"
@@ -136,7 +150,9 @@ def by_model():
             "cost_usd": g["cost_usd"],
             "avg_cost": g["cost_usd"] / g["calls"] if g["calls"] else 0.0,
         }
-        for model, g in sorted(groups.items(), key=lambda x: x[1]["cost_usd"], reverse=True)
+        for model, g in sorted(
+            groups.items(), key=lambda x: x[1]["cost_usd"], reverse=True
+        )
     ]
 
     return render_template("by_model.html", rows=rows)

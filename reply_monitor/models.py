@@ -74,9 +74,9 @@ class FileEntry:
 
 @dataclass
 class AttachmentCatalog:
-    path: str           # local path to downloaded file
+    path: str  # local path to downloaded file
     size_bytes: int
-    file_type: str      # "zip", "json", "csv", "pdf", etc.
+    file_type: str  # "zip", "json", "csv", "pdf", etc.
     files: list[FileEntry] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)
     schema: list[dict] = field(default_factory=list)  # LLM-inferred category schemas
@@ -99,7 +99,11 @@ class AttachmentCatalog:
             "size_bytes": self.size_bytes,
             "file_type": self.file_type,
             "files": [
-                {"filename": f.filename, "size_bytes": f.size_bytes, "file_type": f.file_type}
+                {
+                    "filename": f.filename,
+                    "size_bytes": f.size_bytes,
+                    "file_type": f.file_type,
+                }
                 for f in self.files
             ],
             "categories": self.categories,
@@ -139,10 +143,14 @@ class ReplyRecord:
     has_attachment: bool
     attachment_catalog: dict | None
     suggested_reply: str = ""
-    reply_review_status: str = ""   # "" | "pending" | "sent" | "dismissed"
-    sent_reply_body: str = ""       # actual text user sent (may differ from suggested_reply if edited)
-    sent_reply_at: str = ""         # ISO timestamp of when user sent it
-    portal_verification: dict | None = None  # {url, classification, checked_at, error, page_title}
+    reply_review_status: str = ""  # "" | "pending" | "sent" | "dismissed"
+    sent_reply_body: str = (
+        ""  # actual text user sent (may differ from suggested_reply if edited)
+    )
+    sent_reply_at: str = ""  # ISO timestamp of when user sent it
+    portal_verification: dict | None = (
+        None  # {url, classification, checked_at, error, page_title}
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -193,11 +201,11 @@ class ReplyRecord:
 class CompanyState:
     domain: str
     company_name: str
-    sar_sent_at: str          # ISO datetime string — most recent attempt
-    to_email: str             # most recent attempt address
+    sar_sent_at: str  # ISO datetime string — most recent attempt
+    to_email: str  # most recent attempt address
     subject: str
-    gmail_thread_id: str      # most recent attempt thread
-    deadline: str             # ISO date YYYY-MM-DD — most recent attempt deadline
+    gmail_thread_id: str  # most recent attempt thread
+    deadline: str  # ISO date YYYY-MM-DD — most recent attempt deadline
     replies: list[ReplyRecord] = field(default_factory=list)
     last_checked: str = ""
     # Older attempts (bounced / superseded), ordered oldest-first.
@@ -209,10 +217,12 @@ class CompanyState:
     # status: "submitted" | "manual" | "failed" | None (not attempted)
     portal_submission: dict | None = None
     # Portal submission tracking
-    portal_status: str = ""            # "submitted" | "awaiting_verification" | "awaiting_captcha" | "manual" | "failed" | ""
-    portal_verified_at: str = ""       # ISO datetime — when verification was confirmed passed
+    portal_status: str = ""  # "submitted" | "awaiting_verification" | "awaiting_captcha" | "manual" | "failed" | ""
+    portal_verified_at: str = (
+        ""  # ISO datetime — when verification was confirmed passed
+    )
     portal_confirmation_ref: str = ""  # reference/ticket number from portal
-    portal_screenshot: str = ""        # path to confirmation screenshot
+    portal_screenshot: str = ""  # path to confirmation screenshot
     # Status transition log — list of {from, to, at, reason}
     status_log: list[dict] = field(default_factory=list)
 

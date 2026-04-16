@@ -8,7 +8,6 @@ import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from reply_monitor.attachment_handler import (
     _catalog_csv,
@@ -23,6 +22,7 @@ from reply_monitor.attachment_handler import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_zip_bytes(filenames: list[str]) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
@@ -35,13 +35,16 @@ def _make_service(attachment_data: bytes):
     """Mock Gmail service that returns base64-encoded attachment data."""
     service = MagicMock()
     encoded = base64.urlsafe_b64encode(attachment_data).decode()
-    service.users().messages().attachments().get().execute.return_value = {"data": encoded}
+    service.users().messages().attachments().get().execute.return_value = {
+        "data": encoded
+    }
     return service
 
 
 # ---------------------------------------------------------------------------
 # _guess_categories_from_filename tests
 # ---------------------------------------------------------------------------
+
 
 class TestGuessCategories:
     def test_location_filename(self):
@@ -72,6 +75,7 @@ class TestGuessCategories:
 # ---------------------------------------------------------------------------
 # _catalog_zip tests
 # ---------------------------------------------------------------------------
+
 
 class TestCatalogZip:
     def test_lists_files(self):
@@ -113,13 +117,16 @@ class TestCatalogZip:
 # _catalog_json tests
 # ---------------------------------------------------------------------------
 
+
 class TestCatalogJson:
     def test_extracts_top_level_keys(self):
-        payload = json.dumps({
-            "location_history": [],
-            "profile": {},
-            "search_activity": [],
-        }).encode()
+        payload = json.dumps(
+            {
+                "location_history": [],
+                "profile": {},
+                "search_activity": [],
+            }
+        ).encode()
         files, cats = _catalog_json(payload, "data.json", len(payload))
         assert "Location" in cats
         assert "Profile Data" in cats
@@ -139,6 +146,7 @@ class TestCatalogJson:
 # ---------------------------------------------------------------------------
 # _catalog_csv tests
 # ---------------------------------------------------------------------------
+
 
 class TestCatalogCsv:
     def test_extracts_column_headers(self):
@@ -170,11 +178,16 @@ class TestCatalogCsv:
 # handle_attachment integration tests (mocked Gmail service)
 # ---------------------------------------------------------------------------
 
+
 class TestHandleAttachment:
     def test_downloads_and_saves_zip(self, tmp_path):
         zip_data = _make_zip_bytes(["profile.json", "location.csv"])
         service = _make_service(zip_data)
-        part = {"filename": "mydata.zip", "attachmentId": "att001", "size": len(zip_data)}
+        part = {
+            "filename": "mydata.zip",
+            "attachmentId": "att001",
+            "size": len(zip_data),
+        }
 
         with patch("reply_monitor.attachment_handler._RECEIVED_DIR", tmp_path):
             catalog = handle_attachment(service, "msg001", part, "example.com")
@@ -186,7 +199,9 @@ class TestHandleAttachment:
 
     def test_returns_none_on_download_failure(self, tmp_path):
         service = MagicMock()
-        service.users().messages().attachments().get().execute.side_effect = Exception("API error")
+        service.users().messages().attachments().get().execute.side_effect = Exception(
+            "API error"
+        )
         part = {"filename": "data.zip", "attachmentId": "att001", "size": 100}
 
         with patch("reply_monitor.attachment_handler._RECEIVED_DIR", tmp_path):
@@ -197,7 +212,11 @@ class TestHandleAttachment:
     def test_json_attachment_catalog(self, tmp_path):
         json_data = json.dumps({"location_history": [], "profile": {}}).encode()
         service = _make_service(json_data)
-        part = {"filename": "data.json", "attachmentId": "att002", "size": len(json_data)}
+        part = {
+            "filename": "data.json",
+            "attachmentId": "att002",
+            "size": len(json_data),
+        }
 
         with patch("reply_monitor.attachment_handler._RECEIVED_DIR", tmp_path):
             catalog = handle_attachment(service, "msg002", part, "example.com")

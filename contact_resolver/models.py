@@ -39,9 +39,13 @@ class Subprocessor(BaseModel):
     hq_country_code: str = ""
     purposes: list[str] = Field(default_factory=list)
     data_categories: list[str] = Field(default_factory=list)
-    transfer_basis: Literal["adequacy_decision", "SCCs", "BCRs", "consent", "none", "unknown"] = "unknown"
+    transfer_basis: Literal[
+        "adequacy_decision", "SCCs", "BCRs", "consent", "none", "unknown"
+    ] = "unknown"
     source_url: str = ""
-    source: Literal["scrape_subprocessor_page", "scrape_privacy_policy", "llm_search"] = "llm_search"
+    source: Literal[
+        "scrape_subprocessor_page", "scrape_privacy_policy", "llm_search"
+    ] = "llm_search"
     last_fetched: str = ""
     sub_subprocessors: list["Subprocessor"] = Field(default_factory=list)
 
@@ -58,9 +62,9 @@ class SubprocessorRecord(BaseModel):
 
 
 class PortalFormField(BaseModel):
-    name: str          # AXTree element name, e.g. "First Name"
-    value_key: str     # key into user_data dict, e.g. "first_name"
-    role: str          # AXTree role: "textbox", "combobox", "checkbox"
+    name: str  # AXTree element name, e.g. "First Name"
+    value_key: str  # key into user_data dict, e.g. "first_name"
+    role: str  # AXTree role: "textbox", "combobox", "checkbox"
 
 
 class PortalFieldMapping(BaseModel):
@@ -73,7 +77,13 @@ class PortalFieldMapping(BaseModel):
 class CompanyRecord(BaseModel):
     company_name: str
     legal_entity_name: str = ""
-    source: Literal["datarequests", "llm_search", "user_manual", "dataowners_override", "privacy_scrape"]
+    source: Literal[
+        "datarequests",
+        "llm_search",
+        "user_manual",
+        "dataowners_override",
+        "privacy_scrape",
+    ]
     source_confidence: Literal["high", "medium", "low"]
     last_verified: str  # ISO date: YYYY-MM-DD
     contact: Contact = Field(default_factory=Contact)

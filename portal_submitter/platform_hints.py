@@ -5,8 +5,13 @@ from urllib.parse import urlparse
 
 # Domains where the portal requires account login — not automatable
 _LOGIN_REQUIRED_DOMAINS: set[str] = {
-    "google.com", "apple.com", "meta.com", "amazon.com",
-    "facebook.com", "twitter.com", "x.com",
+    "google.com",
+    "apple.com",
+    "meta.com",
+    "amazon.com",
+    "facebook.com",
+    "twitter.com",
+    "x.com",
 }
 
 # URL pattern → platform
