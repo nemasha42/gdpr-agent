@@ -57,6 +57,15 @@ def create_app() -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
 
+    # --- Leaf blueprints (Phase 1) ---
+    from dashboard.blueprints.costs_bp import costs_bp
+    from dashboard.blueprints.settings_bp import settings_bp
+    from dashboard.blueprints.api_bp import api_bp
+
+    app.register_blueprint(costs_bp)
+    app.register_blueprint(settings_bp)
+    app.register_blueprint(api_bp)
+
     # --- Before-request hook ---
     @app.before_request
     def _inject_user():
