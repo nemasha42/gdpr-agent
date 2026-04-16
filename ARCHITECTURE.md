@@ -13,7 +13,7 @@ Under GDPR (and UK GDPR), individuals have the right to obtain a copy of all per
 
 ## 2. System Overview
 
-The pipeline runs in five stages triggered by `run.py`, with a separate monitoring CLI (`monitor.py`) and a Flask dashboard that also drives portal automation and subprocessor disclosure requests. The dashboard uses an app factory pattern: `dashboard/__init__.py` provides `create_app()` (Flask setup, LoginManager, auth blueprints), `dashboard/shared.py` holds shared helpers and constants, and `dashboard/app.py` registers all route handlers.
+The pipeline runs in five stages triggered by `run.py`, with a separate monitoring CLI (`monitor.py`) and a Flask dashboard that also drives portal automation and subprocessor disclosure requests. The dashboard uses an app factory pattern: `dashboard/__init__.py` provides `create_app()` (Flask setup, LoginManager, auth blueprints and leaf blueprints), `dashboard/shared.py` holds shared helpers and constants, and `dashboard/app.py` registers remaining route handlers. Extracted blueprints live in `dashboard/blueprints/`: `costs_bp.py`, `settings_bp.py`, `api_bp.py` (Phase 1), `data_bp.py` (Phase 2 — `/data/<domain>`, `/scan/<domain>`, `/download/<domain>`).
 
 ```mermaid
 flowchart TD
@@ -107,7 +107,7 @@ Data flows strictly left to right within each run. The resolver writes back to `
 | `letter_engine/` | SAR letter composition (`composer.py`), dispatch + Y/N prompt (`sender.py`), sent-letter logging (`tracker.py`) |
 | `reply_monitor/` | Gmail reply fetcher, 3-pass classifier, state manager (`reply_state.json`), link downloader, schema builder, URL verifier, data models (`models.py`) |
 | `portal_submitter/` | Playwright-based portal automation: form analysis, filling, CAPTCHA relay, OTP handling, platform detection, multi-step navigation |
-| `dashboard/` | App factory (`__init__.py`: `create_app()`), shared helpers & constants (`shared.py`), route handlers (`app.py`), Jinja2 templates, static JS/CSS, service modules (`services/graph_data.py`, `services/jurisdiction.py`), auth (`auth_routes.py`, `admin_routes.py`, `user_model.py`) |
+| `dashboard/` | App factory (`__init__.py`: `create_app()`), shared helpers & constants (`shared.py`), remaining route handlers (`app.py`), extracted blueprints (`blueprints/costs_bp.py`, `blueprints/settings_bp.py`, `blueprints/api_bp.py`, `blueprints/data_bp.py`, `blueprints/monitor_bp.py`), Jinja2 templates, static JS/CSS, service modules (`services/graph_data.py`, `services/jurisdiction.py`, `services/monitor_runner.py`), auth (`auth_routes.py`, `admin_routes.py`, `user_model.py`) |
 | `auth/` | Gmail OAuth2 with per-account token storage, service cache, call logger |
 | `config/` | `.env` loader via Pydantic (`settings.py`) |
 | `templates/` | SAR email/postal templates, subprocessor disclosure request templates |
@@ -232,7 +232,8 @@ As of the last test run: **655 tests pass, 1 failed** (the `test_portal_submitte
 | `reply_monitor/schema_builder.py` | `test_schema_builder.py` | Good — empty export, corrupt ZIP, malformed JSON, successful extraction, dynamic truncation |
 | `reply_monitor/link_downloader.py` | `test_link_downloader.py` | Good — DownloadResult, filename parsing, requests path, too-large, 404 expiry; Playwright path skipped if not installed |
 | `reply_monitor/models.py` | Covered indirectly | No dedicated tests |
-| `dashboard/app.py` | `test_dashboard.py` | Partial — routes `/`, `/costs`, `/refresh`, `/company/<domain>` covered; `/data/<domain>`, `/cards`, `/scan/<domain>`, `/download/<domain>`, `/reextract`, `/api/body/<domain>/<id>` untested |
+| `dashboard/app.py` | `test_dashboard.py` | Partial — routes `/`, `/costs`, `/refresh`, `/company/<domain>` covered; `/cards`, `/reextract`, `/api/body/<domain>/<id>` untested |
+| `dashboard/blueprints/data_bp.py` | **Untested** | Routes `/data/<domain>`, `/scan/<domain>`, `/download/<domain>` — no test coverage |
 | `dashboard/shared.py` (helpers) | `test_snippet_clean.py` | Good — `_clean_snippet()` HTML entity/MIME/URL decoding, `_is_human_friendly()` predicate, `_dedup_reply_rows()` |
 | `dashboard/app.py` (portal routes) | `test_portal_submit_route.py` | Good — portal URL resolution from query param, overrides fallback, rejection when no URL, `save_portal_submission()` persistence lifecycle |
 | `dashboard/` (UI health) | `test_ui_health.py` | Good — verifies required templates, static JS assets, service modules, and template cross-references exist; catches missing files after merges |
@@ -260,7 +261,7 @@ The following are genuinely untested — not undercovered, but absent:
 
 **GitHub API rate limit warning** — the `X-RateLimit-Remaining` header check in `_fetch_dir_listing()` is untested. Risk: the warning path may never fire in practice (difficult to discover).
 
-**Dashboard routes `/data/<domain>`, `/cards`, `/scan/<domain>`, `/download/<domain>`, `/reextract`, `/api/body/<domain>/<id>`** — these six routes have no tests. Risk: template rendering errors or logic bugs are only discovered during live use.
+**Dashboard routes `/cards`, `/reextract`, `/api/body/<domain>/<id>`** — these routes in `app.py` have no tests. **`dashboard/blueprints/data_bp.py`** (`/data/<domain>`, `/scan/<domain>`, `/download/<domain>`) — also untested. Risk: template rendering errors or logic bugs are only discovered during live use.
 
 **`cost_tracker.record_resolver_result()` and `set_llm_limit()`** — the new functions added during the code review have no dedicated tests (though `set_llm_limit` is exercised indirectly by `test_run.py::test_resolver_skips_llm_when_limit_reached`).
 
@@ -317,7 +318,7 @@ Issues identified during code review (2026-03-16). 29 issues were found and fixe
 | P3 | Dashboard `/refresh` | Blocks the HTTP response during a full monitor run. Should use a background thread or task queue. |
 | P3 | Monitor reply dedup cache | `_llm_cache` in `classifier.py` resets between runs. Identical auto-replies in separate runs each trigger an LLM call. |
 | P2 | `portal_submitter/submitter.py` | Ketch portals always fail reCAPTCHA v3 in headless Playwright — falls back to manual. No known workaround. |
-| P3 | `dashboard/app.py` | Flask routes and template rendering have no test coverage — only pure helper functions (now in `shared.py`) are tested. Blueprint extraction in progress. |
+| P3 | `dashboard/app.py` + `dashboard/blueprints/` | Flask routes and template rendering have no test coverage — only pure helper functions (now in `shared.py`) are tested. Blueprint extraction in progress: Phase 1 (costs, settings, api) and Phase 2 (data) complete; `app.py` down from ~3,594 to ~2,571 lines. |
 | — | `monitor.py` | Zero test coverage for the CLI entry point. |
 
 ---

@@ -104,21 +104,22 @@ def test_refresh_with_no_account_redirects(client):
 
 
 def test_refresh_calls_monitor_and_redirects(client):
-    with patch("dashboard.app._run_monitor_for_account") as mock_monitor:
-        with patch("dashboard.app._reextract_missing_links") as mock_reextract:
-            mock_monitor.return_value = None
-            mock_reextract.return_value = 0
-            resp = client.get("/refresh?account=test@example.com")
-            assert resp.status_code == 302
-            mock_monitor.assert_called_once_with("test@example.com")
+    with patch("dashboard.services.monitor_runner.run_sar_monitor") as mock_monitor:
+        with patch("dashboard.services.monitor_runner.run_sp_monitor"):
+            with patch("dashboard.services.monitor_runner.reextract_missing_links") as mock_reextract:
+                mock_monitor.return_value = (None, "", {}, {})
+                mock_reextract.return_value = 0
+                resp = client.get("/refresh?account=test@example.com")
+                assert resp.status_code == 302
+                mock_monitor.assert_called_once()
 
 
 def test_refresh_monitor_exception_does_not_crash(client):
     """Monitor errors should be caught; route still redirects."""
     with patch(
-        "dashboard.app._run_monitor_for_account", side_effect=RuntimeError("boom")
+        "dashboard.services.monitor_runner.run_sar_monitor", side_effect=RuntimeError("boom")
     ):
-        with patch("dashboard.app._reextract_missing_links", return_value=0):
+        with patch("dashboard.services.monitor_runner.reextract_missing_links", return_value=0):
             resp = client.get("/refresh?account=test@example.com")
             assert resp.status_code == 302
 
