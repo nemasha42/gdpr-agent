@@ -32,10 +32,15 @@ def app(tmp_path):
             email, path=app.config["USERS_PATH"], data_root=app.config["USER_DATA_ROOT"]
         )
 
-    # Dummy dashboard route so url_for("dashboard") resolves in tests
-    @app.route("/")
+    # Dummy dashboard route so url_for("main.dashboard") resolves in tests
+    from flask import Blueprint
+    _main_bp = Blueprint("main", __name__)
+
+    @_main_bp.route("/")
     def dashboard():
         return "dashboard"
+
+    app.register_blueprint(_main_bp)
 
     return app
 

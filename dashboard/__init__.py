@@ -76,9 +76,13 @@ def create_app() -> Flask:
     # --- Phase 3 blueprints ---
     from dashboard.blueprints.portal_bp import portal_bp
     from dashboard.blueprints.transfers_bp import transfers_bp
+    from dashboard.blueprints.company_bp import company_bp
+    from dashboard.blueprints.dashboard_bp import dashboard_bp
 
     app.register_blueprint(portal_bp)
     app.register_blueprint(transfers_bp)
+    app.register_blueprint(company_bp)
+    app.register_blueprint(dashboard_bp)
 
     # --- Before-request hook ---
     @app.before_request

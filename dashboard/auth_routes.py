@@ -150,7 +150,7 @@ def oauth_callback():
         tokens_dir.mkdir(parents=True, exist_ok=True)
         token_file = tokens_dir / f"{safe}_{scope_label}.json"
         token_file.write_text(creds.to_json())
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("main.dashboard"))
 
     # Normal flow: user is already logged in, connecting a Gmail account
     safe = _safe_email(gmail_email)
@@ -160,16 +160,16 @@ def oauth_callback():
     token_file.write_text(creds.to_json())
 
     if session.pop("onboarding_email", None):
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("main.dashboard"))
 
     flash(f"Gmail account {gmail_email} connected ({scope_label}).")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("main.dashboard"))
 
 
 @auth_bp.route("/login")
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("main.dashboard"))
     return render_template("login.html")
 
 
