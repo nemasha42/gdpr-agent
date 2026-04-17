@@ -13,7 +13,7 @@ Under GDPR (and UK GDPR), individuals have the right to obtain a copy of all per
 
 ## 2. System Overview
 
-The pipeline runs in five stages triggered by `run.py`, with a separate monitoring CLI (`monitor.py`) and a Flask dashboard that also drives portal automation and subprocessor disclosure requests. The dashboard uses an app factory pattern: `dashboard/__init__.py` provides `create_app()` (Flask setup, LoginManager, all blueprint registration, before_request hook), `dashboard/shared.py` holds shared helpers and constants, and `dashboard/app.py` is the entry point (~34 lines — creates the app via `create_app()` and runs it). All routes live in blueprints under `dashboard/blueprints/`: `costs_bp.py`, `settings_bp.py`, `api_bp.py` (Phase 1), `data_bp.py`, `monitor_bp.py` (Phase 2), `portal_bp.py`, `transfers_bp.py`, `company_bp.py`, `dashboard_bp.py` (Phase 3), `pipeline_bp.py` (Phase 4 — scan, resolve, send, review, SSE scan stream).
+The pipeline runs in five stages triggered by `run.py`, with a separate monitoring CLI (`monitor.py`) and a Flask dashboard that also drives portal automation and subprocessor disclosure requests. The dashboard uses an app factory pattern: `dashboard/__init__.py` provides `create_app()` (107 lines — Flask setup, LoginManager, all blueprint registration, before_request hook), `dashboard/shared.py` (579 lines) holds shared helpers and constants, and `dashboard/app.py` is the entry point (33 lines — creates the app via `create_app()` and runs it). All routes live in 10 blueprints under `dashboard/blueprints/` (2,837 lines total): `pipeline_bp.py` (832), `company_bp.py` (568), `transfers_bp.py` (385), `data_bp.py` (285), `portal_bp.py` (239), `dashboard_bp.py` (204), `monitor_bp.py` (90), `costs_bp.py` (89), `api_bp.py` (78), `settings_bp.py` (67). Service modules under `dashboard/services/` (1,437 lines total): `monitor_runner.py` (807), `graph_data.py` (395), `jurisdiction.py` (235). Total dashboard: ~5,558 lines across all Python files.
 
 ```mermaid
 flowchart TD
@@ -107,7 +107,7 @@ Data flows strictly left to right within each run. The resolver writes back to `
 | `letter_engine/` | SAR letter composition (`composer.py`), dispatch + Y/N prompt (`sender.py`), sent-letter logging (`tracker.py`) |
 | `reply_monitor/` | Gmail reply fetcher, 3-pass classifier, state manager (`reply_state.json`), link downloader, schema builder, URL verifier, data models (`models.py`) |
 | `portal_submitter/` | Playwright-based portal automation: form analysis, filling, CAPTCHA relay, OTP handling, platform detection, multi-step navigation |
-| `dashboard/` | App factory (`__init__.py`: `create_app()`), shared helpers & constants (`shared.py`), entry point (`app.py`), all route blueprints (`blueprints/costs_bp.py`, `blueprints/settings_bp.py`, `blueprints/api_bp.py`, `blueprints/data_bp.py`, `blueprints/monitor_bp.py`, `blueprints/portal_bp.py`, `blueprints/transfers_bp.py`, `blueprints/company_bp.py`, `blueprints/dashboard_bp.py`, `blueprints/pipeline_bp.py`), Jinja2 templates, static JS/CSS, service modules (`services/graph_data.py`, `services/jurisdiction.py`, `services/monitor_runner.py`), auth (`auth_routes.py`, `admin_routes.py`, `user_model.py`) |
+| `dashboard/` | App factory (`__init__.py`: `create_app()`, 107 lines), shared helpers & constants (`shared.py`, 579 lines), entry point (`app.py`, 33 lines), 10 route blueprints under `blueprints/` (2,837 lines): `pipeline_bp.py` (832), `company_bp.py` (568), `transfers_bp.py` (385), `data_bp.py` (285), `portal_bp.py` (239), `dashboard_bp.py` (204), `monitor_bp.py` (90), `costs_bp.py` (89), `api_bp.py` (78), `settings_bp.py` (67). Service modules under `services/` (1,437 lines): `monitor_runner.py` (807), `graph_data.py` (395), `jurisdiction.py` (235). Support modules: `auth_routes.py` (203), `user_model.py` (128), `tasks.py` (81), `scan_state.py` (62), `admin_routes.py` (59), `sse.py` (32). Jinja2 templates, static JS/CSS. Total: ~5,558 lines |
 | `auth/` | Gmail OAuth2 with per-account token storage, service cache, call logger |
 | `config/` | `.env` loader via Pydantic (`settings.py`) |
 | `templates/` | SAR email/postal templates, subprocessor disclosure request templates |
@@ -205,7 +205,7 @@ All tests live in `tests/unit/`. There are no integration test directories, no e
 
 Files follow the naming convention `test_{module_name}.py`. Each file corresponds to one source module. Test classes are named `Test{ConceptBeingTested}` (e.g. `TestContactResolver`, `TestNONGDPRPrepass`); individual test functions are named `test_{specific_scenario}`.
 
-As of the last test run: **651 tests pass, 5 failed** (4 pre-existing `test_run.py` failures from missing `credentials.json`, 1 `test_portal_submitter` settings mock — all known issues).
+As of the last test run: **655 passed, 1 failed** (`test_portal_submitter` settings mock — known issue).
 
 ---
 
@@ -320,7 +320,7 @@ Issues identified during code review (2026-03-16). 29 issues were found and fixe
 | P3 | Dashboard `/refresh` | Blocks the HTTP response during a full monitor run. Should use a background thread or task queue. |
 | P3 | Monitor reply dedup cache | `_llm_cache` in `classifier.py` resets between runs. Identical auto-replies in separate runs each trigger an LLM call. |
 | P2 | `portal_submitter/submitter.py` | Ketch portals always fail reCAPTCHA v3 in headless Playwright — falls back to manual. No known workaround. |
-| P3 | `dashboard/blueprints/` | Flask routes and template rendering have partial test coverage — only pure helper functions (in `shared.py`) and a few routes (`/`, `/refresh`, `/company/<domain>`) are tested. Blueprint extraction complete: all routes moved from `app.py` into 10 blueprints across 4 phases; `app.py` is now a 34-line entry point. |
+| P3 | `dashboard/blueprints/` | Flask routes and template rendering have partial test coverage — only pure helper functions (in `shared.py`) and a few routes (`/`, `/refresh`, `/company/<domain>`) are tested. Blueprint extraction complete: all routes in 10 blueprints (2,837 lines), services extracted (1,437 lines), `app.py` reduced to 33-line entry point. |
 | — | `monitor.py` | Zero test coverage for the CLI entry point. |
 
 ---
