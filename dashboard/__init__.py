@@ -84,6 +84,11 @@ def create_app() -> Flask:
     app.register_blueprint(company_bp)
     app.register_blueprint(dashboard_bp)
 
+    # --- Phase 4 blueprint (pipeline — final extraction) ---
+    from dashboard.blueprints.pipeline_bp import pipeline_bp
+
+    app.register_blueprint(pipeline_bp)
+
     # --- Before-request hook ---
     @app.before_request
     def _inject_user():

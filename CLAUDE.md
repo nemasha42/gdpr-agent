@@ -31,7 +31,7 @@ python dashboard/app.py                                # Flask on :5001
 
 Five-stage pipeline: Scanner → Resolver → Composer/Sender → Monitor → Subprocessors
 
-- **Dashboard uses an app factory pattern.** `dashboard/__init__.py` contains `create_app()` (Flask setup, LoginManager, auth blueprints, before_request hook). `dashboard/shared.py` contains all shared helpers, constants, and the context processor. `dashboard/app.py` has remaining routes (~2,102 lines). Extracted blueprints in `dashboard/blueprints/`: `costs_bp.py`, `settings_bp.py`, `api_bp.py` (Phase 1), `data_bp.py`, `monitor_bp.py` (Phase 2). `dashboard/services/monitor_runner.py` contains unified monitor functions used by both `monitor.py` CLI and `monitor_bp`. Do not add new routes without discussion.
+- **Dashboard uses an app factory pattern.** `dashboard/__init__.py` contains `create_app()` (Flask setup, LoginManager, all blueprint registration, before_request hook). `dashboard/shared.py` contains all shared helpers, constants, and the context processor. `dashboard/app.py` is now just the entry point (~34 lines — creates the app and runs it). **All routes are in blueprints** in `dashboard/blueprints/`: `costs_bp.py`, `settings_bp.py`, `api_bp.py` (Phase 1), `data_bp.py`, `monitor_bp.py` (Phase 2), `portal_bp.py`, `transfers_bp.py`, `company_bp.py`, `dashboard_bp.py` (Phase 3), `pipeline_bp.py` (Phase 4). `dashboard/services/monitor_runner.py` contains unified monitor functions used by both `monitor.py` CLI and `monitor_bp`. Do not add new routes without discussion.
 - All LLM calls go through `contact_resolver/cost_tracker.py` — call `record_llm_call()` AFTER JSON extraction so `found=` reflects the actual result.
 - Portal automation uses Playwright with stealth scripts in `portal_submitter/`.
 - Playwright ≥1.58: `page.accessibility.snapshot()` is removed. Use `page.locator("body").aria_snapshot()`.
@@ -81,7 +81,7 @@ All tests in `tests/unit/` use DI or `unittest.mock` — no real network calls. 
 
 ## Known Tech Debt
 
-- `dashboard/app.py` — still ~2,102 lines of route handlers (blueprint extraction in progress), no route test coverage
+- Dashboard route test coverage is partial — most blueprint routes lack dedicated tests
 - GitHub API rate limit (60/hour) blocks 500+ company runs — needs `GITHUB_TOKEN`
 - Ketch portal reCAPTCHA v3 — no automated workaround
 

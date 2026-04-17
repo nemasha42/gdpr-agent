@@ -124,14 +124,14 @@ def test_portal_submit_falls_back_to_overrides(state_dir):
     mock_record.contact.gdpr_portal_url = ""
 
     with patch.object(ContactResolver, "resolve", return_value=mock_record), patch(
-        "dashboard.app._lookup_company",
+        "dashboard.shared._lookup_company",
         return_value={
             "contact": {
                 "gdpr_portal_url": "https://www.zendesk.com/datasubjectrequest/"
             }
         },
     ):
-        from dashboard.app import _lookup_company
+        from dashboard.shared import _lookup_company
 
         domain = "zendesk.com"
         portal_url_param = ""  # not passed
@@ -160,9 +160,9 @@ def test_portal_submit_rejects_no_url():
     mock_record.contact.gdpr_portal_url = ""
 
     with patch.object(ContactResolver, "resolve", return_value=mock_record), patch(
-        "dashboard.app._lookup_company", return_value={}
+        "dashboard.shared._lookup_company", return_value={}
     ):
-        from dashboard.app import _lookup_company
+        from dashboard.shared import _lookup_company
 
         domain = "nocorp.com"
         portal_url_param = ""

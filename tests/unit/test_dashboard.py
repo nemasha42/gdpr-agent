@@ -62,20 +62,16 @@ def client(tmp_path):
     )
     save_user(admin, path=tmp_path / "users.json")
 
-    import dashboard.app as app_module
+    from dashboard.app import app
 
-    app_module._STATE_PATH = state_path
-    app_module._USER_DATA = tmp_path
-
-    with patch("dashboard.app.get_log", return_value=[]):
-        with patch("contact_resolver.cost_tracker._COST_LOG_PATH", cost_path):
-            app_module.app.config["TESTING"] = True
-            app_module.app.config["USERS_PATH"] = tmp_path / "users.json"
-            app_module.app.config["USER_DATA_ROOT"] = tmp_path
-            with app_module.app.test_client() as c:
-                with c.session_transaction() as sess:
-                    sess["_user_id"] = "test@example.com"
-                yield c
+    with patch("contact_resolver.cost_tracker._COST_LOG_PATH", cost_path):
+        app.config["TESTING"] = True
+        app.config["USERS_PATH"] = tmp_path / "users.json"
+        app.config["USER_DATA_ROOT"] = tmp_path
+        with app.test_client() as c:
+            with c.session_transaction() as sess:
+                sess["_user_id"] = "test@example.com"
+            yield c
 
 
 # ---------------------------------------------------------------------------

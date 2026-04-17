@@ -13,7 +13,7 @@ Under GDPR (and UK GDPR), individuals have the right to obtain a copy of all per
 
 ## 2. System Overview
 
-The pipeline runs in five stages triggered by `run.py`, with a separate monitoring CLI (`monitor.py`) and a Flask dashboard that also drives portal automation and subprocessor disclosure requests. The dashboard uses an app factory pattern: `dashboard/__init__.py` provides `create_app()` (Flask setup, LoginManager, auth blueprints and leaf blueprints), `dashboard/shared.py` holds shared helpers and constants, and `dashboard/app.py` registers remaining route handlers. Extracted blueprints live in `dashboard/blueprints/`: `costs_bp.py`, `settings_bp.py`, `api_bp.py` (Phase 1), `data_bp.py` (Phase 2 — `/data/<domain>`, `/scan/<domain>`, `/download/<domain>`).
+The pipeline runs in five stages triggered by `run.py`, with a separate monitoring CLI (`monitor.py`) and a Flask dashboard that also drives portal automation and subprocessor disclosure requests. The dashboard uses an app factory pattern: `dashboard/__init__.py` provides `create_app()` (Flask setup, LoginManager, all blueprint registration, before_request hook), `dashboard/shared.py` holds shared helpers and constants, and `dashboard/app.py` is the entry point (~34 lines — creates the app via `create_app()` and runs it). All routes live in blueprints under `dashboard/blueprints/`: `costs_bp.py`, `settings_bp.py`, `api_bp.py` (Phase 1), `data_bp.py`, `monitor_bp.py` (Phase 2), `portal_bp.py`, `transfers_bp.py`, `company_bp.py`, `dashboard_bp.py` (Phase 3), `pipeline_bp.py` (Phase 4 — scan, resolve, send, review, SSE scan stream).
 
 ```mermaid
 flowchart TD
@@ -107,7 +107,7 @@ Data flows strictly left to right within each run. The resolver writes back to `
 | `letter_engine/` | SAR letter composition (`composer.py`), dispatch + Y/N prompt (`sender.py`), sent-letter logging (`tracker.py`) |
 | `reply_monitor/` | Gmail reply fetcher, 3-pass classifier, state manager (`reply_state.json`), link downloader, schema builder, URL verifier, data models (`models.py`) |
 | `portal_submitter/` | Playwright-based portal automation: form analysis, filling, CAPTCHA relay, OTP handling, platform detection, multi-step navigation |
-| `dashboard/` | App factory (`__init__.py`: `create_app()`), shared helpers & constants (`shared.py`), remaining route handlers (`app.py`), extracted blueprints (`blueprints/costs_bp.py`, `blueprints/settings_bp.py`, `blueprints/api_bp.py`, `blueprints/data_bp.py`, `blueprints/monitor_bp.py`), Jinja2 templates, static JS/CSS, service modules (`services/graph_data.py`, `services/jurisdiction.py`, `services/monitor_runner.py`), auth (`auth_routes.py`, `admin_routes.py`, `user_model.py`) |
+| `dashboard/` | App factory (`__init__.py`: `create_app()`), shared helpers & constants (`shared.py`), entry point (`app.py`), all route blueprints (`blueprints/costs_bp.py`, `blueprints/settings_bp.py`, `blueprints/api_bp.py`, `blueprints/data_bp.py`, `blueprints/monitor_bp.py`, `blueprints/portal_bp.py`, `blueprints/transfers_bp.py`, `blueprints/company_bp.py`, `blueprints/dashboard_bp.py`, `blueprints/pipeline_bp.py`), Jinja2 templates, static JS/CSS, service modules (`services/graph_data.py`, `services/jurisdiction.py`, `services/monitor_runner.py`), auth (`auth_routes.py`, `admin_routes.py`, `user_model.py`) |
 | `auth/` | Gmail OAuth2 with per-account token storage, service cache, call logger |
 | `config/` | `.env` loader via Pydantic (`settings.py`) |
 | `templates/` | SAR email/postal templates, subprocessor disclosure request templates |
@@ -205,7 +205,7 @@ All tests live in `tests/unit/`. There are no integration test directories, no e
 
 Files follow the naming convention `test_{module_name}.py`. Each file corresponds to one source module. Test classes are named `Test{ConceptBeingTested}` (e.g. `TestContactResolver`, `TestNONGDPRPrepass`); individual test functions are named `test_{specific_scenario}`.
 
-As of the last test run: **655 tests pass, 1 failed** (the `test_portal_submitter` settings mock — known issue).
+As of the last test run: **651 tests pass, 5 failed** (4 pre-existing `test_run.py` failures from missing `credentials.json`, 1 `test_portal_submitter` settings mock — all known issues).
 
 ---
 
@@ -232,10 +232,12 @@ As of the last test run: **655 tests pass, 1 failed** (the `test_portal_submitte
 | `reply_monitor/schema_builder.py` | `test_schema_builder.py` | Good — empty export, corrupt ZIP, malformed JSON, successful extraction, dynamic truncation |
 | `reply_monitor/link_downloader.py` | `test_link_downloader.py` | Good — DownloadResult, filename parsing, requests path, too-large, 404 expiry; Playwright path skipped if not installed |
 | `reply_monitor/models.py` | Covered indirectly | No dedicated tests |
-| `dashboard/app.py` | `test_dashboard.py` | Partial — routes `/`, `/costs`, `/refresh`, `/company/<domain>` covered; `/cards`, `/reextract`, `/api/body/<domain>/<id>` untested |
+| `dashboard/blueprints/dashboard_bp.py` | `test_dashboard.py` | Partial — routes `/`, `/refresh` covered; `/cards`, `/reextract` untested |
+| `dashboard/blueprints/company_bp.py` | `test_dashboard.py` | Partial — `/company/<domain>` covered |
+| `dashboard/blueprints/pipeline_bp.py` | **Untested** | All pipeline routes (`/pipeline`, `/pipeline/review`, `/pipeline/scan-page`, SSE scan stream) — no test coverage |
 | `dashboard/blueprints/data_bp.py` | **Untested** | Routes `/data/<domain>`, `/scan/<domain>`, `/download/<domain>` — no test coverage |
 | `dashboard/shared.py` (helpers) | `test_snippet_clean.py` | Good — `_clean_snippet()` HTML entity/MIME/URL decoding, `_is_human_friendly()` predicate, `_dedup_reply_rows()` |
-| `dashboard/app.py` (portal routes) | `test_portal_submit_route.py` | Good — portal URL resolution from query param, overrides fallback, rejection when no URL, `save_portal_submission()` persistence lifecycle |
+| `dashboard/blueprints/portal_bp.py` (portal routes) | `test_portal_submit_route.py` | Good — portal URL resolution from query param, overrides fallback, rejection when no URL, `save_portal_submission()` persistence lifecycle |
 | `dashboard/` (UI health) | `test_ui_health.py` | Good — verifies required templates, static JS assets, service modules, and template cross-references exist; catches missing files after merges |
 | `portal_submitter/` | `test_portal_submitter.py` | Good — models, platform detection, OTP sender hints, `build_user_data()`, `analyze_form()` with LLM mocking and cache expiration, CAPTCHA detection/relay, `fill_and_submit()` with various field types, OTP extraction, `wait_for_otp()` with mock Gmail, full `submit_portal()` workflow |
 | `auth/gmail_oauth.py` | `test_oauth_refactor.py` | Good — service cache (hit/miss/expiry/clear), OAuth call logging (counter persistence, TSV format, caller info), `getProfile` skip optimization |
@@ -261,7 +263,7 @@ The following are genuinely untested — not undercovered, but absent:
 
 **GitHub API rate limit warning** — the `X-RateLimit-Remaining` header check in `_fetch_dir_listing()` is untested. Risk: the warning path may never fire in practice (difficult to discover).
 
-**Dashboard routes `/cards`, `/reextract`, `/api/body/<domain>/<id>`** — these routes in `app.py` have no tests. **`dashboard/blueprints/data_bp.py`** (`/data/<domain>`, `/scan/<domain>`, `/download/<domain>`) — also untested. Risk: template rendering errors or logic bugs are only discovered during live use.
+**Dashboard blueprint routes** — `/cards`, `/reextract` (`dashboard_bp`), `/api/body/<domain>/<id>` (`api_bp`), all pipeline routes (`pipeline_bp`), `/data/<domain>` routes (`data_bp`), `/transfers/*` (`transfers_bp`) have no or partial test coverage. Risk: template rendering errors or logic bugs are only discovered during live use.
 
 **`cost_tracker.record_resolver_result()` and `set_llm_limit()`** — the new functions added during the code review have no dedicated tests (though `set_llm_limit` is exercised indirectly by `test_run.py::test_resolver_skips_llm_when_limit_reached`).
 
@@ -301,9 +303,9 @@ Centralised OAuth2 logic. Tokens are stored per-account in `user_data/tokens/{em
 
 **OAuth call logger:** Every `get_gmail_service()`, `get_gmail_send_service()`, and `check_send_token_valid()` call appends a TSV line to `user_data/oauth_calls.log` with a monotonic counter, UTC timestamp, function name, reason (cache_hit/disk_load/browser_auth/etc.), email, and caller location. Thread-safe via `_log_lock`. The log is append-only — never truncate or rotate.
 
-**Batched OAuth:** The `_reextract_missing_links()` helper in `dashboard/app.py` shares a single `get_gmail_service()` call across all pending re-extractions instead of one per reply.
+**Batched OAuth:** The `_reextract_missing_links()` helper in `dashboard/blueprints/monitor_bp.py` shares a single `get_gmail_service()` call across all pending re-extractions instead of one per reply.
 
-**Gmail send tokens** (`*_send.json`) can be revoked by Google independently of readonly tokens. Symptoms: letters show "ready" forever, send task completes with 0 sent, no error shown. Diagnosis: run `check_send_token_valid(email)` or visit `/pipeline/reauth-send`. The dashboard pre-flight check in `pipeline_send()` calls `_send_token_valid()` before launching the background task.
+**Gmail send tokens** (`*_send.json`) can be revoked by Google independently of readonly tokens. Symptoms: letters show "ready" forever, send task completes with 0 sent, no error shown. Diagnosis: run `check_send_token_valid(email)` or visit `/pipeline/reauth-send`. The dashboard pre-flight check in `pipeline_send()` (in `dashboard/blueprints/pipeline_bp.py`) calls `_send_token_valid()` before launching the background task.
 
 ---
 
@@ -318,7 +320,7 @@ Issues identified during code review (2026-03-16). 29 issues were found and fixe
 | P3 | Dashboard `/refresh` | Blocks the HTTP response during a full monitor run. Should use a background thread or task queue. |
 | P3 | Monitor reply dedup cache | `_llm_cache` in `classifier.py` resets between runs. Identical auto-replies in separate runs each trigger an LLM call. |
 | P2 | `portal_submitter/submitter.py` | Ketch portals always fail reCAPTCHA v3 in headless Playwright — falls back to manual. No known workaround. |
-| P3 | `dashboard/app.py` + `dashboard/blueprints/` | Flask routes and template rendering have no test coverage — only pure helper functions (now in `shared.py`) are tested. Blueprint extraction in progress: Phase 1 (costs, settings, api) and Phase 2 (data) complete; `app.py` down from ~3,594 to ~2,571 lines. |
+| P3 | `dashboard/blueprints/` | Flask routes and template rendering have partial test coverage — only pure helper functions (in `shared.py`) and a few routes (`/`, `/refresh`, `/company/<domain>`) are tested. Blueprint extraction complete: all routes moved from `app.py` into 10 blueprints across 4 phases; `app.py` is now a 34-line entry point. |
 | — | `monitor.py` | Zero test coverage for the CLI entry point. |
 
 ---
