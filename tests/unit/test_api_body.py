@@ -9,7 +9,9 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from dashboard.app import app
+from dashboard import create_app
+
+app = create_app()
 
 
 @pytest.fixture

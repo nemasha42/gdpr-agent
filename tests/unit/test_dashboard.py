@@ -62,7 +62,9 @@ def client(tmp_path):
     )
     save_user(admin, path=tmp_path / "users.json")
 
-    from dashboard.app import app
+    from dashboard import create_app
+
+    app = create_app()
 
     with patch("contact_resolver.cost_tracker._COST_LOG_PATH", cost_path):
         app.config["TESTING"] = True
