@@ -203,7 +203,7 @@ def captcha_show(domain: str):
 
     if not screenshot.exists() or not challenge_file.exists():
         flash("No pending CAPTCHA for this domain.", "warning")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("main.dashboard"))
 
     img_b64 = base64.b64encode(screenshot.read_bytes()).decode()
     challenge = json.loads(challenge_file.read_text())
@@ -236,4 +236,4 @@ def captcha_solve(domain: str):
     else:
         flash("CAPTCHA challenge not found or already expired.", "warning")
 
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("main.dashboard"))
