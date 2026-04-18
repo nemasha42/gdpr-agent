@@ -154,7 +154,6 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
                     r"will not begin processing.{0,40}until you have confirmed"
                     r"|confirm.{0,20}request.{0,20}button"
                     r"|confirm request"
-                    r"|hrtechprivacy\.com/confirm"
                     r"|click.{0,30}confirm",
                     re.I,
                 ),
@@ -203,7 +202,6 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
                     # Portal/form redirect signals (merged from former REDIRECT_TO_PORTAL)
                     r"|please submit via|privacy portal|dsar portal"
                     r"|online form at|submit your request at"
-                    r"|requests\.hrtechprivacy\.com"
                     r"|use our (online|web) (form|portal|tool)"
                     # Self-service deflection — company telling user to manage data themselves
                     r"|via our self-service|self-service portal|self-service tool"
@@ -296,7 +294,6 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
                     r"data file is now available for download"
                     r"|download your.{0,30}personal data"
                     r"|download link will expire"
-                    r"|glassdoor\.com/dyd/download\?token="
                     r"|access your.{0,20}data.{0,20}link"
                     r"|your data is ready"
                     r"|your.{0,20}export.{0,20}(is )?ready"
@@ -425,9 +422,7 @@ _RE_REF_UUID = re.compile(
     re.I,
 )
 _RE_REF_GENERIC = re.compile(r"Ref(?:erence)?[:#\s]\s*([\w-]+)", re.I)
-_RE_CONFIRM_URL = re.compile(
-    r"https://requests\.hrtechprivacy\.com/confirm/[\w/-]+", re.I
-)
+_RE_CONFIRM_URL = re.compile(r"https?://\S+/confirm/[\w/-]+", re.I)
 _RE_DOWNLOAD_URL = re.compile(
     r"https://\S+/dyd/download\?token=[^\s\u201c\u201d\"'<>]+"  # Glassdoor
     r"|https?://\S+(?:download|export)/[^\s\u201c\u201d\"'<>]{8,}"  # path-based export
@@ -864,21 +859,26 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
         r"(?:please\s+)?(?:submit|file|send|make|raise|log|open)\s+"
         r"(?:your\s+)?(?:request|inquiry|query|complaint|ticket|case)\s+"
         r"(?:via|through|at|on|using)\s+(.{10,120}?)(?:\.|$)",
-        full_text, re.I,
+        full_text,
+        re.I,
     )
     if not _wc_match:
         _wc_match = re.search(
             r"(?:use|visit|go\s+to|navigate\s+to|access)\s+"
             r"(?:our\s+)?(.{10,120}?)(?:\s+to\s+submit|\s+to\s+file|\s+to\s+make|\.|$)",
-            full_text, re.I,
+            full_text,
+            re.I,
         )
     if _wc_match:
         wrong_channel_instructions = _wc_match.group(0).strip().rstrip(".")
 
-    login_required = bool(re.search(
-        r"log\s*in|sign\s*in|authenticate|your\s+account",
-        full_text, re.I,
-    ))
+    login_required = bool(
+        re.search(
+            r"log\s*in|sign\s*in|authenticate|your\s+account",
+            full_text,
+            re.I,
+        )
+    )
 
     return {
         "reference_number": reference_number,

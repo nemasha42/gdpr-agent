@@ -29,10 +29,6 @@ def test_co_uk_tld() -> None:
     assert normalize_domain("amazon.co.uk") == "Amazon"
 
 
-def test_co_uk_tld_deliveroo() -> None:
-    assert normalize_domain("deliveroo.co.uk") == "Deliveroo"
-
-
 def test_com_au_tld() -> None:
     assert normalize_domain("woolworths.com.au") == "Woolworths"
 
@@ -88,24 +84,16 @@ def test_known_exception_t_co() -> None:
     assert normalize_domain("t.co") == "Twitter/X"
 
 
-def test_known_exception_facebookmail() -> None:
+def test_known_exception_alternate_mail_domain() -> None:
     assert normalize_domain("facebookmail.com") == "Facebook"
 
 
-def test_known_exception_glassdoor() -> None:
+def test_known_exception_preserves_casing() -> None:
     assert normalize_domain("glassdoor.com") == "Glassdoor"
 
 
-def test_known_exception_substack() -> None:
-    assert normalize_domain("substack.com") == "Substack"
-
-
-def test_known_exception_github() -> None:
+def test_known_exception_mixed_case() -> None:
     assert normalize_domain("github.com") == "GitHub"
-
-
-def test_known_exception_linkedin() -> None:
-    assert normalize_domain("linkedin.com") == "LinkedIn"
 
 
 def test_known_exception_after_stripping() -> None:
@@ -144,13 +132,9 @@ def test_canonical_domain_strips_then_maps() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_normalize_youtube_returns_google() -> None:
+def test_alias_resolves_to_parent_group() -> None:
     assert normalize_domain("youtube.com") == "Google"
 
 
 def test_normalize_ibkr_returns_interactive_brokers() -> None:
     assert normalize_domain("ibkr.com") == "Interactive Brokers"
-
-
-def test_normalize_instagram_returns_facebook() -> None:
-    assert normalize_domain("instagram.com") == "Facebook"

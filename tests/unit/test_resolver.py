@@ -38,7 +38,7 @@ _DR_ENTRY: dict = {
 }
 
 # A dataowners entry for testing the overrides lookup
-_DATAOWNERS_SPOTIFY: dict = {
+_DATAOWNERS_OVERRIDE_ENTRY: dict = {
     "spotify.com": {
         "company_name": "Spotify",
         "legal_entity_name": "Spotify AB",
@@ -301,7 +301,7 @@ def test_resolve_skips_stale_cache_and_continues(tmp_path: Path) -> None:
 
 
 def test_resolve_finds_domain_in_dataowners(tmp_path: Path) -> None:
-    resolver = _make_resolver(tmp_path, dataowners=_DATAOWNERS_SPOTIFY)
+    resolver = _make_resolver(tmp_path, dataowners=_DATAOWNERS_OVERRIDE_ENTRY)
 
     result = resolver.resolve("spotify.com", "Spotify")
 
@@ -314,7 +314,7 @@ def test_resolve_finds_domain_in_dataowners(tmp_path: Path) -> None:
 
 
 def test_resolve_dataowners_result_persisted_to_db(tmp_path: Path) -> None:
-    resolver = _make_resolver(tmp_path, dataowners=_DATAOWNERS_SPOTIFY)
+    resolver = _make_resolver(tmp_path, dataowners=_DATAOWNERS_OVERRIDE_ENTRY)
     resolver.resolve("spotify.com", "Spotify")
 
     db = resolver._load_db()
@@ -328,7 +328,7 @@ def test_resolve_dataowners_miss_falls_through_to_datarequests(tmp_path: Path) -
     resolver = _make_resolver(
         tmp_path,
         http_get=mock_http,
-        dataowners={"other.com": _DATAOWNERS_SPOTIFY["spotify.com"]},
+        dataowners={"other.com": _DATAOWNERS_OVERRIDE_ENTRY["spotify.com"]},
     )
 
     result = resolver.resolve("spotify.com", "Spotify")
@@ -593,7 +593,7 @@ def test_verbose_cache_hit(tmp_path: Path, capsys: pytest.CaptureFixture) -> Non
 def test_verbose_cache_miss_and_dataowners_found(
     tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
-    resolver = _make_resolver(tmp_path, dataowners=_DATAOWNERS_SPOTIFY)
+    resolver = _make_resolver(tmp_path, dataowners=_DATAOWNERS_OVERRIDE_ENTRY)
 
     resolver.resolve("spotify.com", "Spotify", verbose=True)
 

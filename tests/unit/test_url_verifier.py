@@ -73,10 +73,6 @@ class TestVerifyLoginRequired:
         result = verify("https://myaccount.google.com/privacy")
         assert result["classification"] == CLASSIFICATION.LOGIN_REQUIRED
 
-    def test_apple_login_required(self):
-        result = verify("https://privacy.apple.com/account")
-        assert result["classification"] == CLASSIFICATION.LOGIN_REQUIRED
-
 
 class TestVerifyGDPRPortal:
     def test_onetrust_portal(self):

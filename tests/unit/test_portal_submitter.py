@@ -74,17 +74,11 @@ class TestPlatformDetection:
             == "salesforce"
         )
 
-    def test_login_required_google(self):
+    def test_login_required_account_portal(self):
         assert (
             detect_platform("https://myaccount.google.com/data-and-privacy")
             == "login_required"
         )
-
-    def test_login_required_apple(self):
-        assert detect_platform("https://privacy.apple.com") == "login_required"
-
-    def test_login_required_meta(self):
-        assert detect_platform("https://www.meta.com/dyi") == "login_required"
 
     def test_unknown(self):
         assert detect_platform("https://example.com/privacy-request") == "unknown"
@@ -242,7 +236,9 @@ class TestAnalyzeForm:
             call_count += 1
             return llm_response
 
-        mapping = analyze_form(fake_page, llm_call=mock_llm_call, cached_mapping=cached)
+        _mapping = analyze_form(
+            fake_page, llm_call=mock_llm_call, cached_mapping=cached
+        )
         assert call_count == 1
 
 

@@ -49,7 +49,7 @@ class TestBouncePermanent:
         )
         assert "BOUNCE_PERMANENT" in result.tags
 
-    def test_google_group_rejection(self):
+    def test_group_permission_bounce(self):
         result = classify(
             msg(
                 snippet="group you tried to contact may not exist or you may not have permission to post"
@@ -84,13 +84,13 @@ class TestAutoAcknowledge:
         result = classify(msg(subject="[GDPR-123456] Your request has been received"))
         assert "AUTO_ACKNOWLEDGE" in result.tags
 
-    def test_google_ticket_format(self):
+    def test_numeric_case_id_auto_acknowledged(self):
         result = classify(
             msg(snippet="Thank you [5-9110000040081] your case has been logged")
         )
         assert "AUTO_ACKNOWLEDGE" in result.tags
 
-    def test_substack_request_received(self):
+    def test_bracketed_request_received_subject(self):
         result = classify(msg(subject="[Request received] Subject Access Request"))
         assert "AUTO_ACKNOWLEDGE" in result.tags
 
@@ -124,7 +124,7 @@ class TestOutOfOffice:
 
 
 class TestConfirmationRequired:
-    def test_hrtechprivacy_url(self):
+    def test_confirm_before_processing_snippet(self):
         result = classify(
             msg(
                 snippet="will not begin processing your request until you have confirmed it by clicking the Confirm Request button"
@@ -136,7 +136,7 @@ class TestConfirmationRequired:
         result = classify(msg(subject="Confirm Your Request — privacy portal"))
         assert "CONFIRMATION_REQUIRED" in result.tags
 
-    def test_hrtechprivacy_url_extracted(self):
+    def test_confirmation_url_extracted(self):
         url = "https://requests.hrtechprivacy.com/confirm/abc-123-xyz"
         result = classify(msg(snippet=f"Click here to confirm: {url}"))
         assert result.extracted["confirmation_url"] == url
@@ -218,8 +218,12 @@ class TestWrongChannel:
         )
         assert "WRONG_CHANNEL" in result.tags
 
-    def test_hrtechprivacy_url(self):
-        result = classify(msg(snippet="Submit via requests.hrtechprivacy.com/submit"))
+    def test_third_party_privacy_portal_url(self):
+        result = classify(
+            msg(
+                snippet="Please submit via our privacy portal at https://privacy.example.com/submit"
+            )
+        )
         assert "WRONG_CHANNEL" in result.tags
 
     def test_self_service_deflection(self):
@@ -234,7 +238,7 @@ class TestWrongChannel:
         )
         assert "WRONG_CHANNEL" in result.tags
 
-    def test_finalroundai_snippet(self):
+    def test_self_service_portal_mention_is_wrong_channel(self):
         # Real Final Round AI reply — truncated snippet that ends mid-sentence
         result = classify(
             msg(
@@ -246,7 +250,8 @@ class TestWrongChannel:
             )
         )
         assert "WRONG_CHANNEL" in result.tags
-    def test_zendesk_ticket_set_to_solved(self):
+
+    def test_ticket_solved_without_data_is_wrong_channel(self):
         """Zendesk 'ticket is set to Solved' without data → WRONG_CHANNEL."""
         result = classify(
             msg(
@@ -283,21 +288,33 @@ class TestWrongChannel:
         )
         assert "DATA_PROVIDED_LINK" in result.tags
         assert "WRONG_CHANNEL" not in result.tags
+
     def test_wrong_channel_instructions_extracted(self):
-        result = classify(msg(snippet="Please submit your request at our privacy portal. Visit https://privacy.example.com/request"))
+        result = classify(
+            msg(
+                snippet="Please submit your request at our privacy portal. Visit https://privacy.example.com/request"
+            )
+        )
         assert "WRONG_CHANNEL" in result.tags
         assert result.extracted.get("wrong_channel_instructions")  # non-empty
 
     def test_wrong_channel_login_required(self):
-        result = classify(msg(snippet="This mailbox is not monitored. Please log in to your account and use our self-service portal"))
+        result = classify(
+            msg(
+                snippet="This mailbox is not monitored. Please log in to your account and use our self-service portal"
+            )
+        )
         assert "WRONG_CHANNEL" in result.tags
         assert result.extracted.get("login_required") is True
 
     def test_wrong_channel_no_login_required(self):
-        result = classify(msg(snippet="This email address is no longer monitored. Please use our support form."))
+        result = classify(
+            msg(
+                snippet="This email address is no longer monitored. Please use our support form."
+            )
+        )
         assert "WRONG_CHANNEL" in result.tags
         assert result.extracted.get("login_required") is False
-
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +344,7 @@ class TestRequestAccepted:
 
 
 class TestDataProvided:
-    def test_data_link_glassdoor(self):
+    def test_data_link_proprietary_token_url(self):
         result = classify(
             msg(
                 subject="Download Your Glassdoor Personal Data File",
@@ -341,7 +358,7 @@ class TestDataProvided:
         result = classify(msg(snippet=f"data file is now available for download {url}"))
         assert result.extracted["data_link"] == url
 
-    def test_data_link_full_token_with_colons(self):
+    def test_data_link_token_with_colon_segments(self):
         """Real Glassdoor tokens contain colon-separated segments — must capture in full."""
         url = "https://www.glassdoor.com/dyd/download?token=2mUMY8nURO44N2FmJH4TyA:AaZmUVY-abc:SPjrP6rx2Yg0"
         result = classify(msg(snippet=f"data file is now available {url}"))
@@ -456,7 +473,7 @@ class TestMultiTag:
 
 
 class TestReferenceExtraction:
-    def test_google_ticket_ref(self):
+    def test_numeric_case_id_ref_extracted(self):
         result = classify(msg(snippet="Your case [5-9110000040081] has been received"))
         assert result.extracted["reference_number"] == "[5-9110000040081]"
 
@@ -822,7 +839,7 @@ class TestDraftTone:
             mock_client.messages.create.return_value = mock_response
 
             with patch("reply_monitor.classifier.cost_tracker"):
-                result = generate_reply_draft(
+                _result = generate_reply_draft(
                     "Your ticket is set to Solved. Visit our portal for details.",
                     ["WRONG_CHANNEL"],
                     "Zendesk",
@@ -858,7 +875,7 @@ class TestDraftTone:
             mock_client.messages.create.return_value = mock_response
 
             with patch("reply_monitor.classifier.cost_tracker"):
-                result = generate_reply_draft(
+                _result = generate_reply_draft(
                     "This address is no longer monitored. Use our support form.",
                     ["WRONG_CHANNEL"],
                     "Example Corp",

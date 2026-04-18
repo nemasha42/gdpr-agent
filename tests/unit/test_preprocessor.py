@@ -100,7 +100,7 @@ class TestJsonAnalysis:
         assert "track" in meta.json_keys
         assert result.total_records_estimate == 3
 
-    def test_twitter_js_wrapper_unwrapped(self, tmp_path):
+    def test_js_variable_assignment_wrapper_unwrapped(self, tmp_path):
         inner = json.dumps([{"tweet": {"full_text": "Hello world"}}])
         js_content = f"window.YTD.tweets.part0 = {inner}"
         fpath = tmp_path / "tweets.js"

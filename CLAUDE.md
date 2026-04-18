@@ -91,6 +91,8 @@ Value `"portal_submitted"` is valid alongside `""`, `"pending"`, `"sent"`, `"dis
 
 All tests in `tests/unit/` use DI or `unittest.mock` — no real network calls. `ContactResolver` accepts injectable `http_get`, `llm_search`, `privacy_scrape`.
 
+**No customer names in test code.** Test function names, variable names, and regex patterns must describe the *pattern* being tested, not a specific customer (e.g. `test_data_link_proprietary_token_url`, not `test_data_link_glassdoor`). Customer names in fixture *data* (email addresses, URLs used as test input) are fine for fidelity. Platform names (Zendesk, Ketch, OneTrust) are legitimate and stay.
+
 ## Known Tech Debt
 
 - Dashboard route test coverage is partial — most blueprint routes lack dedicated tests

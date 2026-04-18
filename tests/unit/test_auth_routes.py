@@ -34,6 +34,7 @@ def app(tmp_path):
 
     # Dummy dashboard route so url_for("main.dashboard") resolves in tests
     from flask import Blueprint
+
     _main_bp = Blueprint("main", __name__)
 
     @_main_bp.route("/")
@@ -95,7 +96,7 @@ def test_logout_redirects_to_login(app, tmp_path):
         assert "/login" in resp.headers["Location"]
 
 
-def test_login_google_redirects_to_oauth(app, tmp_path):
+def test_login_redirects_to_oauth_provider(app, tmp_path):
     """Test that /login/google starts the OAuth flow and redirects to Google."""
     from unittest.mock import patch, MagicMock
 
