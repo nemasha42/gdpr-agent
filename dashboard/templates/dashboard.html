@@ -64,13 +64,12 @@
         </div>
       </div>
 
-      {% if card.tried_emails %}
-        {% for addr in card.tried_emails %}
-          <div class="text-muted small"><s>&#x2709; {{ addr }}</s></div>
-        {% endfor %}
-      {% endif %}
       {% if card.to_email %}
-        <div class="text-muted small mb-2">&#x2709; {{ card.to_email }}</div>
+        {% if card.status in ('BOUNCED', 'ADDRESS_NOT_FOUND') %}
+          <div class="text-muted small mb-2"><s>&#x2709; {{ card.to_email }}</s></div>
+        {% else %}
+          <div class="text-muted small mb-2">&#x2709; {{ card.to_email }}</div>
+        {% endif %}
       {% endif %}
 
       <div class="d-flex gap-3 small text-muted mb-2">
@@ -127,7 +126,7 @@
     <div class="card-footer bg-transparent border-top-0">
       <div class="d-flex gap-2">
         <a href="/company/{{ card.domain }}?account={{ selected_account }}"
-           class="btn btn-sm {% if card.has_company_replies %}btn-outline-primary{% else %}btn-outline-secondary text-muted{% endif %}">View correspondence</a>
+           class="btn btn-sm btn-outline-{{ status_colour.get(card.company_status, 'secondary') }}">View correspondence</a>
         {% if card.has_data %}
           <a href="/data/{{ card.domain }}?account={{ selected_account }}"
              class="btn btn-sm btn-success">&#x1F4E6; View data</a>
@@ -154,6 +153,26 @@
           <span class="badge bg-warning text-dark" style="font-size:0.68rem">&#x270F; Draft reply ready</span>
         </div>
       {% endif %}
+      {# Status pictograms: SAR / SUB / DEL #}
+      <div class="picto-row mt-2">
+        {% if card.status == 'COMPLETED' %}
+          <span class="picto picto-green" title="SAR: Data provided">SAR</span>
+        {% elif card.status in ('DENIED', 'BOUNCED', 'ADDRESS_NOT_FOUND') or 'WRONG_CHANNEL' in card.tags %}
+          <span class="picto picto-red" title="SAR: {{ card.status.replace('_', ' ') }}">SAR</span>
+        {% else %}
+          <span class="picto picto-yellow" title="SAR: Waiting">SAR</span>
+        {% endif %}
+        {% if not card.sp_sent %}
+          <span class="picto picto-grey" title="Subprocessor: Not requested">SUB</span>
+        {% elif card.sp_status == 'COMPLETED' %}
+          <span class="picto picto-green" title="Subprocessor: Data provided">SUB</span>
+        {% elif card.sp_status in ('DENIED', 'BOUNCED', 'ADDRESS_NOT_FOUND') %}
+          <span class="picto picto-red" title="Subprocessor: {{ card.sp_status.replace('_', ' ') }}">SUB</span>
+        {% else %}
+          <span class="picto picto-yellow" title="Subprocessor: Waiting">SUB</span>
+        {% endif %}
+        <span class="picto picto-grey" title="Deletion: Not requested">DEL</span>
+      </div>
     </div>
   </div>
 </div>

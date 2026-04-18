@@ -16,6 +16,7 @@ class Contact(BaseModel):
     dpo_email: str = ""
     privacy_email: str = ""
     gdpr_portal_url: str = ""
+    privacy_policy_url: str = ""
     postal_address: PostalAddress = Field(default_factory=PostalAddress)
     preferred_method: Literal["email", "portal", "postal"] = "email"
 

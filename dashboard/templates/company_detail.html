@@ -65,6 +65,12 @@
   <div class="flex-grow-1">
     <h4 class="mb-0 fw-bold">{{ state.company_name }}</h4>
     <span class="text-muted small">{{ domain }}</span>
+    {% if privacy_policy_url %}
+      <div class="mt-1">
+        <a href="{{ privacy_policy_url }}" target="_blank" class="small text-decoration-none">
+          &#x1F4C4; Privacy Policy</a>
+      </div>
+    {% endif %}
   </div>
   <div class="text-end">
     <span class="badge bg-{{ company_status_colour }} fs-6">{{ company_status.replace('_', ' ') }}</span>

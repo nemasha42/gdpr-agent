@@ -133,7 +133,7 @@ def scrape_privacy_page(
             else:
                 print(f"found portal: {portal}")
 
-        return _build_record(company_name, emails, portal)
+        return _build_record(company_name, emails, portal, privacy_policy_url=url)
 
     return None
 
@@ -183,6 +183,8 @@ def _build_record(
     company_name: str,
     emails: list[str],
     portal: str,
+    *,
+    privacy_policy_url: str = "",
 ) -> CompanyRecord:
     dpo_email, privacy_email = _classify_emails(emails)
     has_email = bool(emails)
@@ -197,6 +199,7 @@ def _build_record(
             dpo_email=dpo_email,
             privacy_email=privacy_email,
             gdpr_portal_url=portal,
+            privacy_policy_url=privacy_policy_url,
             preferred_method=preferred,  # type: ignore[arg-type]
         ),
         flags=Flags(

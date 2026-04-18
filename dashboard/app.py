@@ -502,7 +502,8 @@ def _lookup_company(domain: str) -> dict:
     try:
         import json
         data = json.loads(_COMPANIES_PATH.read_text())
-        return data.get(domain, {})
+        companies = data.get("companies", data)
+        return companies.get(domain, {})
     except Exception:
         return {}
 
@@ -752,6 +753,11 @@ def company_detail(domain: str):
     )
     sar_days_left = days_remaining(state.sar_sent_at)
 
+    # Look up privacy policy URL from companies.json
+    company_record = _lookup_company(domain)
+    contact_info = company_record.get("contact", {})
+    privacy_policy_url = contact_info.get("privacy_policy_url", "")
+
     return render_template(
         "company_detail.html",
         domain=domain,
@@ -771,6 +777,7 @@ def company_detail(domain: str):
         company_status=company_status,
         company_status_colour=_STATUS_COLOUR.get(company_status, "secondary"),
         sar_days_left=sar_days_left,
+        privacy_policy_url=privacy_policy_url,
     )
 
 

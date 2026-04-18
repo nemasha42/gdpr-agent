@@ -75,10 +75,12 @@
         <div class="card-body">
           <h5 class="card-title mb-1">{{ item.company_name }}</h5>
           <div class="text-muted small mb-2">{{ item.domain }}</div>
-          {% if item.tried_emails %}
-            {% for addr in item.tried_emails %}
-              <div class="text-muted small"><s>&#x2709; {{ addr }}</s></div>
-            {% endfor %}
+          {% if item.to_email %}
+            {% if item.status in ('BOUNCED', 'ADDRESS_NOT_FOUND') %}
+              <div class="text-muted small"><s>&#x2709; {{ item.to_email }}</s></div>
+            {% else %}
+              <div class="text-muted small">&#x2709; {{ item.to_email }}</div>
+            {% endif %}
           {% endif %}
           <div class="mb-2 mt-1">
             <span class="badge bg-{{ item.status_color or 'secondary' }}">{{ item.status.replace('_', ' ') }}</span>
