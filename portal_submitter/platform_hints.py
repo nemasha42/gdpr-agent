@@ -37,6 +37,16 @@ _OTP_SENDERS: dict[str, list[str]] = {
     "ketch": ["noreply@ketch.com"],
 }
 
+# Domains that portal platforms use to send replies (verification emails,
+# status updates, results).  The fetcher searches these when a company has
+# portal_status set, catching out-of-domain portal replies.
+_PORTAL_REPLY_DOMAINS: dict[str, list[str]] = {
+    "onetrust": ["onetrust.com"],
+    "trustarc": ["trustarc.com"],
+    "ketch": ["ketch.com", "m.ketch.com"],
+    "salesforce": ["salesforce.com"],
+}
+
 
 def detect_platform(url: str, html: str = "") -> str:
     """Classify a portal URL into a known platform or 'unknown'.
@@ -89,3 +99,30 @@ def detect_platform(url: str, html: str = "") -> str:
 def otp_sender_hints(platform: str) -> list[str]:
     """Return email sender patterns to watch for OTP/verification emails."""
     return list(_OTP_SENDERS.get(platform, []))
+
+
+def portal_reply_domains(platform: str) -> list[str]:
+    """Return email sender domains used by the portal platform for replies.
+
+    These domains are searched by the fetcher when a company uses a portal
+    platform (Ketch, OneTrust, TrustArc, Salesforce) that sends replies
+    from the platform's own domain rather than the company's domain.
+    """
+    return list(_PORTAL_REPLY_DOMAINS.get(platform, []))
+
+
+def all_portal_reply_domains() -> list[str]:
+    """Return all known portal platform reply domains (deduplicated).
+
+    Used as a fallback when a company has portal_status set but the
+    platform cannot be determined from the portal URL alone (e.g.
+    Zendesk uses Ketch, but the portal URL is on zendesk.com).
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+    for domains in _PORTAL_REPLY_DOMAINS.values():
+        for d in domains:
+            if d not in seen:
+                seen.add(d)
+                result.append(d)
+    return result

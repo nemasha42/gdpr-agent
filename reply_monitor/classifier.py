@@ -350,7 +350,18 @@ _RULES: list[tuple[str, list[tuple[str, re.Pattern]]]] = [
                     r"|not in our systems|no data held|unable to identify you"
                     r"|no account.{0,20}associated"
                     r"|do not hold.{0,30}data|not hold.{0,30}records"
-                    r"|hold no.{0,20}(data|information|records).{0,20}about you",
+                    r"|hold no.{0,20}(data|information|records).{0,20}about you"
+                    r"|unable to (find|locate|process).{0,30}(your|the).{0,30}(request|data|information)"
+                    r"|could not (find|locate|identify).{0,30}(you|your|account|record)",
+                    re.I,
+                ),
+            ),
+            (
+                "subject",
+                re.compile(
+                    r"unable to process.{0,10}$"
+                    r"|request.{0,20}not.{0,20}(found|processed)"
+                    r"|no.{0,10}data.{0,10}(found|held)",
                     re.I,
                 ),
             ),
@@ -616,12 +627,16 @@ def classify(
     message: dict,
     *,
     api_key: str | None = None,
+    in_thread: bool = False,
 ) -> ClassificationResult:
     """Classify a Gmail message dict into GDPR reply tags.
 
     Args:
         message: dict with keys: from, subject, snippet, has_attachment (bool)
         api_key: Anthropic API key for LLM fallback (optional)
+        in_thread: True when this message was fetched from a known SAR thread.
+            Suppresses NON_GDPR tagging — every message in a SAR thread is
+            contextually relevant even if its content looks like marketing/survey.
 
     Returns:
         ClassificationResult with tags, extracted info, and llm_used flag
@@ -633,7 +648,9 @@ def classify(
     has_attachment = message.get("has_attachment", False)
 
     # --- Pass 0: NON_GDPR pre-pass ---
-    if _is_non_gdpr(from_addr, subject, snippet):
+    # Skip for in-thread messages: every message in a SAR thread is contextually
+    # relevant, even CSAT surveys or ticket-closure notifications.
+    if not in_thread and _is_non_gdpr(from_addr, subject, snippet):
         return ClassificationResult(
             tags=["NON_GDPR"],
             extracted=_extract(from_addr, subject, snippet),
@@ -732,6 +749,10 @@ def classify(
                 {k: v for k, v in llm_result.items() if k in extracted and v}
             )
             llm_used = True
+            # In-thread messages: LLM may return NON_GDPR for surveys/closures
+            # within a SAR thread — override to HUMAN_REVIEW so they stay visible.
+            if in_thread and tags == ["NON_GDPR"]:
+                tags = ["HUMAN_REVIEW"]
             # HUMAN_REVIEW is a last-resort fallback — drop it if any substantive tag is present
             if "HUMAN_REVIEW" in tags and len(tags) > 1:
                 tags = [t for t in tags if t != "HUMAN_REVIEW"]

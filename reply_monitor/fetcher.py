@@ -1,21 +1,60 @@
 """Fetch Gmail replies for sent SAR records.
 
 Strategy:
-  1. If gmail_thread_id is present → threads.get() to get all messages in thread
-     → skip messages where From matches the user's own address
-  2. Fallback (legacy records without thread_id) → two Gmail searches:
-       a) from:{to_email_address}  after:{day_before_sent}   (exact address, broadest catch)
-       b) from:{domain}            after:{day_before_sent}   (whole domain, catches replies
-                                                              from a different address)
-     No subject filter — auto-acks, OOO replies, and data-download emails all have
-     different subject lines and would be missed otherwise.
-  3. Deduplicate against already-stored reply IDs
+  1. If gmail_thread_id is present -> threads.get() to get all messages in thread
+     -> skip messages where From matches the user's own address
+  2. Supplementary GDPR-keyword search against the company's domain -- catches
+     out-of-thread replies from ticket systems (Zendesk, Freshdesk, etc.) that
+     reply from new threads instead of the original SAR thread.
+  3. Fallback (legacy records without thread_id) -> two Gmail searches:
+       a) from:{to_email_address}  after:{day_before_sent}
+       b) from:{domain}            after:{day_before_sent}
+  4. Portal platform sender search -- when portal_sender_domains is provided,
+     searches for emails from third-party portal platforms (Ketch, OneTrust,
+     TrustArc, Salesforce) that send replies from their own domain.
+  5. Deduplicate against already-stored reply IDs
 """
 
 from __future__ import annotations
 
+import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Gmail API exception types -- conditional import so tests run without google libs
+# ---------------------------------------------------------------------------
+_API_ERRORS: tuple[type[BaseException], ...] = (OSError,)
+try:
+    from googleapiclient.errors import HttpError
+
+    _API_ERRORS = (*_API_ERRORS, HttpError)
+except ImportError:
+    pass
+
+# ---------------------------------------------------------------------------
+# GDPR keyword search constants
+# ---------------------------------------------------------------------------
+
+# Gmail search OR-group (Gmail {term1 term2} = any match).
+_GDPR_GMAIL_TERMS = (
+    '{gdpr "subject access" "data subject" "data request" '
+    '"personal data" "right to erasure" sub-processor '
+    '"data protection" sar "your request" "your data"}'
+)
+
+# Local regex for post-fetch validation of GDPR relevance.
+_RE_GDPR_RELEVANT = re.compile(
+    r"(?i)"
+    r"(?:gdpr|subject.access|data.subject|data.request|personal.data|"
+    r"right.to.erasure|sub.?processor|data.protection|"
+    r"privacy.request|your.request|your.data|"
+    r"data.export|download.your|erasure|rectification|"
+    r"data.portability|article.1[5-7]|article.20)"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -29,42 +68,62 @@ def fetch_replies_for_sar(
     existing_reply_ids: set[str] | None = None,
     user_email: str = "",
     verbose: bool = False,
+    portal_sender_domains: list[str] | None = None,
 ) -> list[dict]:
     """Return new reply message dicts for a sent SAR record.
 
     Each returned dict has:
-        id, from, subject, received_at (ISO), snippet, has_attachment (bool),
-        parts (list of attachment part dicts for the attachment handler)
+        id, from, subject, received_at (ISO), snippet, body,
+        has_attachment (bool), parts (list of attachment part dicts)
 
     Args:
-        service:            Authenticated Gmail readonly service
-        sent_record:        One entry from sent_letters.json
-        existing_reply_ids: Set of gmail_message_ids already stored in state
-        user_email:         The sender's email address (to filter outgoing msgs)
+        service:               Authenticated Gmail readonly service
+        sent_record:           One entry from sent_letters.json
+        existing_reply_ids:    Set of gmail_message_ids already stored in state
+        user_email:            The sender's email address (to filter outgoing msgs)
+        portal_sender_domains: Extra domains to search for portal platform replies
+                               (e.g. ["ketch.com", "m.ketch.com"] for Ketch portals)
     """
-    if existing_reply_ids is None:
-        existing_reply_ids = set()
-
     thread_id = sent_record.get("gmail_thread_id", "")
-    messages: list[dict] = []
-
-    seen_ids: set[str] = set(existing_reply_ids)
+    seen_ids: set[str] = set(existing_reply_ids) if existing_reply_ids else set()
     messages: list[dict] = []
 
     if thread_id:
-        # Thread-based lookup is authoritative: only messages in our SAR's Gmail
-        # thread are genuine replies. Do NOT also search by domain — that picks up
-        # newsletters, marketing mail, and other unrelated emails from the same sender.
+        # Thread-based lookup is authoritative for in-thread replies.
         thread_msgs = _fetch_by_thread(
             service, thread_id, user_email, seen_ids, verbose
         )
+        for m in thread_msgs:
+            m["in_thread"] = True  # classifier uses this to suppress NON_GDPR
         messages.extend(thread_msgs)
+        for m in thread_msgs:
+            seen_ids.add(m["id"])
+
+        # Supplementary GDPR-keyword search: catches out-of-thread replies
+        # from ticket systems (Zendesk, Freshdesk) that create new threads.
+        gdpr_msgs = _fetch_gdpr_from_domain(
+            service, sent_record, user_email, seen_ids, verbose
+        )
+        messages.extend(gdpr_msgs)
+        for m in gdpr_msgs:
+            seen_ids.add(m["id"])
     else:
-        # No thread_id: legacy record or portal/postal SAR — fall back to domain search.
+        # No thread_id: legacy record or portal/postal SAR -- full domain search.
         search_msgs = _fetch_by_search(
             service, sent_record, user_email, seen_ids, verbose
         )
         messages.extend(search_msgs)
+        for m in search_msgs:
+            seen_ids.add(m["id"])
+
+    # Portal platform sender domains: catches replies from third-party portal
+    # platforms (Ketch, OneTrust, TrustArc, Salesforce) that send from their
+    # own domain rather than the company's domain.
+    if portal_sender_domains:
+        portal_msgs = _fetch_from_portal_senders(
+            service, sent_record, portal_sender_domains, user_email, seen_ids, verbose
+        )
+        messages.extend(portal_msgs)
 
     return messages
 
@@ -85,20 +144,17 @@ def _fetch_by_thread(
         thread = (
             service.users()
             .threads()
-            .get(
-                userId="me",
-                id=thread_id,
-                format="full",
-            )
+            .get(userId="me", id=thread_id, format="full")
             .execute()
         )
-    except Exception:
+    except _API_ERRORS as exc:
+        logger.warning("Thread fetch failed for %s: %s", thread_id, exc)
         return []
 
     results = []
     for i, msg in enumerate(thread.get("messages", [])):
         if i == 0:
-            continue  # First message is the original letter we sent — always skip
+            continue  # First message is the original letter we sent
         if msg["id"] in existing_ids:
             continue
         from_header = _get_header(msg, "From")
@@ -112,7 +168,147 @@ def _fetch_by_thread(
 
 
 # ---------------------------------------------------------------------------
-# Search-based fallback
+# GDPR keyword search (supplementary -- runs after thread lookup)
+# ---------------------------------------------------------------------------
+
+
+def _fetch_gdpr_from_domain(
+    service: Any,
+    sent_record: dict,
+    user_email: str,
+    existing_ids: set[str],
+    verbose: bool = False,
+) -> list[dict]:
+    """Search for GDPR-related emails from the company's domain.
+
+    Catches out-of-thread replies from ticket systems that create new
+    threads/tickets instead of replying in the original SAR thread.
+    Results are filtered through _is_gdpr_relevant() to prevent false positives.
+    """
+    to_email = sent_record.get("to_email", "")
+    if not to_email or "@" not in to_email:
+        return []
+
+    domain = to_email.split("@")[-1]
+    date_filter = _date_filter(sent_record.get("sent_at", ""))
+    query = f"from:{domain}{date_filter} {_GDPR_GMAIL_TERMS}"
+
+    if verbose:
+        print(f"    [gdpr-search] {query}")
+
+    refs = _paginated_search(service, query, max_results=50)
+    results: list[dict] = []
+
+    for ref in refs:
+        if ref["id"] in existing_ids:
+            continue
+        existing_ids.add(ref["id"])
+        try:
+            msg = (
+                service.users()
+                .messages()
+                .get(userId="me", id=ref["id"], format="full")
+                .execute()
+            )
+        except _API_ERRORS as exc:
+            logger.debug("Failed to fetch message %s: %s", ref["id"], exc)
+            continue
+
+        from_header = _get_header(msg, "From")
+        if user_email and user_email.lower() in from_header.lower():
+            continue
+
+        parsed = _parse_message(msg)
+        if parsed and _is_gdpr_relevant(parsed):
+            results.append(parsed)
+
+    return results
+
+
+def _is_gdpr_relevant(msg: dict) -> bool:
+    """Check if a message's content is GDPR-relevant using local regex."""
+    text = " ".join(
+        [
+            msg.get("subject", ""),
+            msg.get("snippet", ""),
+            msg.get("body", "")[:2000],
+        ]
+    )
+    return bool(_RE_GDPR_RELEVANT.search(text))
+
+
+# ---------------------------------------------------------------------------
+# Portal platform sender search
+# ---------------------------------------------------------------------------
+
+
+def _fetch_from_portal_senders(
+    service: Any,
+    sent_record: dict,
+    portal_domains: list[str],
+    user_email: str,
+    existing_ids: set[str],
+    verbose: bool = False,
+) -> list[dict]:
+    """Search for emails from portal platform sender domains.
+
+    When a company uses a third-party portal platform (Ketch, OneTrust, etc.),
+    replies come from the platform's domain (e.g. m.ketch.com) rather than
+    the company's domain.  This function searches each portal domain for
+    GDPR-related emails sent after the SAR date.
+    """
+    date_filter = _date_filter(sent_record.get("sent_at", ""))
+    results: list[dict] = []
+
+    for portal_domain in portal_domains:
+        query = f"from:{portal_domain}{date_filter} {_GDPR_GMAIL_TERMS}"
+
+        if verbose:
+            print(f"    [portal-search] {query}")
+
+        refs = _paginated_search(service, query, max_results=50)
+
+        for ref in refs:
+            if ref["id"] in existing_ids:
+                continue
+            existing_ids.add(ref["id"])
+            try:
+                msg = (
+                    service.users()
+                    .messages()
+                    .get(userId="me", id=ref["id"], format="full")
+                    .execute()
+                )
+            except _API_ERRORS as exc:
+                logger.debug("Failed to fetch message %s: %s", ref["id"], exc)
+                continue
+
+            from_header = _get_header(msg, "From")
+            if user_email and user_email.lower() in from_header.lower():
+                continue
+
+            parsed = _parse_message(msg)
+            if parsed:
+                # Portal platform emails are inherently GDPR-relevant — they
+                # only exist because a SAR was filed via that platform.  Still
+                # run the relevance check to filter marketing from the same
+                # platform domain, but also accept emails whose subject
+                # contains the company name as a strong signal.
+                company_name = sent_record.get("company_name", "")
+                subject = parsed.get("subject", "")
+                company_match = (
+                    company_name
+                    and company_name.lower() in subject.lower()
+                )
+                if company_match or _is_gdpr_relevant(parsed):
+                    parsed["from_portal_platform"] = True
+                    results.append(parsed)
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Search-based fallback (for records without thread_id)
 # ---------------------------------------------------------------------------
 
 
@@ -128,21 +324,8 @@ def _fetch_by_search(
         return []
 
     domain = to_email.split("@")[-1]
-    sent_at = sent_record.get("sent_at", "")
+    date_filter = _date_filter(sent_record.get("sent_at", ""))
 
-    # Use one day before sent_at so same-day replies are never excluded.
-    # Gmail's after: filter is exclusive of the specified date.
-    date_filter = ""
-    if sent_at:
-        try:
-            sent_date = datetime.fromisoformat(sent_at[:19]).date()
-            before_sent = sent_date - timedelta(days=1)
-            date_filter = f" after:{before_sent.isoformat().replace('-', '/')}"
-        except ValueError:
-            pass
-
-    # Query (a): exact address we sent to (most targeted)
-    # Query (b): whole domain (catches replies from privacy@ even when we sent to dpo@)
     queries = []
     if to_email:
         queries.append(f"from:{to_email}{date_filter}")
@@ -163,14 +346,11 @@ def _fetch_by_search(
                 msg = (
                     service.users()
                     .messages()
-                    .get(
-                        userId="me",
-                        id=ref["id"],
-                        format="full",
-                    )
+                    .get(userId="me", id=ref["id"], format="full")
                     .execute()
                 )
-            except Exception:
+            except _API_ERRORS as exc:
+                logger.debug("Failed to fetch message %s: %s", ref["id"], exc)
                 continue
             from_header = _get_header(msg, "From")
             if user_email and user_email.lower() in from_header.lower():
@@ -182,7 +362,21 @@ def _fetch_by_search(
     return results
 
 
-def _paginated_search(service: Any, query: str, max_results: int = 200) -> list[dict]:
+def _date_filter(sent_at: str) -> str:
+    """Build Gmail after: date filter string from an ISO datetime."""
+    if not sent_at:
+        return ""
+    try:
+        sent_date = datetime.fromisoformat(sent_at[:19]).date()
+        before_sent = sent_date - timedelta(days=1)
+        return f" after:{before_sent.isoformat().replace('-', '/')}"
+    except ValueError:
+        return ""
+
+
+def _paginated_search(
+    service: Any, query: str, max_results: int = 200
+) -> list[dict]:
     """Run a Gmail search query and return all message refs across pages."""
     refs: list[dict] = []
     page_token = None
@@ -196,7 +390,8 @@ def _paginated_search(service: Any, query: str, max_results: int = 200) -> list[
             kwargs["pageToken"] = page_token
         try:
             resp = service.users().messages().list(**kwargs).execute()
-        except Exception:
+        except _API_ERRORS as exc:
+            logger.warning("Gmail search failed for query %r: %s", query, exc)
             break
         refs.extend(resp.get("messages", []))
         page_token = resp.get("nextPageToken")
@@ -258,7 +453,8 @@ def _extract_body(payload: dict) -> str:
             return base64.urlsafe_b64decode(data + "==").decode(
                 "utf-8", errors="replace"
             )
-        except Exception:
+        except ValueError as exc:
+            logger.debug("Base64 decode failed: %s", exc)
             return ""
 
     def _strip_html(text: str) -> str:
@@ -266,7 +462,7 @@ def _extract_body(payload: dict) -> str:
         text = _re.sub(
             r"<(style|script|head)[^>]*>.*?</\1>", " ", text, flags=_re.I | _re.S
         )
-        # Preserve href URLs before stripping tags — download links live in <a href="...">
+        # Preserve href URLs before stripping tags -- download links live in <a href="...">
         # Insert the URL as plain text next to the anchor text so regexes can find it.
         text = _re.sub(
             r'<a\s[^>]*href=["\']([^"\']+)["\'][^>]*>',
@@ -341,7 +537,7 @@ def _get_header(msg: dict, name: str) -> str:
 
 def _find_attachment_parts(payload: dict) -> list[dict]:
     """Recursively find MIME parts that are attachments."""
-    parts = []
+    parts: list[dict] = []
     _collect_attachment_parts(payload, parts)
     return parts
 
@@ -375,5 +571,6 @@ def _parse_date(date_str: str) -> str:
             .isoformat(timespec="seconds")
             .replace("+00:00", "Z")
         )
-    except Exception:
+    except (ValueError, TypeError, OverflowError) as exc:
+        logger.debug("Date parse failed for %r: %s", date_str, exc)
         return datetime.now(timezone.utc).isoformat(timespec="seconds")

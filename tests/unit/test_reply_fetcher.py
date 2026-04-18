@@ -5,8 +5,10 @@ from unittest.mock import MagicMock
 
 from reply_monitor.fetcher import (
     _extract_body,
+    _fetch_gdpr_from_domain,
     _find_attachment_parts,
     _get_header,
+    _is_gdpr_relevant,
     _parse_message,
     fetch_replies_for_sar,
 )
@@ -125,7 +127,7 @@ class TestFetchByThread:
             "sent_at": "2026-03-16T00:00:00",
         }
         service = MagicMock()
-        service.users().threads().get().execute.side_effect = Exception("API error")
+        service.users().threads().get().execute.side_effect = OSError("API error")
         service.users().messages().list().execute.return_value = {"messages": []}
 
         results = fetch_replies_for_sar(service, sent_record)
@@ -415,3 +417,201 @@ class TestExtractBody:
         result = _extract_body(payload)
         assert "First part" in result
         assert "Second part" in result
+
+
+# ---------------------------------------------------------------------------
+# GDPR keyword search tests
+# ---------------------------------------------------------------------------
+
+
+class TestFetchGdprFromDomain:
+    def test_finds_out_of_thread_gdpr_reply(self):
+        """GDPR keyword search catches replies from ticket systems that create
+        new threads instead of replying in the original SAR thread."""
+        sent_record = {
+            "to_email": "privacy@zendesk.com",
+            "sent_at": "2026-03-16T00:00:00",
+        }
+        gdpr_msg = _make_gmail_msg(
+            msg_id="gdpr001",
+            from_addr="support@zendesk.com",
+            subject="Your data subject request [#12345]",
+            snippet="We have received your GDPR request",
+        )
+
+        service = MagicMock()
+        service.users().messages().list().execute.return_value = {
+            "messages": [{"id": "gdpr001"}]
+        }
+        service.users().messages().get().execute.return_value = gdpr_msg
+
+        results = _fetch_gdpr_from_domain(
+            service, sent_record, user_email="me@gmail.com", existing_ids=set()
+        )
+        assert len(results) == 1
+        assert results[0]["id"] == "gdpr001"
+
+    def test_deduplicates_with_thread_results(self):
+        """Messages already seen via thread lookup are skipped."""
+        sent_record = {
+            "to_email": "privacy@example.com",
+            "sent_at": "2026-03-16T00:00:00",
+        }
+
+        service = MagicMock()
+        service.users().messages().list().execute.return_value = {
+            "messages": [{"id": "already_seen"}]
+        }
+
+        results = _fetch_gdpr_from_domain(
+            service,
+            sent_record,
+            user_email="me@gmail.com",
+            existing_ids={"already_seen"},
+        )
+        assert results == []
+
+    def test_skips_empty_to_email(self):
+        """No search when to_email is empty (portal/postal SAR)."""
+        sent_record = {"to_email": "", "sent_at": "2026-03-16T00:00:00"}
+        service = MagicMock()
+
+        results = _fetch_gdpr_from_domain(
+            service, sent_record, user_email="me@gmail.com", existing_ids=set()
+        )
+        assert results == []
+        service.users().messages().list.assert_not_called()
+
+    def test_filters_own_email(self):
+        """Messages from the user's own address are excluded."""
+        sent_record = {
+            "to_email": "privacy@example.com",
+            "sent_at": "2026-03-16T00:00:00",
+        }
+        own_msg = _make_gmail_msg(
+            msg_id="own001",
+            from_addr="me@gmail.com",
+            subject="Re: GDPR request",
+            snippet="Following up on my data request",
+        )
+
+        service = MagicMock()
+        service.users().messages().list().execute.return_value = {
+            "messages": [{"id": "own001"}]
+        }
+        service.users().messages().get().execute.return_value = own_msg
+
+        results = _fetch_gdpr_from_domain(
+            service, sent_record, user_email="me@gmail.com", existing_ids=set()
+        )
+        assert results == []
+
+    def test_rejects_non_gdpr_content(self):
+        """Messages from the domain that aren't GDPR-relevant are filtered out
+        by _is_gdpr_relevant()."""
+        sent_record = {
+            "to_email": "privacy@example.com",
+            "sent_at": "2026-03-16T00:00:00",
+        }
+        marketing_msg = _make_gmail_msg(
+            msg_id="mkt001",
+            from_addr="news@example.com",
+            subject="Weekly Newsletter",
+            snippet="Check out our latest deals and promotions!",
+        )
+
+        service = MagicMock()
+        service.users().messages().list().execute.return_value = {
+            "messages": [{"id": "mkt001"}]
+        }
+        service.users().messages().get().execute.return_value = marketing_msg
+
+        results = _fetch_gdpr_from_domain(
+            service, sent_record, user_email="me@gmail.com", existing_ids=set()
+        )
+        assert results == []
+
+    def test_api_error_on_message_fetch_continues(self):
+        """An API error fetching one message doesn't abort the whole search."""
+        sent_record = {
+            "to_email": "privacy@example.com",
+            "sent_at": "2026-03-16T00:00:00",
+        }
+        gdpr_msg = _make_gmail_msg(
+            msg_id="good001",
+            from_addr="dpo@example.com",
+            subject="Your SAR request",
+            snippet="We received your data subject access request",
+        )
+
+        service = MagicMock()
+        service.users().messages().list().execute.return_value = {
+            "messages": [{"id": "bad001"}, {"id": "good001"}]
+        }
+
+        def get_msg(userId, id, format):
+            mock = MagicMock()
+            if id == "bad001":
+                mock.execute.side_effect = OSError("timeout")
+            else:
+                mock.execute.return_value = gdpr_msg
+            return mock
+
+        service.users().messages().get.side_effect = get_msg
+
+        results = _fetch_gdpr_from_domain(
+            service, sent_record, user_email="me@gmail.com", existing_ids=set()
+        )
+        assert len(results) == 1
+        assert results[0]["id"] == "good001"
+
+
+# ---------------------------------------------------------------------------
+# _is_gdpr_relevant tests
+# ---------------------------------------------------------------------------
+
+
+class TestIsGdprRelevant:
+    def test_matches_gdpr_keyword(self):
+        msg = {"subject": "Re: GDPR request", "snippet": "Thank you", "body": ""}
+        assert _is_gdpr_relevant(msg) is True
+
+    def test_matches_subject_access(self):
+        msg = {"subject": "Subject Access Request #123", "snippet": "", "body": ""}
+        assert _is_gdpr_relevant(msg) is True
+
+    def test_matches_data_subject_in_body(self):
+        msg = {
+            "subject": "Request update",
+            "snippet": "",
+            "body": "Your data subject request has been processed",
+        }
+        assert _is_gdpr_relevant(msg) is True
+
+    def test_matches_right_to_erasure(self):
+        msg = {"subject": "", "snippet": "right to erasure confirmed", "body": ""}
+        assert _is_gdpr_relevant(msg) is True
+
+    def test_matches_subprocessor(self):
+        msg = {"subject": "Sub-processor list", "snippet": "", "body": ""}
+        assert _is_gdpr_relevant(msg) is True
+
+    def test_matches_data_portability(self):
+        msg = {"subject": "", "snippet": "", "body": "data portability export ready"}
+        assert _is_gdpr_relevant(msg) is True
+
+    def test_matches_article_references(self):
+        msg = {"subject": "Article 15 request", "snippet": "", "body": ""}
+        assert _is_gdpr_relevant(msg) is True
+
+    def test_rejects_non_gdpr_content(self):
+        msg = {
+            "subject": "Weekly newsletter",
+            "snippet": "Check out our latest deals",
+            "body": "Shop now for great savings on electronics",
+        }
+        assert _is_gdpr_relevant(msg) is False
+
+    def test_case_insensitive(self):
+        msg = {"subject": "YOUR DATA PROTECTION request", "snippet": "", "body": ""}
+        assert _is_gdpr_relevant(msg) is True

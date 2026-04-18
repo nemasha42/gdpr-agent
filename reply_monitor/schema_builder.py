@@ -50,6 +50,37 @@ def build_schema(file_path: Path, api_key: str, company_name: str = "") -> dict:
     return _call_llm(pp, api_key, company_name=company_name or file_path.stem)
 
 
+def build_schema_from_body(
+    body: str, api_key: str, company_name: str = ""
+) -> dict:
+    """Analyze personal data provided inline in an email body.
+
+    Used for DATA_PROVIDED_INLINE replies where the company sends personal
+    data directly in the email text rather than as a file attachment or link.
+
+    Args:
+        body:         Plain-text email body containing personal data
+        api_key:      Anthropic API key
+        company_name: Company name for cost tracking
+
+    Returns:
+        Dict with keys: categories, services, export_meta.
+        Returns empty dict on failure or missing api_key.
+    """
+    if not api_key or not body:
+        return {}
+
+    # Build a synthetic PreprocessResult so we can reuse _call_llm
+    pp = PreprocessResult(
+        file_samples=[{"filename": "email_body.txt", "content": body[:_MAX_CONTEXT_BYTES]}],
+        folder_tree={"(inline)": ["email_body.txt"]},
+        total_files=1,
+        total_records_estimate=0,
+        formats_found=["text"],
+    )
+    return _call_llm(pp, api_key, company_name=company_name)
+
+
 def _call_llm(pp: PreprocessResult, api_key: str, *, company_name: str = "") -> dict:
     """Send preprocessed context + file samples to Claude and parse the returned schema."""
     try:

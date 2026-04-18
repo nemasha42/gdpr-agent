@@ -12,7 +12,6 @@ import os
 from pathlib import Path
 
 from auth.gmail_oauth import get_gmail_service
-from contact_resolver import cost_tracker
 from letter_engine.tracker import get_log
 from reply_monitor.attachment_handler import handle_attachment
 from reply_monitor.classifier import (
@@ -25,7 +24,6 @@ from reply_monitor.fetcher import _extract_body, fetch_replies_for_sar
 from reply_monitor.models import AttachmentCatalog, CompanyState, ReplyRecord
 from reply_monitor.state_manager import (
     _ACTION_TAGS,
-    compute_status,
     deadline_from_sent,
     domain_from_sent_record,
     load_state,
@@ -34,6 +32,83 @@ from reply_monitor.state_manager import (
     update_state,
 )
 from reply_monitor.url_verifier import CLASSIFICATION, verify_if_needed
+from portal_submitter.platform_hints import (
+    all_portal_reply_domains,
+    detect_platform,
+    portal_reply_domains,
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+_PROJECT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+
+
+def _get_portal_sender_domains(state: CompanyState) -> list[str] | None:
+    """Determine portal platform sender domains for a company.
+
+    Checks portal_status, portal_submission, and the company record's
+    gdpr_portal_url to detect which portal platform was used.  Returns
+    the platform's reply domains so the fetcher can search them, or None
+    if no portal platform is detected.
+    """
+    # Only search portal senders when a portal was actually used
+    if not state.portal_status and not state.portal_submission:
+        return None
+
+    # Try to find portal URL from portal_submission, company records, or replies
+    portal_url = ""
+    if state.portal_submission:
+        portal_url = state.portal_submission.get("portal_url", "")
+
+    if not portal_url:
+        # Check company record for gdpr_portal_url (project data/ dir)
+        companies_path = _PROJECT_DATA_DIR / "companies.json"
+        if companies_path.exists():
+            try:
+                companies = json.loads(companies_path.read_text())
+                entry = companies.get(state.domain, {})
+                contact = entry.get("contact", {})
+                portal_url = contact.get("gdpr_portal_url", "")
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+    if not portal_url:
+        # Check dataowners_overrides.json (hand-curated portal URLs)
+        overrides_path = _PROJECT_DATA_DIR / "dataowners_overrides.json"
+        if overrides_path.exists():
+            try:
+                overrides = json.loads(overrides_path.read_text())
+                entry = overrides.get(state.domain, {})
+                contact = entry.get("contact", {})
+                portal_url = contact.get("gdpr_portal_url", "")
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+    if not portal_url:
+        # Check reply extracted fields for portal URLs
+        for reply in reversed(state.replies):
+            url = reply.extracted.get("portal_url", "")
+            if url:
+                portal_url = url
+                break
+
+    if portal_url:
+        platform = detect_platform(portal_url)
+        if platform == "login_required":
+            return None
+        if platform != "unknown":
+            domains = portal_reply_domains(platform)
+            if domains:
+                return domains
+
+    # Portal was used but platform is unknown from URL alone (e.g. Zendesk
+    # uses Ketch on a branded domain).  Search ALL known portal reply domains
+    # as a fallback — this is a small set and the search is date-bounded.
+    return all_portal_reply_domains()
 
 
 # ---------------------------------------------------------------------------
@@ -57,9 +132,7 @@ def run_sar_monitor(
     found this run.  The CLI uses these for the summary table and bounce
     retries; the dashboard discards them.
     """
-    service, email = get_gmail_service(
-        email_hint=account, tokens_dir=tokens_dir
-    )
+    service, email = get_gmail_service(email_hint=account, tokens_dir=tokens_dir)
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
 
@@ -105,8 +178,14 @@ def run_sar_monitor(
                 flush=True,
             )
 
+        portal_domains = _get_portal_sender_domains(state)
         new_messages = fetch_replies_for_sar(
-            service, latest_record, existing_ids, user_email=email, verbose=verbose
+            service,
+            latest_record,
+            existing_ids,
+            user_email=email,
+            verbose=verbose,
+            portal_sender_domains=portal_domains,
         )
 
         if verbose:
@@ -131,7 +210,9 @@ def run_sar_monitor(
                 )
                 continue
 
-            result = classify(msg, api_key=api_key)
+            result = classify(
+                msg, api_key=api_key, in_thread=msg.get("in_thread", False)
+            )
             catalog_dict = None
             if msg.get("has_attachment"):
                 for part in msg.get("parts", []):
@@ -188,7 +269,9 @@ def run_sar_monitor(
             )
 
             if verbose:
-                print(f"  [{state.company_name}] {result.tags} -- {msg['snippet'][:60]}")
+                print(
+                    f"  [{state.company_name}] {result.tags} -- {msg['snippet'][:60]}"
+                )
 
         new_counts[domain] = len(new_replies)
         if new_replies:
@@ -210,11 +293,17 @@ def run_sar_monitor(
     save_state(email, states, path=state_path)
 
     # Auto-download data links (Playwright handles Cloudflare-protected sites)
-    auto_download_data_links(email, states, api_key, verbose=verbose, state_path=state_path)
+    auto_download_data_links(
+        email, states, api_key, verbose=verbose, state_path=state_path
+    )
     # Auto-analyze inline data replies
     auto_analyze_inline_data(
-        email, states, api_key, verbose=verbose,
-        state_path=state_path, tokens_dir=tokens_dir,
+        email,
+        states,
+        api_key,
+        verbose=verbose,
+        state_path=state_path,
+        tokens_dir=tokens_dir,
     )
 
     return service, email, states, new_counts
@@ -294,7 +383,9 @@ def run_sp_monitor(
                     )
                 )
                 continue
-            result = classify(msg, api_key=api_key)
+            result = classify(
+                msg, api_key=api_key, in_thread=msg.get("in_thread", False)
+            )
 
             draft = ""
             review_status = ""
@@ -423,9 +514,7 @@ def auto_analyze_inline_data(
     from reply_monitor.schema_builder import build_schema_from_body
 
     try:
-        service, _email = get_gmail_service(
-            email_hint=account, tokens_dir=tokens_dir
-        )
+        service, _email = get_gmail_service(email_hint=account, tokens_dir=tokens_dir)
     except Exception:
         return
 
@@ -464,9 +553,7 @@ def auto_analyze_inline_data(
                         size_bytes=len(body.encode("utf-8")),
                         file_type="email_body",
                         files=[],
-                        categories=[
-                            c["name"] for c in result.get("categories", [])
-                        ],
+                        categories=[c["name"] for c in result.get("categories", [])],
                         schema=result.get("categories", []),
                         services=result.get("services", []),
                         export_meta=result.get("export_meta", {}),
@@ -474,9 +561,7 @@ def auto_analyze_inline_data(
                     reply.attachment_catalog = cat.to_dict()
                     needs_save = True
                     if verbose:
-                        print(
-                            f"[inline-schema] {domain}: {len(cat.schema)} categories"
-                        )
+                        print(f"[inline-schema] {domain}: {len(cat.schema)} categories")
             except Exception as exc:
                 print(f"[inline-schema] {domain}: schema analysis failed -- {exc}")
 
@@ -508,9 +593,7 @@ def reextract_missing_links(
     if not pending:
         return 0
 
-    service, _email = get_gmail_service(
-        email_hint=account, tokens_dir=tokens_dir
-    )
+    service, _email = get_gmail_service(email_hint=account, tokens_dir=tokens_dir)
 
     needs_update = False
     for domain, reply in pending:
@@ -536,7 +619,11 @@ def reextract_missing_links(
         states = load_state(account, path=state_path)
         auto_download_data_links(account, states, api_key, state_path=state_path)
         auto_analyze_inline_data(
-            account, states, api_key, state_path=state_path, tokens_dir=tokens_dir,
+            account,
+            states,
+            api_key,
+            state_path=state_path,
+            tokens_dir=tokens_dir,
         )
 
     return sum(
@@ -565,18 +652,14 @@ def _build_inline_schema(
     from reply_monitor.schema_builder import build_schema_from_body
 
     try:
-        schema_result = build_schema_from_body(
-            body, api_key, company_name=company_name
-        )
+        schema_result = build_schema_from_body(body, api_key, company_name=company_name)
         if schema_result:
             cat = AttachmentCatalog(
                 path="",
                 size_bytes=len(body.encode("utf-8")),
                 file_type="email_body",
                 files=[],
-                categories=[
-                    c["name"] for c in schema_result.get("categories", [])
-                ],
+                categories=[c["name"] for c in schema_result.get("categories", [])],
                 schema=schema_result.get("categories", []),
                 services=schema_result.get("services", []),
                 export_meta=schema_result.get("export_meta", {}),
@@ -613,9 +696,7 @@ def _verify_and_submit_portal(
         return
 
     try:
-        verification = verify_if_needed(
-            portal_url, existing=reply.portal_verification
-        )
+        verification = verify_if_needed(portal_url, existing=reply.portal_verification)
         reply.portal_verification = verification
 
         if verbose:
@@ -655,7 +736,9 @@ def _try_portal_submit(
         from contact_resolver.models import CompanyRecord
         from portal_submitter.submitter import submit_portal
 
-        companies_path = Path(__file__).resolve().parent.parent.parent / "data" / "companies.json"
+        companies_path = (
+            Path(__file__).resolve().parent.parent.parent / "data" / "companies.json"
+        )
         record = None
         if companies_path.exists():
             companies = json.loads(companies_path.read_text())

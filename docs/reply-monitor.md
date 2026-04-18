@@ -16,6 +16,16 @@
 
 `fetcher.py` uses the Gmail thread ID when available — it fetches all messages in the thread and filters out the user's own outgoing message by comparing the `From` header to the authenticated user's email. When no thread ID is available (portal/postal letters), it falls back to two Gmail search queries: one for exact sender address match and one for domain match. Messages are deduplicated against already-seen message IDs. Skips only the first message (the original sent letter); subsequent outgoing messages (user's manual Gmail replies) are returned with `from_self=True`. `monitor.py` converts `from_self` messages into `ReplyRecord` with `tags=["YOUR_REPLY"]` without LLM classification. `YOUR_REPLY` is excluded from status computation in `state_manager.py` and from company reply counts on dashboard cards — it is display-only.
 
+### Portal reply domain search
+
+Companies that use third-party portal platforms (Ketch, OneTrust, TrustArc, Salesforce) send replies from the platform's domain, not the company's own domain. For example, Zendesk uses a Ketch-powered portal, so replies come from `@ketch.com` or `@m.ketch.com` — not `@zendesk.com`. Without portal-aware sender search, these replies are invisible to the monitor.
+
+`_get_portal_sender_domains()` in `dashboard/services/monitor_runner.py` resolves this. When a company has `portal_status` set or a `portal_submission` record, it determines which portal platform was used and returns the platform's reply domains. The fetcher then searches Gmail for messages from these domains in addition to the company's own domain.
+
+**Resolution chain:** (1) Check `portal_submission.portal_url`. (2) Check `companies.json` for `gdpr_portal_url`. (3) Check `dataowners_overrides.json`. (4) Check reply `extracted.portal_url` fields. The portal URL is then passed to `detect_platform()` — if the platform is identified (e.g. "ketch"), `portal_reply_domains("ketch")` returns `["ketch.com", "m.ketch.com"]`. If the platform is "unknown" (e.g. Zendesk's branded URL contains no Ketch indicators), it falls back to `all_portal_reply_domains()` which returns all known portal platform reply domains as a small, bounded set.
+
+**Important:** `_get_portal_sender_domains()` reads `companies.json` and `dataowners_overrides.json` from the project's `data/` directory (via `_PROJECT_DATA_DIR`), not from the per-user `data_dir`. These are project-level reference files, not per-user state.
+
 ---
 
 ## Classifier (`reply_monitor/classifier.py`)

@@ -42,7 +42,7 @@ Multi-step portal navigation. `navigate_to_form(page, platform, api_key=)` dismi
 
 ### `platform_hints.py`
 
-Detects portal platform: `onetrust`, `trustarc`, `ketch`, `salesforce`, `login_required` (Google, Apple, Meta, Amazon, Facebook, Twitter/X), `unknown`. `detect_platform(url, html="")` checks URL patterns first, then HTML signatures for branded domains (e.g. zendesk.es → ketch via `_KETCH_HTML_SIGNATURES`). `otp_sender_hints()` returns expected verification email senders per platform.
+Detects portal platform: `onetrust`, `trustarc`, `ketch`, `salesforce`, `login_required` (Google, Apple, Meta, Amazon, Facebook, Twitter/X), `unknown`. `detect_platform(url, html="")` checks URL patterns first, then HTML signatures for branded domains (e.g. zendesk.es → ketch via `_KETCH_HTML_SIGNATURES`). `otp_sender_hints()` returns expected verification email senders per platform. `portal_reply_domains(platform)` returns email sender domains used by a specific portal platform for replies (e.g. `["onetrust.com"]` for OneTrust). `all_portal_reply_domains()` returns all known portal platform reply domains (deduplicated) — used as a fallback when a company has `portal_status` set but the platform cannot be determined from the portal URL alone (e.g. Zendesk uses Ketch on a branded domain that doesn't contain "ketch" in the URL). `_PORTAL_REPLY_DOMAINS` dict maps platform names to their reply domains: `onetrust` → `onetrust.com`, `trustarc` → `trustarc.com`, `ketch` → `ketch.com`, `m.ketch.com`, `salesforce` → `salesforce.com`.
 
 ---
 
