@@ -32,8 +32,8 @@ from letter_engine.tracker import get_log, _SUBPROCESSOR_REQUESTS_PATH
 from reply_monitor.classifier import _ACTION_DRAFT_TAGS
 from reply_monitor.state_manager import (
     _SUBPROCESSOR_STATE_PATH,
-    _COMPANY_STATUS_PRIORITY,
-    compute_company_status,
+    _STATUS_PRIORITY,
+    compute_status,
     compute_status,
     days_remaining,
     deadline_from_sent,
@@ -534,13 +534,13 @@ def dashboard():
             card["sp_sent"] = domain in sp_sent_domains
             sp_state = sp_states.get(domain)
             card["sp_status"] = compute_status(sp_state) if sp_state else "PENDING"
-            card["company_status"] = compute_company_status(
+            card["company_status"] = compute_status(
                 status, card["sp_status"], card["sp_sent"]
             )
             cards.append(card)
 
         # Sort by company-level urgency
-        cards.sort(key=lambda c: _COMPANY_STATUS_PRIORITY.get(c["company_status"], 0), reverse=True)
+        cards.sort(key=lambda c: _STATUS_PRIORITY.get(c["company_status"], 0), reverse=True)
 
     scan_state = load_scan_state(account, data_dir=_current_data_dir()) if account else {}
     return render_template(
@@ -745,7 +745,7 @@ def company_detail(domain: str):
         sp_thread.sort(key=lambda e: e["sort_key"])
 
     # ── Summary lines ("why is it this status?") ─────────────────────────────
-    company_status = compute_company_status(
+    company_status = compute_status(
         sar_status=status,
         sp_status=sp_status,
         sp_sent=bool(sp_sent),
@@ -1042,7 +1042,7 @@ def cards_listing():
             sp_state = sp_states.get(domain)
             sp_status = compute_status(sp_state) if sp_state else "PENDING"
             sp_sent = domain in sp_sent_domains
-            company_status = compute_company_status(status, sp_status, sp_sent)
+            company_status = compute_status(status, sp_status, sp_sent)
             # Find best catalog across all replies (active + past attempts)
             best_catalog = None
             received_at = ""
@@ -2794,7 +2794,6 @@ def scan_stream():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
->>>>>>> worktree-uix
 
 app = create_app()
 
