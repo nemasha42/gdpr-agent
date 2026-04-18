@@ -224,7 +224,8 @@ class ContactResolver:
             if not text or text in ("{}", ""):
                 return CompaniesDB()
             return CompaniesDB.model_validate_json(text)
-        except Exception:
+        except Exception as exc:
+            print(f"[resolver] _load_db failed: {exc}")
             return CompaniesDB()
 
     def _save_db(self, db: CompaniesDB) -> None:
@@ -273,7 +274,8 @@ class ContactResolver:
             # Always refresh last_verified so the cached copy stays within its TTL
             record.last_verified = date.today().isoformat()
             return record
-        except Exception:
+        except Exception as exc:
+            print(f"[resolver] _search_dataowners failed: {exc}")
             return None
 
     # ------------------------------------------------------------------
@@ -304,7 +306,8 @@ class ContactResolver:
         """Search datarequests.org for *domain* via GitHub file listing."""
         try:
             file_listing = self._fetch_dir_listing()
-        except Exception:
+        except Exception as exc:
+            print(f"[resolver] _search_datarequests dir listing failed: {exc}")
             return None
 
         candidates = _find_candidate_files(file_listing, domain, company_name)
@@ -320,7 +323,8 @@ class ContactResolver:
                 entry: dict = resp.json()
                 if domain in entry.get("runs", []):
                     return _map_datarequests_entry(entry)
-            except Exception:
+            except Exception as exc:
+                print(f"[resolver] datarequests candidate fetch failed: {exc}")
                 continue
 
         return None
@@ -420,7 +424,8 @@ def write_subprocessors(domain: str, record: SubprocessorRecord, db_path: Path =
             db = CompaniesDB()
         else:
             db = CompaniesDB.model_validate_json(text)
-    except Exception:
+    except Exception as exc:
+        print(f"[resolver] write_subprocessors db load failed: {exc}")
         db = CompaniesDB()
 
     existing = db.companies.get(domain)

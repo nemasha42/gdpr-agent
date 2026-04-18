@@ -63,7 +63,8 @@ def _analyze_json(raw: bytes, filename: str) -> tuple[FileMeta, str]:
     # Decode for parsing (up to 4x sample bytes) and for sample display
     try:
         text = raw[:_MAX_JSON_PARSE_BYTES].decode("utf-8", errors="replace")
-    except Exception:
+    except Exception as exc:
+        print(f"[preprocessor] JSON decode failed for {filename}: {exc}")
         text = ""
 
     if ext == "js":
@@ -99,7 +100,8 @@ def _analyze_csv(raw: bytes, filename: str) -> tuple[FileMeta, str]:
 
     try:
         text = raw.decode("utf-8", errors="replace")
-    except Exception:
+    except Exception as exc:
+        print(f"[preprocessor] CSV decode failed for {filename}: {exc}")
         text = ""
 
     sample = text[:_MAX_SAMPLE_BYTES]
@@ -173,7 +175,8 @@ def _preprocess_zip(file_path: Path) -> PreprocessResult:
 
                 try:
                     raw = zf.read(info.filename)
-                except Exception:
+                except Exception as exc:
+                    print(f"[preprocessor] ZIP entry read failed for {info.filename}: {exc}")
                     continue
 
                 if ext in ("json", "js"):
@@ -196,8 +199,8 @@ def _preprocess_zip(file_path: Path) -> PreprocessResult:
 
             result.total_records_estimate = total_records
 
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[preprocessor] ZIP processing failed for {file_path}: {exc}")
 
     return result
 
@@ -257,7 +260,8 @@ def _preprocess_single(file_path: Path, ext: str) -> PreprocessResult:
 
     try:
         raw = file_path.read_bytes()
-    except Exception:
+    except Exception as exc:
+        print(f"[preprocessor] file read failed for {file_path}: {exc}")
         return result
 
     if ext in ("json", "js"):

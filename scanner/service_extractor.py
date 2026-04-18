@@ -76,7 +76,8 @@ def _parse_date_iso(date_str: str) -> str:
     """
     try:
         return parsedate_to_datetime(date_str).date().isoformat()
-    except Exception:
+    except Exception as exc:
+        print(f"[service_extractor] date parse failed: {exc}")
         return date_str
 
 

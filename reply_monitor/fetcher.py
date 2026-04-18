@@ -83,7 +83,8 @@ def _fetch_by_thread(
             id=thread_id,
             format="full",
         ).execute()
-    except Exception:
+    except Exception as exc:
+        print(f"[fetcher] _fetch_by_thread {thread_id}: {exc}")
         return []
 
     results = []
@@ -156,7 +157,8 @@ def _fetch_by_search(
                     id=ref["id"],
                     format="full",
                 ).execute()
-            except Exception:
+            except Exception as exc:
+                print(f"[fetcher] message.get {ref['id']}: {exc}")
                 continue
             from_header = _get_header(msg, "From")
             if user_email and user_email.lower() in from_header.lower():
@@ -178,7 +180,8 @@ def _paginated_search(service: Any, query: str, max_results: int = 200) -> list[
             kwargs["pageToken"] = page_token
         try:
             resp = service.users().messages().list(**kwargs).execute()
-        except Exception:
+        except Exception as exc:
+            print(f"[fetcher] _paginated_search failed: {exc}")
             break
         refs.extend(resp.get("messages", []))
         page_token = resp.get("nextPageToken")
@@ -238,7 +241,8 @@ def _extract_body(payload: dict) -> str:
             return ""
         try:
             return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
-        except Exception:
+        except Exception as exc:
+            print(f"[fetcher] base64 decode failed: {exc}")
             return ""
 
     def _strip_html(text: str) -> str:
@@ -346,5 +350,6 @@ def _parse_date(date_str: str) -> str:
         from email.utils import parsedate_to_datetime
         dt = parsedate_to_datetime(date_str)
         return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-    except Exception:
+    except Exception as exc:
+        print(f"[fetcher] _parse_date failed for '{date_str}': {exc}")
         return datetime.now(timezone.utc).isoformat(timespec="seconds")

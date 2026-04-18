@@ -650,7 +650,8 @@ def generate_reply_draft(
             purpose="Follow-up reply drafting",
         )
         return response.content[0].text.strip()
-    except Exception:
+    except Exception as exc:
+        print(f"[classifier] generate_reply_draft failed: {exc}")
         return ""
 
 
@@ -737,5 +738,6 @@ def _llm_classify(message: dict, api_key: str) -> dict | None:
         if raw.startswith("```"):
             raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("`").strip()
         return json.loads(raw)
-    except Exception:
+    except Exception as exc:
+        print(f"[classifier] _llm_classify failed: {exc}")
         return None

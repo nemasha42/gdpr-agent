@@ -212,5 +212,6 @@ def _validate_and_build(data: dict, company_name: str) -> CompanyRecord | None:
                 known_response_time_days=notes_raw.get("known_response_time_days", 30),
             ),
         )
-    except Exception:
+    except Exception as exc:
+        print(f"[llm_searcher] record build failed: {exc}")
         return None

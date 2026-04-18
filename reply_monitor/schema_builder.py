@@ -170,8 +170,8 @@ Rules:
                     source="schema_builder",
                     purpose="Received data schema analysis",
                 )
-            except Exception:
-                pass  # cost tracking failure should not lose the schema result
+            except Exception as exc:
+                print(f"[schema_builder] cost tracking failed: {exc}")
             return result
     except Exception as exc:
         print(f"[schema_builder] LLM call failed: {exc}")

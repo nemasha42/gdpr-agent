@@ -68,7 +68,8 @@ def fetch_privacy_text(
         url = template.format(domain=domain)
         try:
             resp = get(url, timeout=_TIMEOUT)
-        except Exception:
+        except Exception as exc:
+            print(f"[privacy_scraper] fetch_privacy_text {url}: {exc}")
             continue
         if resp.status_code == 200 and resp.text.strip():
             return _strip_html(resp.text)
@@ -108,9 +109,11 @@ def scrape_privacy_page(
 
         try:
             resp = get(url, timeout=_TIMEOUT)
-        except Exception:
+        except Exception as exc:
             if verbose:
-                print("connection error")
+                print(f"connection error: {exc}")
+            else:
+                print(f"[privacy_scraper] scrape {url}: {exc}")
             continue
 
         if resp.status_code != 200:
