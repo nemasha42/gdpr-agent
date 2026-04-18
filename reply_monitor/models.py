@@ -134,6 +134,9 @@ class ReplyRecord:
     portal_verification: dict | None = (
         None  # {url, classification, checked_at, error, page_title}
     )
+    reply_review_status: str = ""   # "" | "pending" | "sent" | "dismissed" | "portal_submitted"
+    sent_reply_body: str = ""       # actual text user sent (may differ from suggested_reply if edited)
+    sent_reply_at: str = ""         # ISO timestamp of when user sent it
 
     def to_dict(self) -> dict:
         return {

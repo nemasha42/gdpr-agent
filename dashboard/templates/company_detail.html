@@ -176,7 +176,11 @@
 {% elif not last_company %}
   {% set why = "Awaiting first response" %}
 {% elif 'WRONG_CHANNEL' in last_company.tags %}
-  {% set why = "Company says to use a different channel" %}
+  {% if last_company.extracted and last_company.extracted.get('wrong_channel_instructions') %}
+    {% set why = last_company.extracted.wrong_channel_instructions %}
+  {% else %}
+    {% set why = "Company says to use a different channel" %}
+  {% endif %}
 {% elif 'IDENTITY_REQUIRED' in last_company.tags %}
   {% set why = "Identity verification required before processing" %}
 {% elif 'PORTAL_VERIFICATION' in last_company.tags %}
@@ -344,6 +348,8 @@
                 <span class="small ms-1"></span>
               {% endif %}
             {% endif %}
+            {% if has_portal_tag and ex.portal_url %}<span>&#x1F4BB; <a href="{{ ex.portal_url }}" target="_blank">Privacy portal</a>{% if ex.get('login_required') %} <span class="badge bg-info text-dark" style="font-size:0.7rem">Login required</span>{% endif %}</span>{% endif %}
+            {% if 'WRONG_CHANNEL' in ev.tags and ex.get('wrong_channel_instructions') %}<div class="mt-1 small text-warning-emphasis"><strong>Instructions:</strong> {{ ex.wrong_channel_instructions }}</div>{% endif %}
             {% if ex.deadline_extension_days %}<span>&#x23F1; Extended {{ ex.deadline_extension_days }} days</span>{% endif %}
           </div>
         {% endif %}
@@ -382,11 +388,20 @@
           <span class="text-muted small">to {{ ev.to_addr }}</span>
         </div>
       </form>
-      <form method="POST" action="{{ dismiss_url }}" class="mt-2">
-        <input type="hidden" name="account" value="{{ account }}">
-        <input type="hidden" name="gmail_message_id" value="{{ ev.gmail_message_id }}">
-        <button type="submit" class="btn btn-link btn-sm p-0 text-muted small">Dismiss draft</button>
-      </form>
+      <div class="d-flex gap-3 mt-2 align-items-center">
+        <form method="POST" action="{{ dismiss_url }}">
+          <input type="hidden" name="account" value="{{ account }}">
+          <input type="hidden" name="gmail_message_id" value="{{ ev.gmail_message_id }}">
+          <button type="submit" class="btn btn-link btn-sm p-0 text-muted small">Dismiss draft</button>
+        </form>
+        {% if 'WRONG_CHANNEL' in ev.tags %}
+        <form method="POST" action="/company/{{ domain }}/mark-portal-submitted">
+          <input type="hidden" name="account" value="{{ account }}">
+          <input type="hidden" name="gmail_message_id" value="{{ ev.gmail_message_id }}">
+          <button type="submit" class="btn btn-sm btn-outline-success">I submitted via portal</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
     {% endfor %}
     {% endif %}
