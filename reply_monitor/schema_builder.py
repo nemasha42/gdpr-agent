@@ -50,9 +50,7 @@ def build_schema(file_path: Path, api_key: str, company_name: str = "") -> dict:
     return _call_llm(pp, api_key, company_name=company_name or file_path.stem)
 
 
-def build_schema_from_body(
-    body: str, api_key: str, company_name: str = ""
-) -> dict:
+def build_schema_from_body(body: str, api_key: str, company_name: str = "") -> dict:
     """Analyze personal data provided inline in an email body.
 
     Used for DATA_PROVIDED_INLINE replies where the company sends personal
@@ -72,7 +70,9 @@ def build_schema_from_body(
 
     # Build a synthetic PreprocessResult so we can reuse _call_llm
     pp = PreprocessResult(
-        file_samples=[{"filename": "email_body.txt", "content": body[:_MAX_CONTEXT_BYTES]}],
+        file_samples=[
+            {"filename": "email_body.txt", "content": body[:_MAX_CONTEXT_BYTES]}
+        ],
         folder_tree={"(inline)": ["email_body.txt"]},
         total_files=1,
         total_records_estimate=0,

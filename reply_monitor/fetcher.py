@@ -296,10 +296,7 @@ def _fetch_from_portal_senders(
                 # contains the company name as a strong signal.
                 company_name = sent_record.get("company_name", "")
                 subject = parsed.get("subject", "")
-                company_match = (
-                    company_name
-                    and company_name.lower() in subject.lower()
-                )
+                company_match = company_name and company_name.lower() in subject.lower()
                 if company_match or _is_gdpr_relevant(parsed):
                     parsed["from_portal_platform"] = True
                     results.append(parsed)
@@ -374,9 +371,7 @@ def _date_filter(sent_at: str) -> str:
         return ""
 
 
-def _paginated_search(
-    service: Any, query: str, max_results: int = 200
-) -> list[dict]:
+def _paginated_search(service: Any, query: str, max_results: int = 200) -> list[dict]:
     """Run a Gmail search query and return all message refs across pages."""
     refs: list[dict] = []
     page_token = None
