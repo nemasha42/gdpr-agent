@@ -15,7 +15,8 @@ def get_inbox_total(service: Any) -> int:
     try:
         profile = service.users().getProfile(userId="me").execute()
         return int(profile.get("messagesTotal", 0))
-    except Exception:
+    except Exception as exc:
+        print(f"[inbox_reader] get_inbox_total failed: {exc}")
         return 0
 
 

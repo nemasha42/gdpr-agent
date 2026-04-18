@@ -149,6 +149,13 @@ def _fetch_by_thread(
         )
     except _API_ERRORS as exc:
         logger.warning("Thread fetch failed for %s: %s", thread_id, exc)
+        thread = service.users().threads().get(
+            userId="me",
+            id=thread_id,
+            format="full",
+        ).execute()
+    except Exception as exc:
+        print(f"[fetcher] _fetch_by_thread {thread_id}: {exc}")
         return []
 
     results = []
@@ -348,6 +355,13 @@ def _fetch_by_search(
                 )
             except _API_ERRORS as exc:
                 logger.debug("Failed to fetch message %s: %s", ref["id"], exc)
+                msg = service.users().messages().get(
+                    userId="me",
+                    id=ref["id"],
+                    format="full",
+                ).execute()
+            except Exception as exc:
+                print(f"[fetcher] message.get {ref['id']}: {exc}")
                 continue
             from_header = _get_header(msg, "From")
             if user_email and user_email.lower() in from_header.lower():
@@ -387,6 +401,8 @@ def _paginated_search(service: Any, query: str, max_results: int = 200) -> list[
             resp = service.users().messages().list(**kwargs).execute()
         except _API_ERRORS as exc:
             logger.warning("Gmail search failed for query %r: %s", query, exc)
+        except Exception as exc:
+            print(f"[fetcher] _paginated_search failed: {exc}")
             break
         refs.extend(resp.get("messages", []))
         page_token = resp.get("nextPageToken")
@@ -450,6 +466,9 @@ def _extract_body(payload: dict) -> str:
             )
         except ValueError as exc:
             logger.debug("Base64 decode failed: %s", exc)
+            return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
+        except Exception as exc:
+            print(f"[fetcher] base64 decode failed: {exc}")
             return ""
 
     def _strip_html(text: str) -> str:
@@ -568,4 +587,7 @@ def _parse_date(date_str: str) -> str:
         )
     except (ValueError, TypeError, OverflowError) as exc:
         logger.debug("Date parse failed for %r: %s", date_str, exc)
+        return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    except Exception as exc:
+        print(f"[fetcher] _parse_date failed for '{date_str}': {exc}")
         return datetime.now(timezone.utc).isoformat(timespec="seconds")

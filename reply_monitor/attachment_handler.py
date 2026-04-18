@@ -77,7 +77,8 @@ def handle_attachment(
             .execute()
         )
         data = base64.urlsafe_b64decode(resp["data"])
-    except Exception:
+    except Exception as exc:
+        print(f"[attachment_handler] download failed for {filename}: {exc}")
         return None
 
     # Save to disk
@@ -176,8 +177,8 @@ def _catalog_csv(
         headers = next(reader, [])
         for h in headers:
             categories.extend(_guess_categories_from_filename(h))
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[attachment_handler] CSV parse failed for {filename}: {exc}")
     ext = Path(filename).suffix.lstrip(".").lower()
     return [FileEntry(filename=filename, size_bytes=size, file_type=ext)], categories
 

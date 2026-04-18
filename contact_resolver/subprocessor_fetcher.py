@@ -100,7 +100,8 @@ def fetch_subprocessors(
                         page_text = content[:50_000]
                         source_url = url
                         break
-            except Exception:
+            except Exception as exc:
+                print(f"[subprocessor_fetcher] scrape {url}: {exc}")
                 continue
         if page_text:
             break
@@ -188,7 +189,8 @@ def is_stale(record: SubprocessorRecord, ttl_days: int = 30) -> bool:
             )
         ).days
         return age > ttl_days
-    except Exception:
+    except Exception as exc:
+        print(f"[subprocessor_fetcher] is_stale date parse failed: {exc}")
         return True
 
 
@@ -282,7 +284,8 @@ def _fetch_page_playwright(url: str) -> str:
             html = page.content()
             browser.close()
         return html
-    except Exception:
+    except Exception as exc:
+        print(f"[subprocessor_fetcher] playwright fetch {url} failed: {exc}")
         return ""
 
 

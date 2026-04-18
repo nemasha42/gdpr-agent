@@ -100,7 +100,8 @@ def load_persistent_log() -> list[dict]:
         return []
     try:
         return json.loads(_COST_LOG_PATH.read_text())
-    except Exception:
+    except Exception as exc:
+        print(f"[cost_tracker] load cost log failed: {exc}")
         return []
 
 

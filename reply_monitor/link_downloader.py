@@ -135,8 +135,8 @@ def _download_playwright(url: str, save_dir: Path) -> DownloadResult | None:
             # Navigate — Cloudflare challenge runs here automatically
             try:
                 page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            except Exception:
-                pass  # timeout ok if download already triggered
+            except Exception as exc:
+                print(f"[link_downloader] page.goto timeout for {url}: {exc}")
 
             # Wait up to 60s for download to start
             deadline = 60_000
