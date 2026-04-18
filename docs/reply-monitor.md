@@ -58,7 +58,7 @@ Handles **notification-shell emails** — where the body is a brief "your export
 
 ### `extracted` field schema
 
-All keys always present, empty/null if not found: `reference_number` (ticket/case ref), `confirmation_url` (URL to confirm request), `data_link` (first export URL, backward compat), `data_links` (all export URLs), `portal_url` (self-service portal), `deadline_extension_days` (integer or null), `summary` (plain-English ≤15-word sentence — LLM path only, empty string on regex path).
+All keys always present, empty/null if not found: `reference_number` (ticket/case ref), `confirmation_url` (URL to confirm request), `data_link` (first export URL, backward compat), `data_links` (all export URLs), `portal_url` (self-service portal), `deadline_extension_days` (integer or null), `summary` (plain-English ≤15-word sentence — LLM path only, empty string on regex path), `wrong_channel_instructions` (short phrase describing what the company says to do instead, e.g. "Submit via privacy center at https://..." — populated by both regex and LLM paths on WRONG_CHANNEL replies, empty string otherwise), `login_required` (bool — true if the reply indicates the user must log in to access the portal or submit the request).
 
 ### `extracted` field reliability
 
@@ -109,7 +109,7 @@ Priority drives dashboard sort order via `_STATUS_PRIORITY` dict. `REQUEST_STATU
 **Step 4 — Terminal tags → `DONE`.** If any tag in `_TERMINAL_TAGS` is present, return `DONE`. Terminal tags: `DATA_PROVIDED_LINK`, `DATA_PROVIDED_ATTACHMENT`, `DATA_PROVIDED_PORTAL`, `DATA_PROVIDED_INLINE`, `FULFILLED_DELETION`, `REQUEST_DENIED`, `NO_DATA_HELD`, `NOT_GDPR_APPLICABLE`. This check comes before action tags — if the company already fulfilled the request, stale action items (identity verification, confirmation) are moot.
 
 **Step 5 — Action tags → `ACTION_NEEDED` or `REPLIED`.** Collect all replies that have at least one tag in `_ACTION_TAGS` (`CONFIRMATION_REQUIRED`, `IDENTITY_REQUIRED`, `MORE_INFO_REQUIRED`, `WRONG_CHANNEL`, `HUMAN_REVIEW`, `PORTAL_VERIFICATION`). If any exist:
-- Check if ALL action replies are resolved: `reply_review_status` is `"sent"` or `"dismissed"`.
+- Check if ALL action replies are resolved: `reply_review_status` is `"sent"`, `"dismissed"`, or `"portal_submitted"`.
 - If not all resolved, check if a `YOUR_REPLY` exists with a timestamp later than the latest action reply (user replied via Gmail directly, bypassing the dashboard draft flow).
 - If all resolved → `REPLIED` (user acted, awaiting company response).
 - If unresolved actions remain → `ACTION_NEEDED`.
@@ -147,7 +147,7 @@ Tags not in any of these sets (`BOUNCE_TEMPORARY`, `OUT_OF_OFFICE`, `EXTENDED`) 
 - **Active** (WAITING, IN_PROGRESS, ACTION_NEEDED, REPLIED): show "Xd left" countdown from 30-day deadline
 - **Hidden** (DONE, STALLED): show "—" with dimmed progress bar
 - **Negative** (OVERDUE): show "X days overdue" in red
-- **Restart**: after portal verification (`verify_portal()`), deadline resets to 30 days from `portal_verified_at`
+- **Restart**: after portal verification (`verify_portal()`), deadline resets to 30 days from `portal_verified_at`; also resets when `update_state()` adds a reply with `CONFIRMATION_REQUIRED`, `REQUEST_ACCEPTED`, or `IN_PROGRESS` tags (company engaged, clock restarts from reply's `received_at`)
 
 ### Portal helpers
 

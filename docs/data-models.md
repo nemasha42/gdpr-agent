@@ -16,13 +16,14 @@ The public GDPR contact cache. Safe to commit because it contains only publicly 
 - `last_verified` — ISO date string; staleness is computed against this
 - `contact.dpo_email` / `contact.privacy_email` — GDPR contact emails (prefer DPO if both present)
 - `contact.gdpr_portal_url` — web portal URL if the company prefers portal over email
+- `contact.privacy_policy_url` — URL of the privacy policy page (populated by privacy page scraper in Step 4; shown on company detail page)
 - `contact.preferred_method` — `"email"`, `"portal"`, or `"postal"`
 - `flags.portal_only` — if true, email is not accepted; letter engine skips email dispatch
 - `request_notes.special_instructions` — free text shown to user before composing letter
 - `request_notes.identity_verification_required` — flag; shown in dashboard action hints
 - `portal_field_mapping` — optional cached `PortalFieldMapping` with `cached_at`, `platform`, `fields: list[PortalFormField]`, `submit_button` — 90-day TTL. Used by `form_analyzer.py` to avoid re-analyzing portal forms.
 
-**What breaks if malformed:** `CompanyRecord.model_validate_json()` is called on load; any schema violation causes the entire DB to be treated as empty (`CompaniesDB()` is returned) and all cached contacts are lost, forcing a fresh resolution run. This is silent — no error is printed.
+**What breaks if malformed:** `CompanyRecord.model_validate_json()` is called on load; any schema violation causes the entire DB to be treated as empty (`CompaniesDB()` is returned) and all cached contacts are lost, forcing a fresh resolution run. The error is now logged via `[resolver] _load_db failed: {exc}`.
 
 ---
 
@@ -79,11 +80,11 @@ Per-account, per-domain reply state. Written by `state_manager.save_state()` aft
 - `received_at` — ISO datetime
 - `from_addr`, `subject`, `snippet` — raw Gmail fields
 - `tags` — list of classification tags
-- `extracted` — dict with `reference_number`, `confirmation_url`, `data_link` (first URL, for backward compat), `data_links` (all URLs — multi-file deliveries like Substack send multiple ZIPs), `portal_url`, `deadline_extension_days`
+- `extracted` — dict with `reference_number`, `confirmation_url`, `data_link` (first URL, for backward compat), `data_links` (all URLs — multi-file deliveries like Substack send multiple ZIPs), `portal_url`, `deadline_extension_days`, `wrong_channel_instructions` (short phrase from the reply body describing what the company says to do, empty if not WRONG_CHANNEL), `login_required` (bool — true if the company says user must log in)
 - `llm_used` — boolean; shown as an indicator in the dashboard
 - `has_attachment` / `attachment_catalog` — attachment metadata if downloaded
 - `suggested_reply: str` — LLM-generated draft follow-up text (empty if not generated)
-- `reply_review_status: str` — `""` (unseen) | `"pending"` (draft ready) | `"sent"` (user replied) | `"dismissed"`
+- `reply_review_status: str` — `""` (unseen) | `"pending"` (draft ready) | `"sent"` (user replied) | `"dismissed"` | `"portal_submitted"` (user submitted via portal manually)
 - `sent_reply_body: str` — actual text the user sent (may differ from `suggested_reply` if edited before sending)
 - `sent_reply_at: str` — ISO 8601 UTC timestamp of when the user sent the follow-up
 - `portal_verification: dict | None` — URL verification result: `{url, classification, checked_at, error, page_title}`. Classification values: `gdpr_portal`, `help_center`, `login_required`, `dead_link`, `survey`, `unknown`. Set by `monitor.py` when a reply has a portal URL and tags include WRONG_CHANNEL, CONFIRMATION_REQUIRED, or DATA_PROVIDED_PORTAL.

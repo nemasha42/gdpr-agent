@@ -149,11 +149,7 @@ def _fetch_by_thread(
         )
     except _API_ERRORS as exc:
         logger.warning("Thread fetch failed for %s: %s", thread_id, exc)
-        thread = service.users().threads().get(
-            userId="me",
-            id=thread_id,
-            format="full",
-        ).execute()
+        return []
     except Exception as exc:
         print(f"[fetcher] _fetch_by_thread {thread_id}: {exc}")
         return []
@@ -355,11 +351,7 @@ def _fetch_by_search(
                 )
             except _API_ERRORS as exc:
                 logger.debug("Failed to fetch message %s: %s", ref["id"], exc)
-                msg = service.users().messages().get(
-                    userId="me",
-                    id=ref["id"],
-                    format="full",
-                ).execute()
+                continue
             except Exception as exc:
                 print(f"[fetcher] message.get {ref['id']}: {exc}")
                 continue
@@ -466,7 +458,7 @@ def _extract_body(payload: dict) -> str:
             )
         except ValueError as exc:
             logger.debug("Base64 decode failed: %s", exc)
-            return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
+            return ""
         except Exception as exc:
             print(f"[fetcher] base64 decode failed: {exc}")
             return ""
@@ -587,7 +579,7 @@ def _parse_date(date_str: str) -> str:
         )
     except (ValueError, TypeError, OverflowError) as exc:
         logger.debug("Date parse failed for %r: %s", date_str, exc)
-        return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        return datetime.now(timezone.utc).isoformat(timespec="seconds")
     except Exception as exc:
         print(f"[fetcher] _parse_date failed for '{date_str}': {exc}")
         return datetime.now(timezone.utc).isoformat(timespec="seconds")

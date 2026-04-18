@@ -62,6 +62,15 @@ Symptoms: letters show "ready" forever, send task completes with 0 sent, no erro
 ### `extracted` field URLs can be false positives
 `data_link` and `portal_url` may contain misclassified URLs. Templates gate link display on reply tags — don't trust `extracted` URLs without checking tags.
 
+### `extracted` has wrong-channel fields
+`wrong_channel_instructions` (short phrase from the reply body, e.g. "Submit via privacy center at https://...") and `login_required` (bool) are populated by both regex and LLM paths. The company detail template shows instructions inline when present. Both fields are `None`/empty when the reply is not WRONG_CHANNEL.
+
+### `reply_review_status` includes `"portal_submitted"`
+Value `"portal_submitted"` is valid alongside `""`, `"pending"`, `"sent"`, `"dismissed"`. Treated identically to `"sent"` for status computation — resolves the action reply as handled. Set by the "I submitted via portal" button on WRONG_CHANNEL drafts.
+
+### GDPR deadline resets on engagement replies
+`update_state()` resets the 30-day deadline when a new reply carries `CONFIRMATION_REQUIRED`, `REQUEST_ACCEPTED`, or `IN_PROGRESS` tags — the company acknowledged/engaged, so the clock restarts from that reply's `received_at`.
+
 ### Portal reply domain resolution uses project `data/` dir, not per-user `data_dir`
 `_get_portal_sender_domains()` in `monitor_runner.py` reads `companies.json` and `dataowners_overrides.json` from the project's `data/` directory (via `_PROJECT_DATA_DIR`), not from the per-user `data_dir`. When a portal platform can't be identified from the URL (e.g. Zendesk uses Ketch on a branded domain), it falls back to `all_portal_reply_domains()` from `platform_hints.py` to search all known portal platform reply domains.
 
@@ -87,6 +96,7 @@ All tests in `tests/unit/` use DI or `unittest.mock` — no real network calls. 
 - Dashboard route test coverage is partial — most blueprint routes lack dedicated tests
 - GitHub API rate limit (60/hour) blocks 500+ company runs — needs `GITHUB_TOKEN`
 - Ketch portal reCAPTCHA v3 — no automated workaround
+- `Contact.privacy_policy_url` — populated by privacy page scraper (Step 4) but not yet by LLM searcher or datarequests steps
 
 ## LLM Cost Projections (500+ companies, cold cache)
 

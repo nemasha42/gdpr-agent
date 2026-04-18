@@ -159,10 +159,6 @@ def update_state(state: CompanyState, new_replies: list[ReplyRecord]) -> Company
     for reply in new_replies:
         if reply.gmail_message_id not in existing_ids:
             state.replies.append(reply)
-
-    state.last_checked = (
-        datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-    )
             if set(reply.tags) & _DEADLINE_RESET_TAGS:
                 if reply.received_at > latest_reset_ts:
                     latest_reset_ts = reply.received_at
@@ -256,7 +252,8 @@ def compute_status(state: CompanyState) -> str:
     if action_replies:
         # Check if all action replies are resolved (sent, dismissed, or YOUR_REPLY postdates them)
         all_resolved = all(
-            r.reply_review_status in ("sent", "dismissed") for r in action_replies
+            r.reply_review_status in ("sent", "dismissed", "portal_submitted")
+            for r in action_replies
         )
         if not all_resolved:
             # Check if a YOUR_REPLY exists that postdates the latest action reply
@@ -270,9 +267,6 @@ def compute_status(state: CompanyState) -> str:
         if all_resolved:
             return "REPLIED"
         return "ACTION_NEEDED"
-        if all(r.reply_review_status in ("sent", "portal_submitted") for r in action_replies):
-            return "USER_REPLIED"
-        return "ACTION_REQUIRED"
 
     if "EXTENDED" in tags_seen or tags_seen & _ACK_TAGS:
         return "IN_PROGRESS"

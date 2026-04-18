@@ -888,8 +888,6 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
         "portal_url": portal_url,
         "deadline_extension_days": None,
         "summary": "",  # filled by LLM fallback path only
-
-        "summary": "",                   # filled by LLM fallback path only
         "wrong_channel_instructions": wrong_channel_instructions,
         "login_required": login_required,
     }

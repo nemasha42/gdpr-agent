@@ -205,7 +205,7 @@ All tests live in `tests/unit/`. There are no integration test directories, no e
 
 Files follow the naming convention `test_{module_name}.py`. Each file corresponds to one source module. Test classes are named `Test{ConceptBeingTested}` (e.g. `TestContactResolver`, `TestNONGDPRPrepass`); individual test functions are named `test_{specific_scenario}`.
 
-As of the last test run: **670 passed, 1 failed** (`test_portal_submitter` settings mock — known issue).
+As of the last test run: **682 passed, 1 failed** (`test_portal_submitter` settings mock — known issue).
 
 ---
 
@@ -311,7 +311,7 @@ Centralised OAuth2 logic. Tokens are stored per-account in `user_data/tokens/{em
 
 ## 9. Known Issues & Tech Debt
 
-Issues identified during code review (2026-03-16). 29 issues were found and fixed (P1–P3 across llm_searcher, sender, cost_tracker, resolver, classifier, state_manager, link_downloader, schema_builder, privacy_page_scraper, portal_submitter, monitor, run.py). Open items only:
+Issues identified during code review (2026-03-16). 29 issues were found and fixed (P1–P3 across llm_searcher, sender, cost_tracker, resolver, classifier, state_manager, link_downloader, schema_builder, privacy_page_scraper, portal_submitter, monitor, run.py). Error logging audit (2026-04-18): 32 bare `except:` / `except Exception:` blocks across 13 files now log the exception with `[module] context: {exc}` messages. Open items only:
 
 | Priority | Location | Issue |
 |---|---|---|

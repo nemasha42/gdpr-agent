@@ -202,20 +202,20 @@ class TestComputeStatus:
         )
         assert compute_status(state) == "REPLIED"
 
-    def test_portal_submitted_triggers_user_replied(self):
+    def test_portal_submitted_triggers_replied(self):
         # portal_submitted should be treated same as "sent" for status computation
         state = _make_state(replies=[
             _make_reply(["WRONG_CHANNEL"], reply_review_status="portal_submitted"),
         ])
-        assert compute_status(state) == "USER_REPLIED"
+        assert compute_status(state) == "REPLIED"
 
     def test_portal_submitted_mixed_with_unsent_action(self):
-        # One portal_submitted + one unsent action → still ACTION_REQUIRED
+        # One portal_submitted + one unsent action → still ACTION_NEEDED
         state = _make_state(replies=[
             _make_reply(["WRONG_CHANNEL"], msg_id="msg001", reply_review_status="portal_submitted"),
             _make_reply(["IDENTITY_REQUIRED"], msg_id="msg002", reply_review_status=""),
         ])
-        assert compute_status(state) == "ACTION_REQUIRED"
+        assert compute_status(state) == "ACTION_NEEDED"
 
 
 # ---------------------------------------------------------------------------
