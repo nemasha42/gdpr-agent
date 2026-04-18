@@ -68,15 +68,76 @@ After classification, `attachment_handler.py` downloads any Gmail attachment par
 
 ## State Manager (`reply_monitor/state_manager.py`)
 
-`state_manager.py` loads and saves `user_data/reply_state.json`, which is partitioned by account email. It maintains a `CompanyState` for each domain with all accumulated `ReplyRecord` objects. The derived `status` (computed on demand, never stored) uses 7 unified statuses: `OVERDUE > ACTION_NEEDED > STALLED > REPLIED > IN_PROGRESS > WAITING > DONE`. `OVERDUE` fires when today's date exceeds the 30-day GDPR deadline and no terminal tag (data provided, denied, deletion fulfilled) has been seen. `compute_done_reason(state)` returns a sub-label for DONE status: "Data received", "Deletion confirmed", "Denied", "No data held", or "Not applicable".
+`state_manager.py` loads and saves `user_data/reply_state.json`, which is partitioned by account email. It maintains a `CompanyState` for each domain with all accumulated `ReplyRecord` objects. The derived `status` is computed on demand by `compute_status(state)` — never stored in JSON. It returns one of 7 unified statuses used by both SAR and SP streams. `compute_done_reason(state)` returns a sub-label for DONE status.
 
-### Status resolution rules
+### The 7 statuses
 
-1. `_TERMINAL_TAGS` (includes `DATA_PROVIDED_INLINE`) are checked BEFORE action tags — if the company already provided data or fulfilled deletion, stale action items are moot. Terminal → `DONE`.
-2. `REPLIED` fires when all action-tagged replies have `reply_review_status` in `("sent", "dismissed")` OR when a `YOUR_REPLY` exists that postdates the latest action-required reply.
-3. `STALLED` fires when `address_exhausted=True` on the CompanyState, or when the most recent reply is a permanent bounce.
-4. Portal statuses (`portal_status == "awaiting_verification"`, `"submitted"`, `"awaiting_captcha"`) → `WAITING`.
-5. Acknowledged/extended replies → `IN_PROGRESS`.
+| Priority | Status | Color | Meaning |
+|----------|--------|-------|---------|
+| 7 | `OVERDUE` | danger (red) | Past 30-day GDPR deadline, no terminal resolution |
+| 6 | `ACTION_NEEDED` | warning (yellow) | Company asked for something (identity verification, confirmation, portal redirect) — user must act |
+| 5 | `STALLED` | danger (red) | Delivery failed — email bounced or all addresses exhausted |
+| 4 | `REPLIED` | primary (blue) | User sent a follow-up reply, awaiting company response |
+| 3 | `IN_PROGRESS` | info (teal) | Company acknowledged the request or extended the deadline |
+| 2 | `WAITING` | primary (blue) | Request sent, no substantive response yet (default state) |
+| 1 | `DONE` | success/secondary | Terminal — request resolved one way or another |
+
+Priority drives dashboard sort order via `_STATUS_PRIORITY` dict. `REQUEST_STATUSES` list in `models.py` is the canonical list of 7 values.
+
+### Status resolution logic (`compute_status`)
+
+`compute_status(state)` evaluates checks in a fixed order. The first check that matches wins — later checks are skipped. This is the complete evaluation sequence:
+
+**Step 0 — Gather tags.** Collect all tags from `state.replies`, skipping `NON_GDPR` and `YOUR_REPLY` replies (these are invisible to status computation). Also scan `past_attempts` for data-terminal tags (`DATA_PROVIDED_*`, `FULFILLED_DELETION`) so a company that provided data on a previous address attempt retains DONE status even after a retry.
+
+**Step 1 — Address exhausted → `STALLED`.** If `state.address_exhausted` is True (all known addresses bounced and no alternatives found), return immediately. This is checked first because it is a hard dead end — no further monitoring is possible.
+
+**Step 2 — Bounce recency → `STALLED`.** If `BOUNCE_PERMANENT` is in the gathered tags, compare timestamps: find the most recent bounce and the most recent non-bounce reply. If the bounce is the latest event (no subsequent reply superseded it), return `STALLED`. If a real reply arrived after the bounce, discard the bounce tag and fall through to later checks. This prevents a single early bounce from permanently blocking status when the company eventually replied from a different address.
+
+**Step 3 — Overdue → `OVERDUE`.** Parse `state.deadline` (ISO date, 30 days from `sar_sent_at`). If today's date exceeds the deadline AND no terminal tags are present, return `OVERDUE`. Terminal tags take precedence — a company that provided data on day 35 is `DONE`, not `OVERDUE`.
+
+**Step 4 — Terminal tags → `DONE`.** If any tag in `_TERMINAL_TAGS` is present, return `DONE`. Terminal tags: `DATA_PROVIDED_LINK`, `DATA_PROVIDED_ATTACHMENT`, `DATA_PROVIDED_PORTAL`, `DATA_PROVIDED_INLINE`, `FULFILLED_DELETION`, `REQUEST_DENIED`, `NO_DATA_HELD`, `NOT_GDPR_APPLICABLE`. This check comes before action tags — if the company already fulfilled the request, stale action items (identity verification, confirmation) are moot.
+
+**Step 5 — Action tags → `ACTION_NEEDED` or `REPLIED`.** Collect all replies that have at least one tag in `_ACTION_TAGS` (`CONFIRMATION_REQUIRED`, `IDENTITY_REQUIRED`, `MORE_INFO_REQUIRED`, `WRONG_CHANNEL`, `HUMAN_REVIEW`, `PORTAL_VERIFICATION`). If any exist:
+- Check if ALL action replies are resolved: `reply_review_status` is `"sent"` or `"dismissed"`.
+- If not all resolved, check if a `YOUR_REPLY` exists with a timestamp later than the latest action reply (user replied via Gmail directly, bypassing the dashboard draft flow).
+- If all resolved → `REPLIED` (user acted, awaiting company response).
+- If unresolved actions remain → `ACTION_NEEDED`.
+
+**Step 6 — Acknowledgement / extension → `IN_PROGRESS`.** If `EXTENDED` or any tag in `_ACK_TAGS` (`AUTO_ACKNOWLEDGE`, `REQUEST_ACCEPTED`, `IN_PROGRESS`) is present, the company has acknowledged the request and is working on it.
+
+**Step 7 — Default → `WAITING`.** No tags matched any of the above checks. The request was sent but nothing has happened yet. Portal statuses (`portal_status == "awaiting_verification"`, `"submitted"`, `"awaiting_captcha"`) also fall here — portal submission is informational, not a separate status tier.
+
+### DONE sub-labels (`compute_done_reason`)
+
+When `compute_status()` returns `DONE`, `compute_done_reason(state)` provides a human-readable sub-label checked in this priority order:
+
+| Sub-label | Triggers on tags | Badge color |
+|-----------|-----------------|-------------|
+| "Data received" | `DATA_PROVIDED_LINK`, `DATA_PROVIDED_ATTACHMENT`, `DATA_PROVIDED_INLINE`, `DATA_PROVIDED_PORTAL` | success (green) |
+| "Deletion confirmed" | `FULFILLED_DELETION` | success (green) |
+| "Denied" | `REQUEST_DENIED` | secondary (grey) |
+| "No data held" | `NO_DATA_HELD` | secondary (grey) |
+| "Not applicable" | `NOT_GDPR_APPLICABLE` | secondary (grey) |
+
+Data provision is checked first — if a company both denied and later provided data, the sub-label is "Data received".
+
+### Tag sets
+
+Three internal tag sets drive the status logic:
+
+- **`_TERMINAL_TAGS`** (8 tags): `DATA_PROVIDED_LINK`, `DATA_PROVIDED_ATTACHMENT`, `DATA_PROVIDED_PORTAL`, `DATA_PROVIDED_INLINE`, `FULFILLED_DELETION`, `REQUEST_DENIED`, `NO_DATA_HELD`, `NOT_GDPR_APPLICABLE`
+- **`_ACTION_TAGS`** (6 tags): `CONFIRMATION_REQUIRED`, `IDENTITY_REQUIRED`, `MORE_INFO_REQUIRED`, `WRONG_CHANNEL`, `HUMAN_REVIEW`, `PORTAL_VERIFICATION`
+- **`_ACK_TAGS`** (3 tags): `AUTO_ACKNOWLEDGE`, `REQUEST_ACCEPTED`, `IN_PROGRESS`
+
+Tags not in any of these sets (`BOUNCE_TEMPORARY`, `OUT_OF_OFFICE`, `EXTENDED`) are handled by specific checks or ignored. `NON_GDPR` and `YOUR_REPLY` are filtered out before evaluation begins.
+
+### Day count display rules
+
+- **Active** (WAITING, IN_PROGRESS, ACTION_NEEDED, REPLIED): show "Xd left" countdown from 30-day deadline
+- **Hidden** (DONE, STALLED): show "—" with dimmed progress bar
+- **Negative** (OVERDUE): show "X days overdue" in red
+- **Restart**: after portal verification (`verify_portal()`), deadline resets to 30 days from `portal_verified_at`
 
 ### Portal helpers
 

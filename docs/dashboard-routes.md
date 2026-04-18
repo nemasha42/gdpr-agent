@@ -108,12 +108,12 @@ Higher tiers supersede lower — e.g. DATA_PROVIDED hides REQUEST_ACCEPTED; WRON
 
 ## Status System
 
-The status system has 2 layers: 21 reply tags (unchanged) → 7 unified statuses used by both SAR and SP streams. The company-level status layer has been removed — SAR status is the primary badge, SP is shown as a secondary badge using the same 7-status vocabulary.
+The status system has 2 layers: 21 reply tags (unchanged) → 7 unified statuses used by both SAR and SP streams. The company-level status layer has been removed — SAR status is the primary badge, SP is shown as a secondary badge using the same 7-status vocabulary. For the complete evaluation logic, tag sets, and edge cases, see the **Status resolution logic** section in @docs/reply-monitor.md.
 
 | Priority | Status | Color | Meaning |
 |----------|--------|-------|---------|
-| 7 | `OVERDUE` | danger (red) | Past 30-day GDPR deadline |
-| 6 | `ACTION_NEEDED` | warning (yellow) | User must do something |
+| 7 | `OVERDUE` | danger (red) | Past 30-day GDPR deadline, no terminal resolution |
+| 6 | `ACTION_NEEDED` | warning (yellow) | Company asked for something — user must act |
 | 5 | `STALLED` | danger (red) | Delivery failed, can't reach company |
 | 4 | `REPLIED` | primary (blue) | User sent follow-up, awaiting response |
 | 3 | `IN_PROGRESS` | info (teal) | Company acknowledged / working on it |
