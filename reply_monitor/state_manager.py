@@ -19,18 +19,13 @@ _SAR_DEADLINE_DAYS = 30
 # Higher = more urgent
 # ---------------------------------------------------------------------------
 _STATUS_PRIORITY: dict[str, int] = {
-    "OVERDUE": 9,
-    "ACTION_REQUIRED": 8,
-    "ADDRESS_NOT_FOUND": 7,
-    "BOUNCED": 6,
-    "DENIED": 5,
-    "COMPLETED": 4,
-    "EXTENDED": 4,
-    "USER_REPLIED": 3,
-    "PORTAL_VERIFICATION": 3,
-    "ACKNOWLEDGED": 2,
-    "PORTAL_SUBMITTED": 2,
-    "PENDING": 1,
+    "OVERDUE": 7,
+    "ACTION_NEEDED": 6,
+    "STALLED": 5,
+    "REPLIED": 4,
+    "IN_PROGRESS": 3,
+    "WAITING": 2,
+    "DONE": 1,
 }
 
 # Tags that indicate a terminal / resolved state
@@ -160,15 +155,15 @@ def update_state(state: CompanyState, new_replies: list[ReplyRecord]) -> Company
 
 
 def compute_status(state: CompanyState) -> str:
-    """Derive the current company status from accumulated reply tags.
+    """Derive the current request status from accumulated reply tags.
 
-    Priority order (plan spec):
-        BOUNCED > OVERDUE > ACTION_REQUIRED > DENIED > COMPLETED >
-        EXTENDED > ACKNOWLEDGED > PENDING
+    Returns one of 7 unified statuses:
+        STALLED > OVERDUE > ACTION_NEEDED > DONE > REPLIED >
+        IN_PROGRESS > WAITING
     """
-    # Address exhausted: all retry attempts failed — terminal state
+    # Address exhausted: all retry attempts failed
     if state.address_exhausted:
-        return "ADDRESS_NOT_FOUND"
+        return "STALLED"
 
     tags_seen: set[str] = set()
     for reply in state.replies:
@@ -177,7 +172,7 @@ def compute_status(state: CompanyState) -> str:
         tags_seen.update(reply.tags)
 
     # Also include DATA_PROVIDED/FULFILLED_DELETION tags from past attempts.
-    # This preserves COMPLETED status when a new SAR was sent to a company after
+    # This preserves DONE status when a new SAR was sent to a company after
     # data was already received (promote_latest_attempt would archive the old replies).
     _DATA_TERMINAL = frozenset(
         {
@@ -195,7 +190,7 @@ def compute_status(state: CompanyState) -> str:
                         tags_seen.add(tag)
 
     if "BOUNCE_PERMANENT" in tags_seen:
-        # Only treat as BOUNCED if the bounce is the most recent event.
+        # Only treat as STALLED if the bounce is the most recent event.
         # If a non-bounce reply arrived after the bounce, the bounce is superseded.
         last_bounce = max(
             (
@@ -214,7 +209,7 @@ def compute_status(state: CompanyState) -> str:
             default="",
         )
         if last_bounce >= last_non_bounce:
-            return "BOUNCED"
+            return "STALLED"
         # else: bounce superseded by later reply — drop BOUNCE_PERMANENT and fall through
         tags_seen.discard("BOUNCE_PERMANENT")
 
@@ -231,9 +226,7 @@ def compute_status(state: CompanyState) -> str:
     # Terminal tags (data provided, denied, etc.) override unresolved actions.
     # If the company already fulfilled the request, stale action items are moot.
     if tags_seen & _TERMINAL_TAGS:
-        if {"REQUEST_DENIED", "NO_DATA_HELD", "NOT_GDPR_APPLICABLE"} & tags_seen:
-            return "DENIED"
-        return "COMPLETED"
+        return "DONE"
 
     action_replies = [
         r
@@ -257,22 +250,52 @@ def compute_status(state: CompanyState) -> str:
             ):
                 all_resolved = True
         if all_resolved:
-            return "USER_REPLIED"
-        return "ACTION_REQUIRED"
+            return "REPLIED"
+        return "ACTION_NEEDED"
 
-    if "EXTENDED" in tags_seen:
-        return "EXTENDED"
+    if "EXTENDED" in tags_seen or tags_seen & _ACK_TAGS:
+        return "IN_PROGRESS"
 
-    if tags_seen & _ACK_TAGS:
-        return "ACKNOWLEDGED"
+    # Portal-specific: submitted or awaiting verification — still WAITING
+    # (portal_status is informational, not a separate status tier)
 
-    # Portal-specific statuses (more informative than bare PENDING)
-    if state.portal_status == "awaiting_verification":
-        return "PORTAL_VERIFICATION"
-    if state.portal_status in ("submitted", "awaiting_captcha"):
-        return "PORTAL_SUBMITTED"
+    return "WAITING"
 
-    return "PENDING"
+
+def compute_done_reason(state: CompanyState) -> str:
+    """Return a human-readable sub-label for DONE status.
+
+    Only meaningful when compute_status(state) == "DONE".
+    Returns one of: "Data received", "Deletion confirmed", "Denied",
+    "No data held", "Not applicable", or "" if undetermined.
+    """
+    tags_seen: set[str] = set()
+    for reply in state.replies:
+        if "NON_GDPR" in reply.tags or "YOUR_REPLY" in reply.tags:
+            continue
+        tags_seen.update(reply.tags)
+    # Also check past attempts for data-terminal tags
+    for pa in state.past_attempts:
+        for r in pa.get("replies", []):
+            if "NON_GDPR" not in r.get("tags", []):
+                tags_seen.update(r.get("tags", []))
+
+    if tags_seen & {
+        "DATA_PROVIDED_LINK",
+        "DATA_PROVIDED_ATTACHMENT",
+        "DATA_PROVIDED_INLINE",
+        "DATA_PROVIDED_PORTAL",
+    }:
+        return "Data received"
+    if "FULFILLED_DELETION" in tags_seen:
+        return "Deletion confirmed"
+    if "REQUEST_DENIED" in tags_seen:
+        return "Denied"
+    if "NO_DATA_HELD" in tags_seen:
+        return "No data held"
+    if "NOT_GDPR_APPLICABLE" in tags_seen:
+        return "Not applicable"
+    return ""
 
 
 def days_remaining(sar_sent_at: str | None) -> int:
@@ -360,58 +383,6 @@ def verify_portal(state: CompanyState) -> CompanyState:
 def status_sort_key(status: str) -> int:
     """Return numeric priority for sorting — higher means more urgent."""
     return _STATUS_PRIORITY.get(status, 0)
-
-
-# ---------------------------------------------------------------------------
-# Company-level (two-stream) status derivation
-# ---------------------------------------------------------------------------
-
-_SAR_TERMINAL = frozenset({"COMPLETED", "DENIED"})
-_STALLED = frozenset({"BOUNCED", "ADDRESS_NOT_FOUND"})
-_PROGRESS = frozenset(
-    {"ACKNOWLEDGED", "EXTENDED", "PORTAL_SUBMITTED", "PORTAL_VERIFICATION"}
-)
-
-_COMPANY_STATUS_PRIORITY: dict[str, int] = {
-    "OVERDUE": 8,
-    "ACTION_REQUIRED": 7,
-    "STALLED": 6,
-    "USER_REPLIED": 5,
-    "DATA_RECEIVED": 4,
-    "FULLY_RESOLVED": 3,
-    "IN_PROGRESS": 2,
-    "SP_PENDING": 1,
-    "PENDING": 0,
-}
-
-
-def compute_company_status(
-    sar_status: str,
-    sp_status: str,
-    sp_sent: bool,
-) -> str:
-    """Derive company-level status aggregating SAR + SP streams.
-
-    SP is supplementary — sp_sent=False never downgrades company status.
-    SP can only escalate (e.g. SP=OVERDUE surfaces even if SAR=COMPLETED).
-    """
-    if sar_status == "OVERDUE" or (sp_sent and sp_status == "OVERDUE"):
-        return "OVERDUE"
-    if sar_status == "ACTION_REQUIRED" or (sp_sent and sp_status == "ACTION_REQUIRED"):
-        return "ACTION_REQUIRED"
-    if sar_status in _STALLED or (sp_sent and sp_status in _STALLED):
-        return "STALLED"
-    if sar_status in _SAR_TERMINAL:
-        if not sp_sent or sp_status in _SAR_TERMINAL:
-            return "FULLY_RESOLVED"
-        return "DATA_RECEIVED"  # SP sent but still open
-    if sar_status in _PROGRESS:
-        return "IN_PROGRESS"
-    if sar_status == "USER_REPLIED":
-        return "USER_REPLIED"
-    if sar_status == "PENDING" and sp_sent:
-        return "SP_PENDING"
-    return "PENDING"
 
 
 def promote_latest_attempt(

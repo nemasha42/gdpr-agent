@@ -44,13 +44,12 @@
       <div class="d-flex justify-content-between align-items-start mb-2">
         <h6 class="card-title mb-0 fw-bold">{{ card.company_name }}</h6>
         <div class="d-flex flex-column align-items-end gap-1">
-          <span class="badge bg-{{ status_colour.get(card.company_status, 'secondary') }} status-badge">
-            {{ card.company_status.replace('_', ' ') }}
+          <span class="badge bg-{{ status_colour.get(card.status, 'secondary') }} status-badge">
+            {{ card.status.replace('_', ' ') }}
           </span>
-          {# Only show SAR sub-status when it adds info beyond company_status #}
-          {% if card.company_status == 'FULLY_RESOLVED' and card.status != 'COMPLETED' %}
-          <span class="badge bg-{{ status_colour.get(card.status, 'secondary') }} opacity-75" style="font-size:0.65rem">
-            SAR: {{ card.status.replace('_', ' ') }}
+          {% if card.done_reason %}
+          <span class="badge bg-{{ 'secondary' if card.done_reason in ['Denied', 'No data held', 'Not applicable'] else 'success' }} opacity-75" style="font-size:0.65rem">
+            {{ card.done_reason }}
           </span>
           {% endif %}
         </div>
@@ -84,7 +83,7 @@
         </span>
       </div>
 
-      {# Tags — only show action-required tags; progress/delivery tags are captured by company_status #}
+      {# Tags — only show action-required tags; progress/delivery tags are captured by the status badge #}
       {% set _suppress_tags = ['REQUEST_ACCEPTED', 'AUTO_ACKNOWLEDGE', 'DATA_PROVIDED_LINK', 'DATA_PROVIDED_ATTACHMENT', 'DATA_PROVIDED_PORTAL'] %}
       {% if card.tags %}
       <div class="mb-2">
@@ -125,15 +124,14 @@
              class="btn btn-sm btn-success">&#x1F4E6; View data</a>
         {% endif %}
       </div>
-      {# SP badge — suppress when company_status=SP_PENDING (top badge already says it) #}
-      {% if card.sp_sent and card.company_status != 'SP_PENDING' %}
+      {% if card.sp_sent %}
         <div class="mt-1">
           <a href="/transfers#{{ card.domain }}" class="text-decoration-none">
             <span class="badge
-              {% if card.sp_status == 'COMPLETED' %}bg-success
-              {% elif card.sp_status == 'ACKNOWLEDGED' %}bg-info text-dark
+              {% if card.sp_status == 'DONE' %}bg-success
+              {% elif card.sp_status == 'IN_PROGRESS' %}bg-info text-dark
               {% elif card.sp_status == 'OVERDUE' %}bg-danger
-              {% elif card.sp_status == 'ACTION_REQUIRED' %}bg-warning text-dark
+              {% elif card.sp_status == 'ACTION_NEEDED' %}bg-warning text-dark
               {% else %}bg-light text-muted border{% endif %}"
               style="font-size:0.68rem">
               SP: {{ card.sp_status | replace('_', ' ') | title }}

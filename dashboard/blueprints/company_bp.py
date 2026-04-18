@@ -9,7 +9,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from letter_engine.tracker import get_log
 from reply_monitor.classifier import _ACTION_DRAFT_TAGS
 from reply_monitor.state_manager import (
-    compute_company_status,
+    compute_done_reason,
     compute_status,
     days_remaining,
     load_state,
@@ -252,13 +252,8 @@ def company_detail(domain: str):
                 )
         sp_thread.sort(key=lambda e: e["sort_key"])
 
-    # ── Summary lines ("why is it this status?") ─────────────────────────────
-    company_status = compute_company_status(
-        sar_status=status,
-        sp_status=sp_status,
-        sp_sent=bool(sp_sent),
-    )
     sar_days_left = days_remaining(state.sar_sent_at)
+    done_reason = compute_done_reason(state) if status == "DONE" else ""
 
     # Look up portal URL from company records (overrides included)
     company_record = _lookup_company(domain)
@@ -270,6 +265,7 @@ def company_detail(domain: str):
         state=state,
         status=status,
         status_colour=_STATUS_COLOUR.get(status, "secondary"),
+        done_reason=done_reason,
         reply_rows=reply_rows,
         past_attempts=past_attempts_display,
         account=account,
@@ -282,8 +278,6 @@ def company_detail(domain: str):
         sp_reply_rows=sp_reply_rows,
         sar_thread=sar_thread,
         sp_thread=sp_thread,
-        company_status=company_status,
-        company_status_colour=_STATUS_COLOUR.get(company_status, "secondary"),
         sar_days_left=sar_days_left,
         portal_url=portal_url,
     )
@@ -303,14 +297,18 @@ def send_followup(domain: str):
     state = states.get(domain)
     if not state:
         flash("Company not found.", "danger")
-        return redirect(url_for("company.company_detail", domain=domain, account=account))
+        return redirect(
+            url_for("company.company_detail", domain=domain, account=account)
+        )
 
     reply = next(
         (r for r in state.replies if r.gmail_message_id == gmail_message_id), None
     )
     if not reply:
         flash("Reply not found.", "danger")
-        return redirect(url_for("company.company_detail", domain=domain, account=account))
+        return redirect(
+            url_for("company.company_detail", domain=domain, account=account)
+        )
 
     success, _msg_id, _thread_id = send_thread_reply(
         state.gmail_thread_id,
@@ -369,14 +367,18 @@ def send_sp_followup(domain: str):
     state = sp_states.get(domain)
     if not state:
         flash("SP state not found.", "danger")
-        return redirect(url_for("company.company_detail", domain=domain, account=account))
+        return redirect(
+            url_for("company.company_detail", domain=domain, account=account)
+        )
 
     reply = next(
         (r for r in state.replies if r.gmail_message_id == gmail_message_id), None
     )
     if not reply:
         flash("Reply not found.", "danger")
-        return redirect(url_for("company.company_detail", domain=domain, account=account))
+        return redirect(
+            url_for("company.company_detail", domain=domain, account=account)
+        )
 
     success, _msg_id, _thread_id = send_thread_reply(
         thread_id or state.gmail_thread_id,
@@ -430,7 +432,9 @@ def compose_reply(domain: str):
 
     if not reply_body:
         flash("Reply body cannot be empty.", "warning")
-        return redirect(url_for("company.company_detail", domain=domain, account=account))
+        return redirect(
+            url_for("company.company_detail", domain=domain, account=account)
+        )
 
     from letter_engine.sender import send_thread_reply
 
@@ -438,7 +442,9 @@ def compose_reply(domain: str):
     state = states.get(domain)
     if not state:
         flash("Company not found.", "danger")
-        return redirect(url_for("company.company_detail", domain=domain, account=account))
+        return redirect(
+            url_for("company.company_detail", domain=domain, account=account)
+        )
 
     success, _msg_id, _thread_id = send_thread_reply(
         state.gmail_thread_id,
@@ -493,7 +499,9 @@ def compose_sp_reply(domain: str):
 
     if not reply_body:
         flash("Reply body cannot be empty.", "warning")
-        return redirect(url_for("company.company_detail", domain=domain, account=account))
+        return redirect(
+            url_for("company.company_detail", domain=domain, account=account)
+        )
 
     from letter_engine.sender import send_thread_reply
 
@@ -501,7 +509,9 @@ def compose_sp_reply(domain: str):
     state = sp_states.get(domain)
     if not state:
         flash("SP state not found.", "danger")
-        return redirect(url_for("company.company_detail", domain=domain, account=account))
+        return redirect(
+            url_for("company.company_detail", domain=domain, account=account)
+        )
 
     success, _msg_id, _thread_id = send_thread_reply(
         thread_id or state.gmail_thread_id,

@@ -251,15 +251,15 @@
       <h6 class="mb-0 fw-bold">4. Monitor Replies</h6>
       {% if monitor_counts.OVERDUE > 0 %}
         <span class="badge bg-danger">{{ monitor_counts.OVERDUE }} overdue</span>
-      {% elif monitor_counts.PENDING > 0 %}
-        <span class="badge bg-primary">{{ monitor_counts.PENDING }} pending</span>
+      {% elif monitor_counts.WAITING > 0 %}
+        <span class="badge bg-primary">{{ monitor_counts.WAITING }} pending</span>
       {% else %}
         <span class="badge bg-secondary">—</span>
       {% endif %}
     </div>
     <p class="text-muted small mb-2">
       {{ sent_count }} compan{% if sent_count == 1 %}y{% else %}ies{% endif %} monitored —
-      {{ monitor_counts.PENDING }} pending,
+      {{ monitor_counts.WAITING }} pending,
       {{ monitor_counts.OVERDUE }} overdue.
     </p>
     <a href="/?account={{ account }}" class="btn btn-outline-secondary btn-sm">Open dashboard</a>

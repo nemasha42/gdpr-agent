@@ -126,7 +126,7 @@ Detailed documentation for each subsystem is split into separate files. Use `@do
 | @docs/pipeline-stages.md | Stage 1 (Scanner), Stage 2 (Resolver), Stage 3 (Letter Engine), Stage 5 (Subprocessors), subprocessor disclosure request path, LLM call sites 1 and 6 |
 | @docs/reply-monitor.md | Stage 4 full documentation: fetcher, 3-pass classifier, state manager, attachment handler, link downloader, schema builder, URL verifier, LLM call sites 2 and 3 |
 | @docs/portal-automation.md | All 7 `portal_submitter/` modules, platform-specific constraints, LLM call sites 4 and 5 |
-| @docs/dashboard-routes.md | Route reference, UI components, tag display tiers, company-level status computation, known limitations |
+| @docs/dashboard-routes.md | Route reference, UI components, tag display tiers, 7-status system, known limitations |
 | @docs/data-models.md | `companies.json`, `dataowners_overrides.json`, `sent_letters.json`, `reply_state.json` (CompanyState + ReplyRecord), `cost_log.json`, `subprocessor_requests.json`, portal models — all with "what breaks if malformed" sections |
 
 ---
@@ -227,7 +227,7 @@ As of the last test run: **655 passed, 1 failed** (`test_portal_submitter` setti
 | `reply_monitor/classifier.py` | `test_reply_classifier.py` | Excellent — all 18 tags, NON_GDPR pre-pass (including `alerts@` scoring), URL extraction from body, LLM fallback, multi-tag messages |
 | `reply_monitor/fetcher.py` | `test_reply_fetcher.py` | Good — thread fetch, search fallback, body extraction (plain/HTML/multipart), attachment detection, deduplication |
 | `reply_monitor/attachment_handler.py` | `test_attachment_handler.py` | Good — ZIP cataloging, JSON/CSV key extraction, category guessing, Gmail attachment download |
-| `reply_monitor/state_manager.py` | `test_reply_state_manager.py` | Good — all 8 statuses, priority ordering, deadline computation, per-account isolation, update_state dedup |
+| `reply_monitor/state_manager.py` | `test_reply_state_manager.py` | Good — all 7 statuses, priority ordering, deadline computation, per-account isolation, update_state dedup |
 | `reply_monitor/classifier.py` (LLM cache) | `test_reply_classifier.py` | Partial — LLM fallback tested; dedup cache (`_llm_cache`) not explicitly tested |
 | `reply_monitor/schema_builder.py` | `test_schema_builder.py` | Good — empty export, corrupt ZIP, malformed JSON, successful extraction, dynamic truncation |
 | `reply_monitor/link_downloader.py` | `test_link_downloader.py` | Good — DownloadResult, filename parsing, requests path, too-large, 404 expiry; Playwright path skipped if not installed |

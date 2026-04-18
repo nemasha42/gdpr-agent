@@ -24,7 +24,6 @@ from auth.gmail_oauth import get_gmail_service
 from contact_resolver import cost_tracker
 from reply_monitor.models import CompanyState
 from reply_monitor.state_manager import (
-    _ACTION_TAGS,
     compute_status,
     days_remaining,
     deadline_from_sent,
@@ -33,7 +32,6 @@ from reply_monitor.state_manager import (
 )
 
 from dashboard.services.monitor_runner import (
-    auto_download_data_links,
     run_sar_monitor,
     run_sp_monitor,
     _reprocess_existing,
@@ -127,8 +125,12 @@ def main() -> None:
             return
 
         if args.draft_backfill:
-            n_sar = _backfill_reply_drafts(states, api_key, service, verbose=args.verbose)
-            n_sp = _backfill_reply_drafts(sp_states, api_key, service, verbose=args.verbose)
+            n_sar = _backfill_reply_drafts(
+                states, api_key, service, verbose=args.verbose
+            )
+            n_sp = _backfill_reply_drafts(
+                sp_states, api_key, service, verbose=args.verbose
+            )
             print(f"[draft-backfill] {n_sar} SAR + {n_sp} SP reply draft(s) generated")
             if n_sar:
                 save_state(email, states, path=state_path)
@@ -208,7 +210,7 @@ def _handle_bounce_retries(
     for domain, state in states.items():
         if state.address_exhausted:
             continue
-        if compute_status(state) != "BOUNCED":
+        if compute_status(state) != "STALLED":
             continue
 
         total_attempts = 1 + len(state.past_attempts)
@@ -378,15 +380,13 @@ def _print_summary(
 
 def _status_priority(status: str) -> int:
     return {
-        "OVERDUE": 8,
-        "ACTION_REQUIRED": 7,
-        "ADDRESS_NOT_FOUND": 6,
-        "BOUNCED": 5,
-        "DENIED": 4,
-        "COMPLETED": 3,
-        "EXTENDED": 3,
-        "ACKNOWLEDGED": 2,
-        "PENDING": 1,
+        "OVERDUE": 7,
+        "ACTION_NEEDED": 6,
+        "STALLED": 5,
+        "REPLIED": 4,
+        "IN_PROGRESS": 3,
+        "WAITING": 2,
+        "DONE": 1,
     }.get(status, 0)
 
 

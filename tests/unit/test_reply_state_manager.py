@@ -82,68 +82,68 @@ def _make_reply(
 
 
 class TestComputeStatus:
-    def test_pending_no_replies(self):
+    def test_waiting_no_replies(self):
         state = _make_state()
-        assert compute_status(state) == "PENDING"
+        assert compute_status(state) == "WAITING"
 
-    def test_bounced_from_permanent_bounce(self):
+    def test_stalled_from_permanent_bounce(self):
         state = _make_state(replies=[_make_reply(["BOUNCE_PERMANENT"])])
-        assert compute_status(state) == "BOUNCED"
+        assert compute_status(state) == "STALLED"
 
-    def test_acknowledged_auto_ack(self):
+    def test_in_progress_auto_ack(self):
         state = _make_state(replies=[_make_reply(["AUTO_ACKNOWLEDGE"])])
-        assert compute_status(state) == "ACKNOWLEDGED"
+        assert compute_status(state) == "IN_PROGRESS"
 
-    def test_acknowledged_request_accepted(self):
+    def test_in_progress_request_accepted(self):
         state = _make_state(replies=[_make_reply(["REQUEST_ACCEPTED"])])
-        assert compute_status(state) == "ACKNOWLEDGED"
+        assert compute_status(state) == "IN_PROGRESS"
 
     def test_action_required_identity(self):
         state = _make_state(
             replies=[_make_reply(["AUTO_ACKNOWLEDGE", "IDENTITY_REQUIRED"])]
         )
-        assert compute_status(state) == "ACTION_REQUIRED"
+        assert compute_status(state) == "ACTION_NEEDED"
 
     def test_action_required_confirmation(self):
         state = _make_state(replies=[_make_reply(["CONFIRMATION_REQUIRED"])])
-        assert compute_status(state) == "ACTION_REQUIRED"
+        assert compute_status(state) == "ACTION_NEEDED"
 
     def test_action_required_wrong_channel(self):
         state = _make_state(replies=[_make_reply(["WRONG_CHANNEL"])])
-        assert compute_status(state) == "ACTION_REQUIRED"
+        assert compute_status(state) == "ACTION_NEEDED"
 
     def test_action_required_wrong_channel_portal(self):
         # WRONG_CHANNEL now covers former REDIRECT_TO_PORTAL cases too
         state = _make_state(replies=[_make_reply(["WRONG_CHANNEL"])])
-        assert compute_status(state) == "ACTION_REQUIRED"
+        assert compute_status(state) == "ACTION_NEEDED"
 
     def test_extended(self):
         state = _make_state(replies=[_make_reply(["EXTENDED"])])
-        assert compute_status(state) == "EXTENDED"
+        assert compute_status(state) == "IN_PROGRESS"
 
     def test_completed_data_link(self):
         state = _make_state(replies=[_make_reply(["DATA_PROVIDED_LINK"])])
-        assert compute_status(state) == "COMPLETED"
+        assert compute_status(state) == "DONE"
 
     def test_completed_data_attachment(self):
         state = _make_state(replies=[_make_reply(["DATA_PROVIDED_ATTACHMENT"])])
-        assert compute_status(state) == "COMPLETED"
+        assert compute_status(state) == "DONE"
 
     def test_completed_fulfilled_deletion(self):
         state = _make_state(replies=[_make_reply(["FULFILLED_DELETION"])])
-        assert compute_status(state) == "COMPLETED"
+        assert compute_status(state) == "DONE"
 
     def test_denied_request_denied(self):
         state = _make_state(replies=[_make_reply(["REQUEST_DENIED"])])
-        assert compute_status(state) == "DENIED"
+        assert compute_status(state) == "DONE"
 
     def test_denied_no_data(self):
         state = _make_state(replies=[_make_reply(["NO_DATA_HELD"])])
-        assert compute_status(state) == "DENIED"
+        assert compute_status(state) == "DONE"
 
     def test_denied_not_applicable(self):
         state = _make_state(replies=[_make_reply(["NOT_GDPR_APPLICABLE"])])
-        assert compute_status(state) == "DENIED"
+        assert compute_status(state) == "DONE"
 
     def test_overdue_past_deadline_no_terminal(self):
         # deadline in the past, no terminal tags
@@ -156,7 +156,7 @@ class TestComputeStatus:
             sent_days_ago=35,
             deadline_days_from_now=-5,
         )
-        assert compute_status(state) == "COMPLETED"
+        assert compute_status(state) == "DONE"
 
     def test_user_replied_when_all_action_replies_sent(self):
         # WRONG_CHANNEL reply, user replied → USER_REPLIED
@@ -165,7 +165,7 @@ class TestComputeStatus:
                 _make_reply(["WRONG_CHANNEL"], reply_review_status="sent"),
             ]
         )
-        assert compute_status(state) == "USER_REPLIED"
+        assert compute_status(state) == "REPLIED"
 
     def test_action_required_when_some_action_replies_not_sent(self):
         # Two action replies, only one replied to → still ACTION_REQUIRED
@@ -179,7 +179,7 @@ class TestComputeStatus:
                 ),
             ]
         )
-        assert compute_status(state) == "ACTION_REQUIRED"
+        assert compute_status(state) == "ACTION_NEEDED"
 
     def test_action_required_when_reply_is_pending(self):
         # pending (draft ready but not sent) → ACTION_REQUIRED
@@ -188,7 +188,7 @@ class TestComputeStatus:
                 _make_reply(["WRONG_CHANNEL"], reply_review_status="pending"),
             ]
         )
-        assert compute_status(state) == "ACTION_REQUIRED"
+        assert compute_status(state) == "ACTION_NEEDED"
 
     def test_user_replied_ignores_non_gdpr(self):
         # Action reply replied to + NON_GDPR reply → USER_REPLIED (NON_GDPR excluded)
@@ -200,7 +200,7 @@ class TestComputeStatus:
                 _make_reply(["NON_GDPR"], msg_id="msg002", reply_review_status=""),
             ]
         )
-        assert compute_status(state) == "USER_REPLIED"
+        assert compute_status(state) == "REPLIED"
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +217,7 @@ class TestStatusPriority:
             sent_days_ago=35,
             deadline_days_from_now=-5,
         )
-        assert compute_status(state) == "BOUNCED"
+        assert compute_status(state) == "STALLED"
 
     def test_action_above_extended(self):
         state = _make_state(
@@ -226,12 +226,11 @@ class TestStatusPriority:
                 _make_reply(["IDENTITY_REQUIRED"], msg_id="msg002"),
             ]
         )
-        assert compute_status(state) == "ACTION_REQUIRED"
+        assert compute_status(state) == "ACTION_NEEDED"
 
     def test_sort_key_ordering(self):
         keys = [
-            status_sort_key(s)
-            for s in ["PENDING", "ACKNOWLEDGED", "COMPLETED", "OVERDUE"]
+            status_sort_key(s) for s in ["DONE", "WAITING", "IN_PROGRESS", "OVERDUE"]
         ]
         assert keys == sorted(keys)  # ascending by urgency in sort_key
 
@@ -243,7 +242,7 @@ class TestStatusPriority:
                 _make_reply(["FULFILLED_DELETION"], msg_id="msg002"),
             ]
         )
-        assert compute_status(state) == "COMPLETED"
+        assert compute_status(state) == "DONE"
 
     def test_terminal_overrides_unresolved_wrong_channel(self):
         """DATA_PROVIDED_LINK (terminal) should override unresolved WRONG_CHANNEL."""
@@ -253,7 +252,7 @@ class TestStatusPriority:
                 _make_reply(["DATA_PROVIDED_LINK"], msg_id="msg002"),
             ]
         )
-        assert compute_status(state) == "COMPLETED"
+        assert compute_status(state) == "DONE"
 
     def test_your_reply_resolves_action_required(self):
         """YOUR_REPLY after action-required reply should resolve to USER_REPLIED."""
@@ -269,7 +268,7 @@ class TestStatusPriority:
                 ),
             ]
         )
-        assert compute_status(state) == "USER_REPLIED"
+        assert compute_status(state) == "REPLIED"
 
     def test_your_reply_before_action_does_not_resolve(self):
         """YOUR_REPLY before an action-required reply should not resolve it."""
@@ -285,7 +284,7 @@ class TestStatusPriority:
                 ),
             ]
         )
-        assert compute_status(state) == "ACTION_REQUIRED"
+        assert compute_status(state) == "ACTION_NEEDED"
 
     def test_dismissed_draft_resolves_action(self):
         """Dismissed drafts should resolve the action (user decided not to respond)."""
@@ -294,7 +293,7 @@ class TestStatusPriority:
                 _make_reply(["WRONG_CHANNEL"], reply_review_status="dismissed"),
             ]
         )
-        assert compute_status(state) == "USER_REPLIED"
+        assert compute_status(state) == "REPLIED"
 
     def test_mixed_sent_and_dismissed_resolves(self):
         """Mix of sent and dismissed action replies should resolve to USER_REPLIED."""
@@ -310,12 +309,12 @@ class TestStatusPriority:
                 ),
             ]
         )
-        assert compute_status(state) == "USER_REPLIED"
+        assert compute_status(state) == "REPLIED"
 
     def test_completed_data_provided_inline(self):
         """DATA_PROVIDED_INLINE should trigger COMPLETED status."""
         state = _make_state(replies=[_make_reply(["DATA_PROVIDED_INLINE"])])
-        assert compute_status(state) == "COMPLETED"
+        assert compute_status(state) == "DONE"
 
 
 # ---------------------------------------------------------------------------
@@ -341,7 +340,7 @@ class TestBounceSuperseded:
                 ),
             ]
         )
-        assert compute_status(state) == "ACKNOWLEDGED"
+        assert compute_status(state) == "IN_PROGRESS"
 
     def test_bounce_not_superseded_when_latest(self):
         # Only bounce reply — should still return BOUNCED.
@@ -350,7 +349,7 @@ class TestBounceSuperseded:
                 _make_reply(["BOUNCE_PERMANENT"], msg_id="msg001"),
             ]
         )
-        assert compute_status(state) == "BOUNCED"
+        assert compute_status(state) == "STALLED"
 
     def test_two_bounces_returns_bounced(self):
         # Two bounce replies — most recent event is still a bounce → BOUNCED.
@@ -369,7 +368,7 @@ class TestBounceSuperseded:
                 ),
             ]
         )
-        assert compute_status(state) == "BOUNCED"
+        assert compute_status(state) == "STALLED"
 
     def test_bounce_superseded_non_gdpr_ignored(self):
         # NON_GDPR reply after bounce should not count as superseding it.
@@ -385,7 +384,7 @@ class TestBounceSuperseded:
                 ),
             ]
         )
-        assert compute_status(state) == "BOUNCED"
+        assert compute_status(state) == "STALLED"
 
 
 # ---------------------------------------------------------------------------

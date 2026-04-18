@@ -91,7 +91,7 @@ def _sync_scan_state_flags(account: str, state: dict) -> dict:
         ):
             sent_by_domain[d] = r
 
-    # Load reply states to detect BOUNCED companies
+    # Load reply states to detect STALLED companies
     try:
         reply_states = load_state(account, path=_current_state_path())
     except Exception:
@@ -108,7 +108,7 @@ def _sync_scan_state_flags(account: str, state: dict) -> dict:
         # waiting for human input.
         if data.get("sar_sent") and not data.get("needs_human"):
             reply_state = reply_states.get(domain)
-            if reply_state and compute_status(reply_state) == "BOUNCED":
+            if reply_state and compute_status(reply_state) == "STALLED":
                 # The bounced email is on the CompanyState, not the most recent
                 # sent record.  reply_state.to_email holds the address that was
                 # used when the state was first created (the original send).
@@ -369,7 +369,6 @@ def pipeline_page() -> str:
 
     discovered = state.get("discovered_companies", {})
     resolved = sum(1 for d in discovered.values() if d.get("contact_resolved"))
-    sent = sum(1 for d in discovered.values() if d.get("sar_sent"))
     skipped = sum(
         1
         for d in discovered.values()
@@ -394,7 +393,7 @@ def pipeline_page() -> str:
     ]
 
     # Count pending/overdue from reply_state for the Monitor card
-    monitor_counts = {"PENDING": 0, "OVERDUE": 0}
+    monitor_counts = {"WAITING": 0, "OVERDUE": 0}
     try:
         reply_states = load_state(account, path=_current_state_path())
         for s in reply_states.values():

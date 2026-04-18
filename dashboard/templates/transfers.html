@@ -140,14 +140,14 @@
             {% endif %}
             {% if row.request_sent %}
               <span class="badge
-                {% if row.sp_status == 'COMPLETED' %}bg-success
-                {% elif row.sp_status == 'ACKNOWLEDGED' %}bg-info text-dark
+                {% if row.sp_status == 'DONE' %}bg-success
+                {% elif row.sp_status == 'IN_PROGRESS' %}bg-info text-dark
                 {% elif row.sp_status == 'OVERDUE' %}bg-danger
-                {% elif row.sp_status == 'ACTION_REQUIRED' %}bg-warning text-dark
+                {% elif row.sp_status == 'ACTION_NEEDED' %}bg-warning text-dark
                 {% else %}bg-light text-muted border{% endif %}"
                 style="font-size:0.72rem"
-                title="Disclosure request sent — {{ row.sp_status or 'Pending' }}">
-                SP: {{ (row.sp_status or 'Pending') | replace('_', ' ') | title }}
+                title="Disclosure request sent — {{ row.sp_status or 'Waiting' }}">
+                SP: {{ (row.sp_status or 'Waiting') | replace('_', ' ') | title }}
               </span>
             {% elif row.has_email %}
               <form method="POST" action="/transfers/request-letter/{{ row.domain }}" style="display:inline" onclick="event.stopPropagation()">

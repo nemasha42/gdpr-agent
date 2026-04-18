@@ -67,7 +67,10 @@
     <span class="text-muted small">{{ domain }}</span>
   </div>
   <div class="text-end">
-    <span class="badge bg-{{ company_status_colour }} fs-6">{{ company_status.replace('_', ' ') }}</span>
+    <span class="badge bg-{{ status_colour }} fs-6">{{ status.replace('_', ' ') }}</span>
+    {% if done_reason %}
+    <div><span class="badge bg-{{ 'secondary' if done_reason in ['Denied', 'No data held', 'Not applicable'] else 'success' }} opacity-75" style="font-size:0.7rem">{{ done_reason }}</span></div>
+    {% endif %}
     <div class="text-muted small mt-1">Deadline {{ state.deadline }}
       {% if sar_days_left > 0 %}· {{ sar_days_left }} days left
       {% elif sar_days_left == 0 %}· Due today
@@ -121,7 +124,7 @@
   <div class="card mb-2 border-secondary opacity-75 p-0">
     <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-2 px-3">
       <span class="small"><s>&#x2709; {{ pa.to_email }}</s> <span class="text-muted">{{ pa.sar_sent_at }}</span></span>
-      <span class="badge bg-secondary">BOUNCED</span>
+      <span class="badge bg-secondary">STALLED</span>
     </div>
     {% if pa.reply_rows %}
     <div class="card-body py-2 px-3">
@@ -427,7 +430,7 @@
 {{ stream_panel(
   "Subprocessor Disclosure Request",
   "sp",
-  sp_status or "PENDING",
+  sp_status or "WAITING",
   sp_status_colour or "secondary",
   sp_sent.get("sent_at", "")[:10],
   sp_sent.get("to", ""),
@@ -490,11 +493,11 @@ document.querySelectorAll('.expand-btn').forEach(btn => {
   });
 });
 
-// Auto-expand threads that have a pending draft or ACTION_REQUIRED status
+// Auto-expand threads that have a pending draft or ACTION_NEEDED status
 document.querySelectorAll('.stream-panel').forEach(panel => {
   const hasDraft = panel.querySelector('.draft-panel');
   const badge = panel.querySelector('.badge');
-  const isAction = badge && badge.textContent.includes('ACTION REQUIRED');
+  const isAction = badge && badge.textContent.includes('ACTION NEEDED');
   if (hasDraft || isAction) {
     const body = panel.querySelector('.thread-body');
     const btn = panel.querySelector('.thread-toggle-btn');

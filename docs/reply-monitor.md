@@ -68,15 +68,15 @@ After classification, `attachment_handler.py` downloads any Gmail attachment par
 
 ## State Manager (`reply_monitor/state_manager.py`)
 
-`state_manager.py` loads and saves `user_data/reply_state.json`, which is partitioned by account email. It maintains a `CompanyState` for each domain with all accumulated `ReplyRecord` objects. The derived `status` (computed on demand, never stored) follows this priority order: `BOUNCED > OVERDUE > ACTION_REQUIRED > DENIED > COMPLETED > EXTENDED > USER_REPLIED > PORTAL_VERIFICATION > PORTAL_SUBMITTED > ADDRESS_NOT_FOUND > ACKNOWLEDGED > PENDING`. `OVERDUE` fires when today's date exceeds the 30-day GDPR deadline and no terminal tag (data provided, denied, deletion fulfilled) has been seen.
+`state_manager.py` loads and saves `user_data/reply_state.json`, which is partitioned by account email. It maintains a `CompanyState` for each domain with all accumulated `ReplyRecord` objects. The derived `status` (computed on demand, never stored) uses 7 unified statuses: `OVERDUE > ACTION_NEEDED > STALLED > REPLIED > IN_PROGRESS > WAITING > DONE`. `OVERDUE` fires when today's date exceeds the 30-day GDPR deadline and no terminal tag (data provided, denied, deletion fulfilled) has been seen. `compute_done_reason(state)` returns a sub-label for DONE status: "Data received", "Deletion confirmed", "Denied", "No data held", or "Not applicable".
 
 ### Status resolution rules
 
-1. `_TERMINAL_TAGS` (includes `DATA_PROVIDED_INLINE`) are checked BEFORE action tags — if the company already provided data or fulfilled deletion, stale action items are moot.
-2. `USER_REPLIED` fires when all action-tagged replies have `reply_review_status` in `("sent", "dismissed")` OR when a `YOUR_REPLY` exists that postdates the latest action-required reply.
-3. `ADDRESS_NOT_FOUND` fires when `address_exhausted=True` on the CompanyState.
-4. `PORTAL_VERIFICATION` fires when `portal_status == "awaiting_verification"` (no reply yet but portal needs confirmation).
-5. `PORTAL_SUBMITTED` fires when `portal_status in ("submitted", "awaiting_captcha")`.
+1. `_TERMINAL_TAGS` (includes `DATA_PROVIDED_INLINE`) are checked BEFORE action tags — if the company already provided data or fulfilled deletion, stale action items are moot. Terminal → `DONE`.
+2. `REPLIED` fires when all action-tagged replies have `reply_review_status` in `("sent", "dismissed")` OR when a `YOUR_REPLY` exists that postdates the latest action-required reply.
+3. `STALLED` fires when `address_exhausted=True` on the CompanyState, or when the most recent reply is a permanent bounce.
+4. Portal statuses (`portal_status == "awaiting_verification"`, `"submitted"`, `"awaiting_captcha"`) → `WAITING`.
+5. Acknowledged/extended replies → `IN_PROGRESS`.
 
 ### Portal helpers
 
@@ -84,7 +84,7 @@ After classification, `attachment_handler.py` downloads any Gmail attachment par
 
 ### `promote_latest_attempt()`
 
-When multiple SAR letters were sent to the same domain (e.g. first address bounced, user retried with a new address), this function ensures the most recent letter is the "active" attempt. Older attempts — along with their replies — are archived into `CompanyState.past_attempts`. Called by `_load_all_states()` on every dashboard load. Portal field preservation: carries forward `portal_status`, `portal_confirmation_ref`, `portal_screenshot`, `portal_verified_at`, `status_log` from the existing `CompanyState` when available — these may have been updated via `verify_portal()` or `set_portal_status()` since the sent record was created. Falls back to the sent record's portal fields only when no existing state exists. `compute_status()` also checks `past_attempts` for terminal tags (DATA_PROVIDED, FULFILLED_DELETION) so a company that received data on a previous attempt retains COMPLETED status.
+When multiple SAR letters were sent to the same domain (e.g. first address bounced, user retried with a new address), this function ensures the most recent letter is the "active" attempt. Older attempts — along with their replies — are archived into `CompanyState.past_attempts`. Called by `_load_all_states()` on every dashboard load. Portal field preservation: carries forward `portal_status`, `portal_confirmation_ref`, `portal_screenshot`, `portal_verified_at`, `status_log` from the existing `CompanyState` when available — these may have been updated via `verify_portal()` or `set_portal_status()` since the sent record was created. Falls back to the sent record's portal fields only when no existing state exists. `compute_status()` also checks `past_attempts` for terminal tags (DATA_PROVIDED, FULFILLED_DELETION) so a company that received data on a previous attempt retains DONE status.
 
 ---
 

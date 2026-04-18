@@ -200,7 +200,7 @@ def test_full_state_cycle(tmp_path):
 
     # 4. Compute status
     status = compute_status(updated)
-    assert status == "ACKNOWLEDGED"
+    assert status == "IN_PROGRESS"
 
     # 5. Save updated state
     save_state(account, {"spotify.com": updated}, path=state_path)

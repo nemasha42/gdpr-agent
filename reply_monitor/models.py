@@ -30,33 +30,16 @@ REPLY_TAGS = [
     "YOUR_REPLY",  # Manual reply sent by the user directly in Gmail (not via dashboard)
 ]
 
-# Derived per-stream statuses (computed, never stored)
-COMPANY_STATUSES = [
-    "PENDING",
-    "BOUNCED",
-    "ADDRESS_NOT_FOUND",
-    "ACKNOWLEDGED",
-    "ACTION_REQUIRED",
-    "USER_REPLIED",
-    "EXTENDED",
-    "COMPLETED",
-    "DENIED",
-    "OVERDUE",
-    "PORTAL_SUBMITTED",
-    "PORTAL_VERIFICATION",
-]
-
-# Derived company-level (two-stream) statuses (computed, never stored)
-COMPANY_LEVEL_STATUSES = [
-    "PENDING",
-    "SP_PENDING",
+# Derived request statuses (computed on-demand from tags, never stored).
+# Used by both SAR and SP streams — no separate company-level layer.
+REQUEST_STATUSES = [
+    "WAITING",
     "IN_PROGRESS",
-    "FULLY_RESOLVED",
-    "DATA_RECEIVED",
-    "USER_REPLIED",
-    "STALLED",
-    "ACTION_REQUIRED",
+    "ACTION_NEEDED",
+    "REPLIED",
+    "DONE",
     "OVERDUE",
+    "STALLED",
 ]
 
 

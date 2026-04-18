@@ -6,8 +6,7 @@ from flask import Blueprint, render_template, request
 
 from letter_engine.tracker import get_log
 from reply_monitor.state_manager import (
-    _COMPANY_STATUS_PRIORITY,
-    compute_company_status,
+    _STATUS_PRIORITY,
     compute_status,
     load_state,
 )
@@ -49,15 +48,12 @@ def dashboard():
             card = _build_card(domain, state, status)
             card["sp_sent"] = domain in sp_sent_domains
             sp_state = sp_states.get(domain)
-            card["sp_status"] = compute_status(sp_state) if sp_state else "PENDING"
-            card["company_status"] = compute_company_status(
-                status, card["sp_status"], card["sp_sent"]
-            )
+            card["sp_status"] = compute_status(sp_state) if sp_state else "WAITING"
             cards.append(card)
 
-        # Sort by company-level urgency
+        # Sort by SAR status urgency
         cards.sort(
-            key=lambda c: _COMPANY_STATUS_PRIORITY.get(c["company_status"], 0),
+            key=lambda c: _STATUS_PRIORITY.get(c["status"], 0),
             reverse=True,
         )
 
@@ -89,17 +85,8 @@ def cards_listing():
 
     if account:
         states = _load_all_states(account)
-        sp_states = load_state(account, path=_current_sp_state_path())
-        sp_sent_domains: set[str] = {
-            r.get("domain", "") for r in get_log(path=_current_sp_requests_path())
-        }
-
         for domain, state in states.items():
             status = compute_status(state)
-            sp_state = sp_states.get(domain)
-            sp_status = compute_status(sp_state) if sp_state else "PENDING"
-            sp_sent = domain in sp_sent_domains
-            company_status = compute_company_status(status, sp_status, sp_sent)
             # Find best catalog across all replies (active + past attempts)
             best_catalog = None
             received_at = ""
@@ -160,8 +147,7 @@ def cards_listing():
                     "domain": domain,
                     "company_name": state.company_name,
                     "status": status,
-                    "company_status": company_status,
-                    "status_color": _STATUS_COLOUR.get(company_status, "secondary"),
+                    "status_color": _STATUS_COLOUR.get(status, "secondary"),
                     "days_remaining": card["remaining"],
                     "latest_tag": card["tags"][0] if card["tags"] else "",
                     "tried_emails": card["tried_emails"],

@@ -74,7 +74,7 @@ Two-panel layout with a `stream_panel()` Jinja2 macro rendering SAR and SP strea
 
 ### Dashboard cards
 
-Show a "View correspondence" button (no reply count) — styled `btn-outline-primary` when the company has at least one non-`NON_GDPR`, non-`YOUR_REPLY` reply, pale `btn-outline-secondary` otherwise. A "View data" button appears when `has_data` is true (status=COMPLETED with a DATA_PROVIDED tag).
+Show a "View correspondence" button (no reply count) — styled `btn-outline-primary` when the company has at least one non-`NON_GDPR`, non-`YOUR_REPLY` reply, pale `btn-outline-secondary` otherwise. A "View data" button appears when `has_data` is true (status=DONE with a DATA_PROVIDED tag).
 
 ### Snippet display
 
@@ -102,27 +102,25 @@ When `classifier.py` falls back to Claude Haiku, it also populates `extracted["s
 | 4 | Informational | AUTO_ACKNOWLEDGE, BOUNCE_* |
 | — | Always hidden | OUT_OF_OFFICE, NON_GDPR (unless only tag) |
 
-Higher tiers supersede lower — e.g. DATA_PROVIDED hides REQUEST_ACCEPTED; WRONG_CHANNEL hides ACK. `_DISPLAY_NAMES` maps raw constants to user-friendly labels. `HUMAN_REVIEW` is in `_ACTION_TAGS` (state_manager.py) so it triggers ACTION_REQUIRED status.
+Higher tiers supersede lower — e.g. DATA_PROVIDED hides REQUEST_ACCEPTED; WRONG_CHANNEL hides ACK. `_DISPLAY_NAMES` maps raw constants to user-friendly labels. `HUMAN_REVIEW` is in `_ACTION_TAGS` (state_manager.py) so it triggers ACTION_NEEDED status.
 
 ---
 
-## Company-Level Status
+## Status System
 
-`compute_company_status(sar_status, sp_status, sp_sent)` in `state_manager.py` aggregates SAR and SP streams into one company-level badge shown as the primary badge on dashboard cards. 9 values, priority order (highest first):
+The status system has 2 layers: 21 reply tags (unchanged) → 7 unified statuses used by both SAR and SP streams. The company-level status layer has been removed — SAR status is the primary badge, SP is shown as a secondary badge using the same 7-status vocabulary.
 
-| Priority | Value | Condition |
-|----------|-------|-----------|
-| 8 | `OVERDUE` | Any stream past GDPR deadline |
-| 7 | `ACTION_REQUIRED` | Any stream needs user action |
-| 6 | `STALLED` | Any stream is BOUNCED or ADDRESS_NOT_FOUND |
-| 5 | `USER_REPLIED` | SAR=USER_REPLIED — user sent follow-up, awaiting company response |
-| 4 | `DATA_RECEIVED` | SAR terminal (COMPLETED/DENIED); SP sent but not yet terminal |
-| 3 | `FULLY_RESOLVED` | SAR terminal + (SP terminal OR SP not sent) |
-| 2 | `IN_PROGRESS` | SAR is ACKNOWLEDGED, EXTENDED, PORTAL_SUBMITTED, or PORTAL_VERIFICATION |
-| 1 | `SP_PENDING` | SAR=PENDING + SP sent + SP=PENDING |
-| 0 | `PENDING` | Default — SAR pending, SP not sent |
+| Priority | Status | Color | Meaning |
+|----------|--------|-------|---------|
+| 7 | `OVERDUE` | danger (red) | Past 30-day GDPR deadline |
+| 6 | `ACTION_NEEDED` | warning (yellow) | User must do something |
+| 5 | `STALLED` | danger (red) | Delivery failed, can't reach company |
+| 4 | `REPLIED` | primary (blue) | User sent follow-up, awaiting response |
+| 3 | `IN_PROGRESS` | info (teal) | Company acknowledged / working on it |
+| 2 | `WAITING` | primary (blue) | Request sent, no response yet |
+| 1 | `DONE` | success/secondary | Terminal — resolved one way or another |
 
-Invariant: SP can only escalate; `sp_sent=False` never downgrades. `DATA_RECEIVED` ranks above `FULLY_RESOLVED` in sort urgency because the SP thread is still open. `_COMPANY_STATUS_PRIORITY` dict drives sort order. `COMPANY_LEVEL_STATUSES` list in `models.py` is the canonical list of 9 values.
+DONE sub-labels (via `compute_done_reason()`): "Data received", "Deletion confirmed", "Denied" (secondary), "No data held" (secondary), "Not applicable" (secondary). `_STATUS_PRIORITY` dict in `state_manager.py` drives sort order. `REQUEST_STATUSES` list in `models.py` is the canonical list of 7 values.
 
 ---
 

@@ -21,6 +21,7 @@ from letter_engine.tracker import get_log, _SUBPROCESSOR_REQUESTS_PATH
 from reply_monitor.classifier import _ACTION_DRAFT_TAGS
 from reply_monitor.state_manager import (
     _SUBPROCESSOR_STATE_PATH,
+    compute_done_reason,
     days_remaining,
     deadline_from_sent,
     domain_from_sent_record,
@@ -62,26 +63,16 @@ REQUEST_TYPES = {
 # ---------------------------------------------------------------------------
 
 # Statuses where the GDPR deadline no longer applies -- hide countdown
-_TERMINAL_STATUSES = {"COMPLETED", "BOUNCED", "DENIED"}
+_TERMINAL_STATUSES = {"DONE", "STALLED"}
 
 _STATUS_COLOUR = {
-    # Per-stream (request-level) statuses
-    "OVERDUE": "danger",
-    "ACTION_REQUIRED": "warning",
-    "ADDRESS_NOT_FOUND": "danger",
-    "BOUNCED": "secondary",
-    "DENIED": "secondary",
-    "COMPLETED": "success",
-    "EXTENDED": "warning",
-    "ACKNOWLEDGED": "info",
-    "PENDING": "primary",
-    # Company-level (two-stream derived) statuses
-    "STALLED": "danger",
-    "USER_REPLIED": "primary",
-    "DATA_RECEIVED": "success",
-    "FULLY_RESOLVED": "success",
+    "WAITING": "primary",
     "IN_PROGRESS": "info",
-    "SP_PENDING": "primary",
+    "ACTION_NEEDED": "warning",
+    "REPLIED": "primary",
+    "DONE": "success",
+    "OVERDUE": "danger",
+    "STALLED": "danger",
 }
 
 _TAG_COLOUR = {
@@ -396,7 +387,7 @@ def _build_card(domain: str, state, status: str) -> dict:
                 all_gdpr_replies_dicts.append(r_dict)
 
     # Data ready hint
-    if status == "COMPLETED":
+    if status == "DONE":
         # Check active replies first, then past attempts
         for r_info in all_gdpr_replies_dicts:
             r_tags = r_info.get("tags", []) if isinstance(r_info, dict) else r_info.tags
@@ -419,7 +410,7 @@ def _build_card(domain: str, state, status: str) -> dict:
                 action_hint = "Data provided directly in email reply"
                 break
 
-    has_data = status == "COMPLETED" and any(
+    has_data = status == "DONE" and any(
         any(t.startswith("DATA_PROVIDED") for t in r_info.get("tags", []))
         for r_info in all_gdpr_replies_dicts
     )
@@ -440,10 +431,13 @@ def _build_card(domain: str, state, status: str) -> dict:
         for r in state.replies
     )
 
+    done_reason = compute_done_reason(state) if status == "DONE" else ""
+
     return {
         "domain": domain,
         "company_name": state.company_name,
         "status": status,
+        "done_reason": done_reason,
         "to_email": state.to_email,
         "tried_emails": tried_emails,
         "sar_sent_at": state.sar_sent_at[:10],
