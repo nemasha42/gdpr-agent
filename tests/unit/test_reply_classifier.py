@@ -173,6 +173,21 @@ class TestWrongChannel:
         )))
         assert "WRONG_CHANNEL" in result.tags
 
+    def test_wrong_channel_instructions_extracted(self):
+        result = classify(msg(snippet="Please submit your request at our privacy portal. Visit https://privacy.example.com/request"))
+        assert "WRONG_CHANNEL" in result.tags
+        assert result.extracted.get("wrong_channel_instructions")  # non-empty
+
+    def test_wrong_channel_login_required(self):
+        result = classify(msg(snippet="This mailbox is not monitored. Please log in to your account and use our self-service portal"))
+        assert "WRONG_CHANNEL" in result.tags
+        assert result.extracted.get("login_required") is True
+
+    def test_wrong_channel_no_login_required(self):
+        result = classify(msg(snippet="This email address is no longer monitored. Please use our support form."))
+        assert "WRONG_CHANNEL" in result.tags
+        assert result.extracted.get("login_required") is False
+
 
 # ---------------------------------------------------------------------------
 # Request accepted tests

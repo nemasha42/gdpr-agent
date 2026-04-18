@@ -827,6 +827,35 @@ def dismiss_followup(domain: str):
     return redirect(url_for("company_detail", domain=domain, account=account))
 
 
+@app.route("/company/<domain>/mark-portal-submitted", methods=["POST"])
+def mark_portal_submitted(domain: str) -> str:
+    """Mark a WRONG_CHANNEL reply as submitted via portal (no Gmail reply sent)."""
+    account = request.form.get("account", "")
+    gmail_message_id = request.form.get("gmail_message_id", "")
+
+    states = load_state(account, path=_current_state_path())
+    state = states.get(domain)
+    if not state:
+        flash("Company not found.", "danger")
+        return redirect(url_for("company_detail", domain=domain, account=account))
+
+    reply = next((r for r in state.replies if r.gmail_message_id == gmail_message_id), None)
+    if not reply:
+        flash("Reply not found.", "danger")
+        return redirect(url_for("company_detail", domain=domain, account=account))
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    reply.reply_review_status = "portal_submitted"
+    reply.sent_reply_body = "Submitted via portal"
+    reply.sent_reply_at = now
+    # Reset the 30-day GDPR deadline from the portal submission time
+    from reply_monitor.state_manager import deadline_from_sent
+    state.deadline = deadline_from_sent(now)
+    save_state(account, states, path=_current_state_path())
+    flash("Marked as submitted via portal. Deadline reset.", "success")
+    return redirect(url_for("company_detail", domain=domain, account=account))
+
+
 @app.route("/company/<domain>/send-sp-followup", methods=["POST"])
 def send_sp_followup(domain: str):
     account = request.form.get("account", "")

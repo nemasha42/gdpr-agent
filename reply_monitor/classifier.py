@@ -554,6 +554,28 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
         if url_match:
             portal_url = _clean_url(url_match.group(0))
 
+    # Wrong-channel instructions: extract a short phrase near portal/form keywords
+    wrong_channel_instructions = ""
+    _wc_match = re.search(
+        r"(?:please\s+)?(?:submit|file|send|make|raise|log|open)\s+"
+        r"(?:your\s+)?(?:request|inquiry|query|complaint|ticket|case)\s+"
+        r"(?:via|through|at|on|using)\s+(.{10,120}?)(?:\.|$)",
+        full_text, re.I,
+    )
+    if not _wc_match:
+        _wc_match = re.search(
+            r"(?:use|visit|go\s+to|navigate\s+to|access)\s+"
+            r"(?:our\s+)?(.{10,120}?)(?:\s+to\s+submit|\s+to\s+file|\s+to\s+make|\.|$)",
+            full_text, re.I,
+        )
+    if _wc_match:
+        wrong_channel_instructions = _wc_match.group(0).strip().rstrip(".")
+
+    login_required = bool(re.search(
+        r"log\s*in|sign\s*in|authenticate|your\s+account",
+        full_text, re.I,
+    ))
+
     return {
         "reference_number": reference_number,
         "confirmation_url": confirmation_url,
@@ -562,6 +584,8 @@ def _extract(from_addr: str, subject: str, snippet: str, body: str = "") -> dict
         "portal_url": portal_url,
         "deadline_extension_days": None,
         "summary": "",                   # filled by LLM fallback path only
+        "wrong_channel_instructions": wrong_channel_instructions,
+        "login_required": login_required,
     }
 
 
@@ -714,7 +738,9 @@ def _llm_classify(message: dict, api_key: str) -> dict | None:
             '  "data_link": <first data export URL, or null>,\n'
             '  "portal_url": <self-service portal URL, or null>,\n'
             '  "deadline_extension_days": <integer days of extension, or null>,\n'
-            '  "summary": <one plain-English sentence ≤15 words describing what this reply says>\n'
+            '  "summary": <one plain-English sentence ≤15 words describing what this reply says>,\n'
+            '  "wrong_channel_instructions": <if WRONG_CHANNEL: one sentence describing what the company says to do instead, e.g. "Submit via privacy center at https://example.com/privacy". null if not WRONG_CHANNEL>,\n'
+            '  "login_required": <true if the company says the user must log in / sign in to access the portal or submit the request, false otherwise>\n'
             "}"
         )
         model = "claude-haiku-4-5-20251001"

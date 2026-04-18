@@ -136,7 +136,7 @@ class ReplyRecord:
     has_attachment: bool
     attachment_catalog: dict | None
     suggested_reply: str = ""
-    reply_review_status: str = ""   # "" | "pending" | "sent" | "dismissed"
+    reply_review_status: str = ""   # "" | "pending" | "sent" | "dismissed" | "portal_submitted"
     sent_reply_body: str = ""       # actual text user sent (may differ from suggested_reply if edited)
     sent_reply_at: str = ""         # ISO timestamp of when user sent it
 

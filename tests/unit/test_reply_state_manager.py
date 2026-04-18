@@ -171,6 +171,21 @@ class TestComputeStatus:
         ])
         assert compute_status(state) == "USER_REPLIED"
 
+    def test_portal_submitted_triggers_user_replied(self):
+        # portal_submitted should be treated same as "sent" for status computation
+        state = _make_state(replies=[
+            _make_reply(["WRONG_CHANNEL"], reply_review_status="portal_submitted"),
+        ])
+        assert compute_status(state) == "USER_REPLIED"
+
+    def test_portal_submitted_mixed_with_unsent_action(self):
+        # One portal_submitted + one unsent action → still ACTION_REQUIRED
+        state = _make_state(replies=[
+            _make_reply(["WRONG_CHANNEL"], msg_id="msg001", reply_review_status="portal_submitted"),
+            _make_reply(["IDENTITY_REQUIRED"], msg_id="msg002", reply_review_status=""),
+        ])
+        assert compute_status(state) == "ACTION_REQUIRED"
+
 
 # ---------------------------------------------------------------------------
 # Status priority tests
@@ -291,6 +306,52 @@ class TestUpdateState:
         updated = update_state(state, [])
         assert updated.last_checked != ""
 
+    def test_deadline_reset_on_confirmation_required(self):
+        """CONFIRMATION_REQUIRED reply resets the 30-day GDPR deadline."""
+        state = _make_state(deadline_days_from_now=5)  # only 5 days left
+        original_deadline = state.deadline
+        reply_ts = date.today().isoformat() + "T12:00:00Z"
+        new = [_make_reply(["CONFIRMATION_REQUIRED"], received_at=reply_ts)]
+        updated = update_state(state, new)
+        assert updated.deadline != original_deadline
+        expected = deadline_from_sent(reply_ts)
+        assert updated.deadline == expected
+
+    def test_deadline_reset_on_request_accepted(self):
+        """REQUEST_ACCEPTED reply resets the 30-day GDPR deadline."""
+        state = _make_state(deadline_days_from_now=10)
+        original_deadline = state.deadline
+        reply_ts = date.today().isoformat() + "T14:00:00Z"
+        new = [_make_reply(["REQUEST_ACCEPTED"], received_at=reply_ts)]
+        updated = update_state(state, new)
+        assert updated.deadline != original_deadline
+        assert updated.deadline == deadline_from_sent(reply_ts)
+
+    def test_deadline_reset_on_in_progress(self):
+        """IN_PROGRESS reply resets the 30-day GDPR deadline."""
+        state = _make_state(deadline_days_from_now=10)
+        reply_ts = date.today().isoformat() + "T14:00:00Z"
+        new = [_make_reply(["IN_PROGRESS"], received_at=reply_ts)]
+        updated = update_state(state, new)
+        assert updated.deadline == deadline_from_sent(reply_ts)
+
+    def test_no_deadline_reset_on_auto_acknowledge(self):
+        """AUTO_ACKNOWLEDGE does NOT reset the deadline."""
+        state = _make_state(deadline_days_from_now=10)
+        original_deadline = state.deadline
+        new = [_make_reply(["AUTO_ACKNOWLEDGE"])]
+        updated = update_state(state, new)
+        assert updated.deadline == original_deadline
+
+    def test_no_deadline_reset_on_duplicate_reply(self):
+        """Duplicate replies (already in state) should NOT reset deadline."""
+        existing = _make_reply(["CONFIRMATION_REQUIRED"], msg_id="existing")
+        state = _make_state(replies=[existing], deadline_days_from_now=5)
+        original_deadline = state.deadline
+        dup = _make_reply(["CONFIRMATION_REQUIRED"], msg_id="existing")
+        updated = update_state(state, [dup])
+        assert updated.deadline == original_deadline
+
 
 # ---------------------------------------------------------------------------
 # Load/save state tests
@@ -366,6 +427,35 @@ class TestPersistence:
         assert r.reply_review_status == ""
         assert r.sent_reply_body == ""
         assert r.sent_reply_at == ""
+
+    def test_portal_submitted_roundtrip(self, tmp_path):
+        """portal_submitted reply_review_status survives save/load."""
+        path = tmp_path / "reply_state.json"
+        reply = _make_reply(
+            ["WRONG_CHANNEL"],
+            reply_review_status="portal_submitted",
+            sent_reply_body="Submitted via portal",
+            sent_reply_at="2026-04-18T10:00:00Z",
+        )
+        state = _make_state(replies=[reply])
+        save_state("user@gmail.com", {"example.com": state}, path=path)
+        loaded = load_state("user@gmail.com", path=path)
+        r = loaded["example.com"].replies[0]
+        assert r.reply_review_status == "portal_submitted"
+        assert r.sent_reply_body == "Submitted via portal"
+
+    def test_wrong_channel_extracted_fields_roundtrip(self, tmp_path):
+        """wrong_channel_instructions and login_required survive save/load."""
+        path = tmp_path / "reply_state.json"
+        reply = _make_reply(["WRONG_CHANNEL"])
+        reply.extracted["wrong_channel_instructions"] = "Submit via privacy center at https://privacy.example.com"
+        reply.extracted["login_required"] = True
+        state = _make_state(replies=[reply])
+        save_state("user@gmail.com", {"example.com": state}, path=path)
+        loaded = load_state("user@gmail.com", path=path)
+        r = loaded["example.com"].replies[0]
+        assert r.extracted["wrong_channel_instructions"] == "Submit via privacy center at https://privacy.example.com"
+        assert r.extracted["login_required"] is True
 
     def test_sent_reply_fields_roundtrip(self, tmp_path):
         """sent_reply_body and sent_reply_at survive a save/load cycle."""
