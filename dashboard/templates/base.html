@@ -44,6 +44,18 @@
     }
     .navbar-brand { font-weight: 700; letter-spacing: -0.02em; }
     .subprocessor-indent { padding-left: 2rem; }
+    .picto-row { display: flex; gap: 6px; }
+    .picto {
+      width: 32px; height: 32px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 4px;
+      font-size: 0.6rem; font-weight: 700; letter-spacing: 0.03em;
+      text-transform: uppercase; line-height: 1;
+    }
+    .picto-grey   { border: 1.5px solid #adb5bd; color: #adb5bd; background: #fff; }
+    .picto-green  { border: 1.5px solid #198754; color: #fff; background: #198754; }
+    .picto-yellow { border: 1.5px solid #e5a100; color: #664d03; background: #fff3cd; }
+    .picto-red    { border: 1.5px solid #dc3545; color: #fff; background: #dc3545; }
   </style>
   {% block extra_head %}{% endblock %}
 </head>
