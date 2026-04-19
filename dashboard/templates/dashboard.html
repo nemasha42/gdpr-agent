@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}GDPR SAR Dashboard{% endblock %}
+{% block title %}GDPR Dashboard{% endblock %}
 
 {% block nav_extra %}
 <div class="d-flex gap-1 align-items-center">
@@ -96,72 +96,51 @@
       </div>
       {% endif %}
 
-      {# Action hint #}
-      {% if card.action_hint %}
-        <div class="action-hint">&#x26A0;&#xFE0F; {{ card.action_hint }}
-          {% if card.action_hint_url %}
-            &nbsp;
-            <a href="{{ card.action_hint_url }}" target="_blank"
-               title="{{ card.action_hint_url }}"
-               class="text-truncate d-inline-block align-middle"
-               style="max-width:200px; vertical-align:middle;">
-              {{ card.action_hint_url }}</a>
-            <button class="btn btn-link btn-sm p-0 ms-1 align-middle"
-                    style="font-size:0.75rem;"
-                    onclick="navigator.clipboard.writeText('{{ card.action_hint_url }}'); this.textContent='✓'; setTimeout(()=>this.textContent='⧉',1500)">&#x29c9;</button>
-          {% endif %}
-        </div>
-      {% endif %}
     </div>
 
     <div class="card-footer bg-transparent border-top-0">
-      <div class="d-flex gap-2">
-        <a href="/company/{{ card.domain }}?account={{ selected_account }}"
-           class="btn btn-sm btn-outline-{{ status_colour.get(card.company_status, 'secondary') }}">View correspondence</a>
-        {% if card.has_data %}
-          <a href="/data/{{ card.domain }}?account={{ selected_account }}"
-             class="btn btn-sm btn-success">&#x1F4E6; View data</a>
-        {% endif %}
-      </div>
-      {% if card.sp_sent %}
-        <div class="mt-1">
-          <a href="/transfers#{{ card.domain }}" class="text-decoration-none">
-            <span class="badge
-              {% if card.sp_status == 'DONE' %}bg-success
-              {% elif card.sp_status == 'IN_PROGRESS' %}bg-info text-dark
-              {% elif card.sp_status == 'OVERDUE' %}bg-danger
-              {% elif card.sp_status == 'ACTION_NEEDED' %}bg-warning text-dark
-              {% else %}bg-light text-muted border{% endif %}"
-              style="font-size:0.68rem">
-              SP: {{ card.sp_status | replace('_', ' ') | title }}
-            </span>
-          </a>
-        </div>
-      {% endif %}
-      {% if card.has_pending_draft %}
-        <div class="mt-1">
-          <span class="badge bg-warning text-dark" style="font-size:0.68rem">&#x270F; Draft reply ready</span>
-        </div>
-      {% endif %}
-      {# Status pictograms: SAR / SUB / DEL #}
-      <div class="picto-row mt-2">
-        {% if card.status == 'COMPLETED' %}
-          <span class="picto picto-green" title="SAR: Data provided">SAR</span>
-        {% elif card.status in ('DENIED', 'BOUNCED', 'ADDRESS_NOT_FOUND') or 'WRONG_CHANNEL' in card.tags %}
-          <span class="picto picto-red" title="SAR: {{ card.status.replace('_', ' ') }}">SAR</span>
+      {# Unified row: pictograms + action buttons #}
+      {% set _no_data = card.done_reason in ('No data held', 'Not applicable') or 'NO_DATA_HELD' in (card.tags or []) or 'NOT_GDPR_APPLICABLE' in (card.tags or []) %}
+      {% set _sar_url = "/company/" ~ card.domain ~ "?account=" ~ selected_account ~ "#sar-panel" %}
+      {% set _sp_url  = "/company/" ~ card.domain ~ "?account=" ~ selected_account ~ "#sp-panel" %}
+      <div class="d-flex align-items-center gap-2">
+        {# SAR tile #}
+        {% if _no_data %}
+          <a href="{{ _sar_url }}" class="picto picto-grey" title="SAR: No data held">SAR</a>
+        {% elif card.has_data or card.done_reason == 'Deletion confirmed' %}
+          <a href="{{ _sar_url }}" class="picto picto-green" title="SAR: {{ card.done_reason }}">SAR{% if card.has_pending_draft %}<span class="picto-pen">&#x270F;&#xFE0F;</span>{% endif %}</a>
+        {% elif card.status in ('STALLED', 'OVERDUE') %}
+          <a href="{{ _sar_url }}" class="picto picto-red" title="SAR: {{ card.status | replace('_', ' ') }}">SAR{% if card.has_pending_draft %}<span class="picto-pen">&#x270F;&#xFE0F;</span>{% endif %}</a>
         {% else %}
-          <span class="picto picto-yellow" title="SAR: Waiting">SAR</span>
+          <a href="{{ _sar_url }}" class="picto picto-yellow" title="SAR: {{ card.status | replace('_', ' ') }}">SAR{% if card.has_pending_draft %}<span class="picto-pen">&#x270F;&#xFE0F;</span>{% endif %}</a>
         {% endif %}
-        {% if not card.sp_sent %}
-          <span class="picto picto-grey" title="Subprocessor: Not requested">SUB</span>
-        {% elif card.sp_status == 'COMPLETED' %}
-          <span class="picto picto-green" title="Subprocessor: Data provided">SUB</span>
-        {% elif card.sp_status in ('DENIED', 'BOUNCED', 'ADDRESS_NOT_FOUND') %}
-          <span class="picto picto-red" title="Subprocessor: {{ card.sp_status.replace('_', ' ') }}">SUB</span>
+        {# SUB tile #}
+        {% if _no_data %}
+          <a href="{{ _sp_url }}" class="picto picto-grey" title="Subprocessor: No data held">SUB</a>
+        {% elif card.sp_status == 'DONE' or card.sub_fetched %}
+          <a href="{{ _sp_url }}" class="picto picto-green" title="Subprocessor: {{ 'Fetched' if card.sub_fetched else 'Done' }}">SUB{% if card.sp_has_pending_draft %}<span class="picto-pen">&#x270F;&#xFE0F;</span>{% endif %}</a>
+        {% elif not card.sp_sent %}
+          <a href="{{ _sp_url }}" class="picto picto-blue" title="Subprocessor: Not yet requested">SUB</a>
+        {% elif card.sp_status in ('STALLED', 'OVERDUE') %}
+          <a href="{{ _sp_url }}" class="picto picto-red" title="Subprocessor: {{ card.sp_status | replace('_', ' ') }}">SUB{% if card.sp_has_pending_draft %}<span class="picto-pen">&#x270F;&#xFE0F;</span>{% endif %}</a>
         {% else %}
-          <span class="picto picto-yellow" title="Subprocessor: Waiting">SUB</span>
+          <a href="{{ _sp_url }}" class="picto picto-yellow" title="Subprocessor: {{ card.sp_status | replace('_', ' ') }}">SUB{% if card.sp_has_pending_draft %}<span class="picto-pen">&#x270F;&#xFE0F;</span>{% endif %}</a>
         {% endif %}
-        <span class="picto picto-grey" title="Deletion: Not requested">DEL</span>
+        {# DEL tile #}
+        {% if _no_data %}
+          <span class="picto picto-grey" title="Deletion: No data held">DEL</span>
+        {% else %}
+          <span class="picto picto-blue" title="Deletion: Not yet requested">DEL</span>
+        {% endif %}
+        {# Action buttons — Details anchored to right edge #}
+        <span class="ms-auto d-flex gap-2">
+          {% if card.has_data %}
+            <a href="/data/{{ card.domain }}?account={{ selected_account }}"
+               class="btn btn-sm btn-success">Data</a>
+          {% endif %}
+          <a href="/company/{{ card.domain }}?account={{ selected_account }}"
+             class="btn btn-sm {% if card.has_new %}btn-primary{% else %}btn-outline-secondary{% endif %}">Details</a>
+        </span>
       </div>
     </div>
   </div>

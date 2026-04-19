@@ -163,7 +163,7 @@
    followup_url     — POST url for sending reply
    dismiss_url      — POST url for dismissing draft
    ════════════════════════════════════════════════════════════════ #}
-{% macro stream_panel(stream_label, stream_id, stream_status, s_colour, sent_date, sent_to, deadline_str, thread_events, followup_url, dismiss_url, compose_url="") %}
+{% macro stream_panel(stream_label, stream_id, stream_status, s_colour, sent_date, sent_to, deadline_str, thread_events, followup_url, dismiss_url, compose_url="", has_new=false) %}
 
 {# Derive the "why" one-liner from the thread #}
 {% set company_msgs = thread_events | selectattr('type', 'equalto', 'reply') | selectattr('non_gdpr', 'equalto', false) | list %}
@@ -222,7 +222,7 @@
 {# Count visible events (NON_GDPR replies are hidden) #}
 {% set msg_count = (thread_events | selectattr('type', 'ne', 'reply') | list | length) + (thread_events | selectattr('type', 'equalto', 'reply') | selectattr('non_gdpr', 'equalto', false) | list | length) %}
 
-<div class="stream-panel mb-4">
+<div class="stream-panel mb-4" id="{{ stream_id }}-panel">
 
   {# ── Panel header ── #}
   <div class="stream-header px-4 py-3">
@@ -242,8 +242,10 @@
         {% if sent_to %}&rarr; {{ sent_to }}{% endif %}
         {% if deadline_str %}&nbsp;&middot;&nbsp;Deadline {{ deadline_str }}{% endif %}
       </div>
-      <button class="btn btn-sm btn-outline-secondary thread-toggle-btn"
+      <button class="btn btn-sm {% if has_new %}btn-primary{% else %}btn-outline-secondary{% endif %} thread-toggle-btn"
               data-target="{{ stream_id }}-thread"
+              data-domain="{{ domain }}"
+              data-account="{{ account }}"
               onclick="toggleThread('{{ stream_id }}-thread', this)">
         Show {{ msg_count }} message{{ 's' if msg_count != 1 else '' }} &#x25BC;
       </button>
@@ -443,7 +445,8 @@
   sar_thread,
   "/company/" ~ domain ~ "/send-followup",
   "/company/" ~ domain ~ "/dismiss-followup",
-  "/company/" ~ domain ~ "/compose-reply"
+  "/company/" ~ domain ~ "/compose-reply",
+  sar_has_new
 ) }}
 
 {# ── Render SP panel (if applicable) ── #}
@@ -459,7 +462,8 @@
   sp_thread,
   "/company/" ~ domain ~ "/send-sp-followup",
   "/company/" ~ domain ~ "/dismiss-sp-followup",
-  "/company/" ~ domain ~ "/compose-sp-reply"
+  "/company/" ~ domain ~ "/compose-sp-reply",
+  sp_has_new
 ) }}
 {% endif %}
 
@@ -472,6 +476,14 @@ function toggleThread(id, btn) {
   const count = btn.dataset.count || btn.textContent.match(/\d+/)?.[0] || '';
   if (hidden) {
     btn.innerHTML = 'Hide messages &#x25B2;';
+    // Mark as viewed and switch to quiet style
+    const domain = btn.dataset.domain;
+    const account = btn.dataset.account;
+    if (domain) {
+      fetch(`/api/mark-viewed/${encodeURIComponent(domain)}?account=${encodeURIComponent(account || '')}`, {method:'POST'});
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-outline-secondary');
+    }
     // Scroll draft into view if present
     const draft = el.querySelector('.draft-panel');
     if (draft) setTimeout(() => draft.scrollIntoView({behavior:'smooth', block:'nearest'}), 150);
@@ -528,6 +540,25 @@ document.querySelectorAll('.stream-panel').forEach(panel => {
     }
   }
 });
+
+// Auto-expand and scroll to panel targeted by URL hash (e.g. #sar-panel, #sp-panel)
+if (location.hash) {
+  const target = document.querySelector(location.hash);
+  if (target && target.classList.contains('stream-panel')) {
+    const body = target.querySelector('.thread-body');
+    const btn = target.querySelector('.thread-toggle-btn');
+    if (body && btn && body.style.display === 'none') {
+      body.style.display = 'block';
+      btn.innerHTML = 'Hide messages &#x25B2;';
+      if (btn.dataset.domain) {
+        fetch(`/api/mark-viewed/${encodeURIComponent(btn.dataset.domain)}?account=${encodeURIComponent(btn.dataset.account || '')}`, {method:'POST'});
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-outline-secondary');
+      }
+    }
+    setTimeout(() => target.scrollIntoView({behavior:'smooth', block:'start'}), 100);
+  }
+}
 
 // Portal submission via WRONG_CHANNEL
 async function submitViaPortal(domain, account, btn, portalUrl) {

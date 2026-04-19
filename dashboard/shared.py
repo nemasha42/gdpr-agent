@@ -183,15 +183,6 @@ def _effective_tags(all_tags: set[str]) -> list[str]:
     return sorted(result)
 
 
-_ACTION_HINTS = {
-    "CONFIRMATION_REQUIRED": "Click the confirmation link in the email",
-    "IDENTITY_REQUIRED": "Submit identity proof as requested",
-    "MORE_INFO_REQUIRED": "Clarify your request as asked",
-    "WRONG_CHANNEL": "Re-submit via the channel they indicated",
-    "BOUNCE_PERMANENT": "Email address bounced — contact via web",
-}
-
-
 # ---------------------------------------------------------------------------
 # Snippet display helpers
 # ---------------------------------------------------------------------------
@@ -293,7 +284,7 @@ def _get_accounts() -> list[str]:
             data = _json_mod.loads(state_file.read_text())
             for safe_key in data:
                 accounts.add(_safe_email_to_addr(safe_key))
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError):
             pass
 
     # From token files
@@ -358,26 +349,7 @@ def _build_card(domain: str, state, status: str) -> dict:
     if gdpr_replies:
         latest_snippet = gdpr_replies[-1].snippet[:100]
 
-    # Action hint
-    action_hint = ""
-    action_hint_url = ""
-    for r in gdpr_replies:
-        for tag in r.tags:
-            if tag in _ACTION_HINTS:
-                hint = _ACTION_HINTS[tag]
-                if tag == "WRONG_CHANNEL":
-                    action_hint_url = r.extracted.get("portal_url") or r.extracted.get(
-                        "confirmation_url", ""
-                    )
-                    if not action_hint_url:
-                        record = _lookup_company(domain)
-                        action_hint_url = record.get("gdpr_portal_url", "")
-                action_hint = hint
-                break
-        if action_hint:
-            break
-
-    # All GDPR replies across current attempt AND past attempts (for completed-data hints)
+    # All GDPR replies across current attempt AND past attempts (for has_data check)
     all_gdpr_replies_dicts: list[dict] = []
     for r in gdpr_replies:
         all_gdpr_replies_dicts.append({"tags": r.tags, "extracted": r.extracted})
@@ -385,30 +357,6 @@ def _build_card(domain: str, state, status: str) -> dict:
         for r_dict in pa.get("replies", []):
             if "NON_GDPR" not in r_dict.get("tags", []):
                 all_gdpr_replies_dicts.append(r_dict)
-
-    # Data ready hint
-    if status == "DONE":
-        # Check active replies first, then past attempts
-        for r_info in all_gdpr_replies_dicts:
-            r_tags = r_info.get("tags", []) if isinstance(r_info, dict) else r_info.tags
-            r_extracted = (
-                r_info.get("extracted", {})
-                if isinstance(r_info, dict)
-                else r_info.extracted
-            )
-            if "DATA_PROVIDED_LINK" in r_tags and r_extracted.get("data_link"):
-                action_hint = "Download data"
-                action_hint_url = r_extracted["data_link"]
-                break
-            if "DATA_PROVIDED_PORTAL" in r_tags:
-                action_hint = "Access your data via their account portal"
-                break
-            if "DATA_PROVIDED_ATTACHMENT" in r_tags:
-                action_hint = "Data ready — open folder in user_data/received/"
-                break
-            if "DATA_PROVIDED_INLINE" in r_tags:
-                action_hint = "Data provided directly in email reply"
-                break
 
     has_data = status == "DONE" and any(
         any(t.startswith("DATA_PROVIDED") for t in r_info.get("tags", []))
@@ -450,8 +398,6 @@ def _build_card(domain: str, state, status: str) -> dict:
         "has_company_replies": len(company_replies) > 0,
         "non_gdpr_count": non_gdpr_count,
         "latest_snippet": latest_snippet,
-        "action_hint": action_hint,
-        "action_hint_url": action_hint_url,
         "has_data": has_data,
         "has_pending_draft": has_pending_draft,
     }
@@ -484,7 +430,7 @@ def _lookup_company(domain: str) -> dict:
                     if k != "contact" and v:
                         record[k] = v
         return record
-    except Exception:
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
         return {}
 
 
@@ -493,7 +439,7 @@ def _load_companies_db() -> dict:
         return json.loads(_COMPANIES_PATH.read_text()).get(
             "companies", json.loads(_COMPANIES_PATH.read_text())
         )
-    except Exception:
+    except (OSError, json.JSONDecodeError, ValueError):
         return {}
 
 
@@ -518,7 +464,7 @@ def _load_all_states(account: str) -> dict:
                 existing_state=states.get(d),
                 deadline_fn=deadline_from_sent,
             )
-    except Exception:
+    except (OSError, json.JSONDecodeError, KeyError, ValueError):
         pass
     return states
 
@@ -569,5 +515,5 @@ def flag_emoji_filter(cc: str) -> str:
         return ""
     try:
         return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in cc.upper())
-    except Exception:
+    except (ValueError, OverflowError):
         return ""

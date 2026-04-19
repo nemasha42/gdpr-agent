@@ -74,13 +74,15 @@ Two-panel layout with a `stream_panel()` Jinja2 macro rendering SAR and SP strea
 
 ### Dashboard cards
 
-Each card shows three elements: **status pictograms**, **contact address**, and **action buttons**.
+Each card shows pictograms, contact address, and action buttons in a single footer row.
 
-**Status pictograms** — a row of small badges (`.picto-row > .picto`) indicating which request streams exist: `SAR` (always present), `SUB` (subprocessor disclosure sent), `DEL` (deletion request). Each pictogram is color-coded by its stream's status color.
+**Status pictograms** — clickable `<a>` tiles (`SAR`, `SUB`, `DEL`) that navigate to the company detail page anchored to the relevant stream panel (`#sar-panel`, `#sp-panel`). Each tile is color-coded by its stream's status (green/yellow/red/blue/grey). When `NO_DATA_HELD` or `NOT_GDPR_APPLICABLE` tags are present, all three tiles go grey regardless of `done_reason`. The pen icon (&#x270F;) overlay indicates a pending draft reply. `DEL` tiles are not yet clickable (deletion not implemented).
 
 **Contact address** — the `to_email` used for the SAR, shown below the company name. Styled with strikethrough (`text-decoration: line-through`) only when the SAR status is `STALLED` (bounce/address exhausted); normal text otherwise.
 
-**Action buttons** — "View correspondence" button colored by SAR status (`btn-outline-{{ status_colour }}`) instead of the previous binary primary/secondary. A "View data" button appears when `has_data` is true (status=DONE with a DATA_PROVIDED tag).
+**Action buttons** — anchored to the right edge via `ms-auto`. "Details" button uses 2-state styling: `btn-primary` (solid blue) when new messages exist since last view, `btn-outline-secondary` (grey) otherwise. "Data" button (green, `btn-success`) appears when `has_data` is true.
+
+**New messages tracking** — `dashboard/view_state.py` stores the last time the user expanded a company's thread (via the "Show N messages" button). `has_new_messages(account, domain, replies)` compares reply `received_at` timestamps against this. The "Details" button on cards and the "Show N messages" button on company detail both reflect this state. Clicking "Show messages" sends `POST /api/mark-viewed/<domain>` and flips the button to grey.
 
 ### Snippet display
 

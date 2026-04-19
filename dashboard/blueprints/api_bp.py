@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request
 from dashboard.shared import _current_data_dir, _current_tokens_dir, _get_accounts
 from dashboard.tasks import get_task, find_running_task
 from dashboard.scan_state import load_scan_state
+from dashboard.view_state import mark_viewed
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -38,6 +39,18 @@ def api_scan_status():
             "total_discovered": len(state.get("discovered_companies", {})),
         }
     )
+
+
+@api_bp.route("/mark-viewed/<domain>", methods=["POST"])
+def api_mark_viewed(domain: str):
+    account = request.args.get("account", "")
+    if not account:
+        accounts = _get_accounts()
+        account = accounts[0] if accounts else ""
+    if not account:
+        return jsonify({"error": "no account"}), 400
+    ts = mark_viewed(account, domain)
+    return jsonify({"viewed_at": ts})
 
 
 @api_bp.route("/body/<domain>/<message_id>")

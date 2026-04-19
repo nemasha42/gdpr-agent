@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import json
+
 from flask import Blueprint, render_template, request
 
 from letter_engine.tracker import get_log
+from reply_monitor.classifier import _ACTION_DRAFT_TAGS
 from reply_monitor.state_manager import (
     _STATUS_PRIORITY,
     compute_status,
     load_state,
 )
 from dashboard.scan_state import load_scan_state
+from dashboard.view_state import has_new_messages
 from dashboard.shared import (
+    _COMPANIES_PATH,
     _STATUS_COLOUR,
     _build_card,
     _current_data_dir,
@@ -43,12 +48,36 @@ def dashboard():
             r.get("domain", "") for r in get_log(path=_current_sp_requests_path())
         }
 
+        # Load companies.json once for subprocessor fetch status
+        try:
+            _raw = json.loads(_COMPANIES_PATH.read_text())
+            companies_raw = _raw.get("companies", _raw)
+        except (OSError, json.JSONDecodeError, ValueError):
+            companies_raw = {}
+
         for domain, state in states.items():
             status = compute_status(state)
             card = _build_card(domain, state, status)
             card["sp_sent"] = domain in sp_sent_domains
             sp_state = sp_states.get(domain)
             card["sp_status"] = compute_status(sp_state) if sp_state else "WAITING"
+            card["sp_has_pending_draft"] = bool(
+                sp_state
+                and any(
+                    r.reply_review_status == "pending"
+                    and r.suggested_reply
+                    and bool(set(r.tags) & _ACTION_DRAFT_TAGS)
+                    for r in sp_state.replies
+                )
+            )
+            # Check if subprocessors were discovered (fetched) for this domain
+            sp_record = companies_raw.get(domain, {}).get("subprocessors")
+            card["sub_fetched"] = bool(
+                sp_record
+                and sp_record.get("fetch_status") == "ok"
+                and sp_record.get("subprocessors")
+            )
+            card["has_new"] = has_new_messages(account, domain, state.replies)
             cards.append(card)
 
         # Sort by SAR status urgency

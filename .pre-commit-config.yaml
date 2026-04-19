@@ -24,6 +24,6 @@ repos:
 
       - id: no-bare-except
         name: Check for bare except clauses
-        entry: bash -c 'grep -rn "except:$\|except Exception:$" --include="*.py" --exclude-dir=venv --exclude-dir=.venv --exclude-dir=node_modules --exclude-dir=.git . && echo "Found bare except — add specific exception type" && exit 1 || exit 0'
+        entry: bash -c 'if [ "$#" -eq 0 ]; then exit 0; fi; grep -n "except:$\|except Exception:$" "$@" && echo "Found bare except — add specific exception type" && exit 1 || exit 0'
         language: system
-        pass_filenames: false
+        types: [python]

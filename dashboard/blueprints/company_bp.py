@@ -8,6 +8,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from letter_engine.tracker import get_log
 from reply_monitor.classifier import _ACTION_DRAFT_TAGS
+from dashboard.view_state import has_new_messages
 from reply_monitor.state_manager import (
     compute_done_reason,
     compute_status,
@@ -255,6 +256,12 @@ def company_detail(domain: str):
     sar_days_left = days_remaining(state.sar_sent_at)
     done_reason = compute_done_reason(state) if status == "DONE" else ""
 
+    # Check for new messages since last view
+    sar_has_new = has_new_messages(account, domain, state.replies)
+    sp_has_new = (
+        has_new_messages(account, domain, sp_state.replies) if sp_state else False
+    )
+
     # Look up portal URL from company records (overrides included)
     company_record = _lookup_company(domain)
     portal_url = (company_record.get("contact", {}) or {}).get("gdpr_portal_url", "")
@@ -280,6 +287,8 @@ def company_detail(domain: str):
         sp_thread=sp_thread,
         sar_days_left=sar_days_left,
         portal_url=portal_url,
+        sar_has_new=sar_has_new,
+        sp_has_new=sp_has_new,
     )
 
 
