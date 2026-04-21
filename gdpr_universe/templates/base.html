@@ -14,6 +14,8 @@
         <div class="d-flex align-items-center gap-3">
             <a class="nav-link-custom {% if active_tab == 'dashboard' %}active{% endif %}" href="/">Dashboard</a>
             <a class="nav-link-custom {% if active_tab == 'analytics' %}active{% endif %}" href="/analytics">Analytics</a>
+            <a class="nav-link-custom {% if active_tab == 'compare' %}active{% endif %}" href="/compare">Compare</a>
+            <a class="nav-link-custom {% if active_tab == 'crawl' %}active{% endif %}" href="/crawl">Crawl</a>
             {% if stats %}
             <span class="text-muted" style="font-size:0.75rem">
                 <strong>{{ stats.total_companies }}</strong> seeds &middot;

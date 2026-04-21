@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from gdpr_universe.app import create_app
 from gdpr_universe.db import (
     Company,
     Edge,
@@ -550,3 +551,68 @@ class TestCompareCache:
         """Passing a single domain raises ValueError."""
         with pytest.raises(ValueError):
             compute_side_by_side(populated_engine, ["acme.com"])
+
+
+# ── Route Tests ────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture()
+def client(tmp_path, populated_engine):
+    """Flask test client backed by the populated_engine's SQLite file."""
+    # Extract db_path from the engine's URL (sqlite:///path)
+    db_url = str(populated_engine.url)
+    db_path = db_url.replace("sqlite:///", "", 1)
+    app = create_app(db_path)
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        yield c
+
+
+class TestCompareRoutes:
+    """Integration tests for /compare routes."""
+
+    def test_compare_page_renders(self, client):
+        """GET /compare returns 200 and contains page heading."""
+        resp = client.get("/compare")
+        assert resp.status_code == 200
+        assert b"Company Benchmarking" in resp.data
+
+    def test_compare_refresh(self, client):
+        """POST /compare/refresh returns 200 JSON with keys_updated."""
+        resp = client.post("/compare/refresh")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "keys_updated" in data
+        assert set(data["keys_updated"]) == {
+            "compare_matrix",
+            "compare_shared_sps",
+            "compare_alternatives",
+            "compare_sector_averages",
+        }
+
+    def test_compare_with_filters(self, client):
+        """GET /compare?country=DE returns 200."""
+        resp = client.get("/compare?country=DE")
+        assert resp.status_code == 200
+
+    def test_side_by_side_api(self, client):
+        """After refresh, GET /api/compare/side-by-side with 2 valid domains returns 200 with expected keys."""
+        # Populate cache first
+        client.post("/compare/refresh")
+        resp = client.get("/api/compare/side-by-side?domains=acme.com,globex.com")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "companies" in data
+        assert "overlap" in data
+        assert len(data["companies"]) == 2
+
+    def test_side_by_side_too_few(self, client):
+        """GET /api/compare/side-by-side with 1 domain returns 400."""
+        resp = client.get("/api/compare/side-by-side?domains=acme.com")
+        assert resp.status_code == 400
+
+    def test_side_by_side_too_many(self, client):
+        """GET /api/compare/side-by-side with 6 domains returns 400."""
+        domains = "a.com,b.com,c.com,d.com,e.com,f.com"
+        resp = client.get(f"/api/compare/side-by-side?domains={domains}")
+        assert resp.status_code == 400
