@@ -5,12 +5,17 @@ Produces one row of comparison data per seed company:
     lockin_pct, xborder_count, xborder_total, max_depth, quality,
     transparency_score, geo_top_country, geo_top_pct,
     composite_score, grade
+
+Cross-company analysis functions:
+    compute_shared_sps   — which SPs are used by the most seeds
+    compute_alternatives — group SPs by service_category to reveal vendor choices
+    compute_sector_averages — per-sector mean of all metric columns
 """
 
 from __future__ import annotations
 
 import logging
-from collections import Counter
+from collections import Counter, defaultdict
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -337,3 +342,154 @@ def compute_company_metrics(engine: Engine, *, category: str = "") -> list[dict]
         })
 
     return results
+
+
+def compute_shared_sps(engine: Engine, *, top_n: int = 0) -> dict[str, dict]:
+    """Return SPs sorted by the number of distinct seed companies that use them.
+
+    Args:
+        engine: SQLAlchemy engine pointing at the universe SQLite DB.
+        top_n:  If > 0, limit results to the top_n most-shared SPs.
+                0 (default) returns all.
+
+    Returns:
+        Ordered dict keyed by SP domain:
+            {sp_domain: {"count": int, "pct": int, "name": str}}
+        Sorted count descending.  ``pct`` = round(count * 100 / total_seeds).
+    """
+    with get_session(engine) as session:
+        # Count of distinct seeds
+        total_seeds_row = session.execute(
+            text("SELECT COUNT(*) FROM companies WHERE is_seed = 1")
+        ).fetchone()
+        total_seeds: int = total_seeds_row[0] if total_seeds_row else 0
+
+        if total_seeds == 0:
+            return {}
+
+        # For each SP child_domain, count distinct seed parent_domains.
+        # We restrict parent_domain to is_seed=1 companies so sub-SP edges
+        # don't inflate counts.
+        rows = session.execute(
+            text(
+                "SELECT e.child_domain, COUNT(DISTINCT e.parent_domain) AS cnt, "
+                "       c.company_name "
+                "FROM edges e "
+                "JOIN companies seed ON e.parent_domain = seed.domain AND seed.is_seed = 1 "
+                "JOIN companies c    ON e.child_domain  = c.domain "
+                "GROUP BY e.child_domain "
+                "ORDER BY cnt DESC"
+            )
+        ).fetchall()
+
+    result: dict[str, dict] = {}
+    for row in rows:
+        child_domain, count, company_name = row
+        pct = round(count * 100 / total_seeds)
+        result[child_domain] = {
+            "count": count,
+            "pct": pct,
+            "name": company_name or child_domain,
+        }
+
+    if top_n > 0:
+        result = dict(list(result.items())[:top_n])
+
+    return result
+
+
+def compute_alternatives(engine: Engine) -> list[dict]:
+    """Group SPs by service_category to expose alternative vendor choices.
+
+    Only categories with 2+ distinct SP vendors are included — a single vendor
+    in a category means there is no choice to highlight.
+
+    Returns:
+        list of dicts, each with:
+            {
+                "category": str,
+                "vendors": [
+                    {"domain": str, "name": str, "used_by": [seed_domain, ...]},
+                    ...
+                ],
+            }
+        Sorted by category name ascending.
+    """
+    with get_session(engine) as session:
+        # Load all seed→SP edges enriched with SP service_category.
+        # Restrict parent to seed companies only.
+        rows = session.execute(
+            text(
+                "SELECT e.parent_domain, e.child_domain, "
+                "       sp.service_category, sp.company_name "
+                "FROM edges e "
+                "JOIN companies seed ON e.parent_domain = seed.domain AND seed.is_seed = 1 "
+                "JOIN companies sp   ON e.child_domain  = sp.domain "
+                "WHERE sp.service_category IS NOT NULL AND sp.service_category != ''"
+            )
+        ).fetchall()
+
+    # category → {sp_domain → {"name": str, "used_by": set[seed_domain]}}
+    category_map: dict[str, dict[str, dict]] = defaultdict(dict)
+    for parent_domain, child_domain, svc_cat, sp_name in rows:
+        if child_domain not in category_map[svc_cat]:
+            category_map[svc_cat][child_domain] = {
+                "domain": child_domain,
+                "name": sp_name or child_domain,
+                "used_by": set(),
+            }
+        category_map[svc_cat][child_domain]["used_by"].add(parent_domain)
+
+    result: list[dict] = []
+    for category in sorted(category_map.keys()):
+        vendors_map = category_map[category]
+        if len(vendors_map) < 2:
+            continue  # only show categories with genuine alternatives
+        vendors = [
+            {
+                "domain": v["domain"],
+                "name": v["name"],
+                "used_by": sorted(v["used_by"]),
+            }
+            for v in sorted(vendors_map.values(), key=lambda x: x["domain"])
+        ]
+        result.append({"category": category, "vendors": vendors})
+
+    return result
+
+
+def compute_sector_averages(engine: Engine) -> dict[str, dict]:
+    """Compute mean metric values grouped by seed company sector.
+
+    Calls ``compute_company_metrics()`` internally to get per-company data,
+    then groups by sector and computes column means.
+
+    Returns:
+        {sector: {avg_sp_count, avg_adequate_pct, avg_risky_pct, avg_basis_pct,
+                  avg_lockin_pct, avg_xborder_count, avg_max_depth,
+                  avg_transparency_score, avg_composite_score, count}}
+    """
+    per_company = compute_company_metrics(engine)
+
+    # Group rows by sector
+    by_sector: dict[str, list[dict]] = defaultdict(list)
+    for row in per_company:
+        sector = row.get("sector") or "Unknown"
+        by_sector[sector].append(row)
+
+    metric_cols = [
+        "sp_count", "adequate_pct", "risky_pct", "basis_pct",
+        "lockin_pct", "xborder_count", "max_depth",
+        "transparency_score", "composite_score",
+    ]
+
+    result: dict[str, dict] = {}
+    for sector, rows in sorted(by_sector.items()):
+        n = len(rows)
+        averages: dict[str, float | int] = {"count": n}
+        for col in metric_cols:
+            total = sum(r.get(col, 0) or 0 for r in rows)
+            averages[f"avg_{col}"] = round(total / n, 2) if n else 0.0
+        result[sector] = averages
+
+    return result

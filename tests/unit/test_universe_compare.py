@@ -19,6 +19,9 @@ from gdpr_universe.compare import (
     _grade,
     _transparency_score,
     compute_company_metrics,
+    compute_shared_sps,
+    compute_alternatives,
+    compute_sector_averages,
 )
 
 
@@ -347,3 +350,156 @@ class TestCompanyMetrics:
         # medium quality=20pts, basis_pct=0, field_coverage_pct=50 → 20 + 0 + 15 = 35
         score_mixed = _transparency_score("medium", 0.0, 50.0)
         assert score_mixed == pytest.approx(35.0)
+
+
+class TestSharedSPs:
+    """Tests for compute_shared_sps()."""
+
+    def test_shared_sps(self, populated_engine):
+        """stripe and aws used by both seeds (count=2); hetzner and datadog used by one (count=1)."""
+        result = compute_shared_sps(populated_engine)
+        assert result["stripe.com"]["count"] == 2
+        assert result["aws.com"]["count"] == 2
+        assert result["hetzner.com"]["count"] == 1
+        assert result["datadog.com"]["count"] == 1
+
+    def test_shared_sps_pct(self, populated_engine):
+        """stripe.com used by 2 of 2 seeds → 100%."""
+        result = compute_shared_sps(populated_engine)
+        assert result["stripe.com"]["pct"] == 100
+        assert result["hetzner.com"]["pct"] == 50
+
+    def test_shared_sps_top_n(self, populated_engine):
+        """top_n=2 limits results to the two most-shared SPs (stripe and aws)."""
+        result = compute_shared_sps(populated_engine, top_n=2)
+        assert len(result) == 2
+        # Both returned entries must have count=2 (the top 2)
+        for entry in result.values():
+            assert entry["count"] == 2
+
+    def test_shared_sps_name(self, populated_engine):
+        """Each entry includes the company_name string."""
+        result = compute_shared_sps(populated_engine)
+        assert result["stripe.com"]["name"] == "Stripe Inc"
+
+    def test_shared_sps_sorted_descending(self, populated_engine):
+        """Results are ordered count descending."""
+        result = compute_shared_sps(populated_engine)
+        counts = [v["count"] for v in result.values()]
+        assert counts == sorted(counts, reverse=True)
+
+    def test_shared_sps_top_n_zero_is_unlimited(self, populated_engine):
+        """top_n=0 (default) returns all SPs."""
+        result = compute_shared_sps(populated_engine, top_n=0)
+        assert len(result) == 4
+
+
+class TestAlternatives:
+    """Tests for compute_alternatives()."""
+
+    def test_alternatives_groups_by_category(self, populated_engine):
+        """'infrastructure' category is present (aws + hetzner both in infrastructure)."""
+        result = compute_alternatives(populated_engine)
+        categories = [r["category"] for r in result]
+        assert "infrastructure" in categories
+
+    def test_alternatives_excludes_single_vendor_categories(self, populated_engine):
+        """Categories with only one distinct vendor are excluded (need 2+ to be alternatives)."""
+        result = compute_alternatives(populated_engine)
+        for group in result:
+            assert len(group["vendors"]) >= 2, (
+                f"Category '{group['category']}' has fewer than 2 vendors: {group['vendors']}"
+            )
+
+    def test_alternatives_vendors_have_used_by(self, populated_engine):
+        """Each vendor entry has 'domain', 'name', and non-empty 'used_by' list."""
+        result = compute_alternatives(populated_engine)
+        for group in result:
+            for vendor in group["vendors"]:
+                assert "domain" in vendor
+                assert "name" in vendor
+                assert "used_by" in vendor
+                assert len(vendor["used_by"]) >= 1
+
+    def test_alternatives_infrastructure_vendors(self, populated_engine):
+        """The 'infrastructure' group contains aws.com and hetzner.com."""
+        result = compute_alternatives(populated_engine)
+        infra = next(g for g in result if g["category"] == "infrastructure")
+        vendor_domains = {v["domain"] for v in infra["vendors"]}
+        assert "aws.com" in vendor_domains
+        assert "hetzner.com" in vendor_domains
+
+    def test_alternatives_payments_excluded(self, populated_engine):
+        """'payments' has only stripe (1 vendor) → excluded from results."""
+        result = compute_alternatives(populated_engine)
+        categories = [r["category"] for r in result]
+        assert "payments" not in categories
+
+    def test_alternatives_analytics_excluded(self, populated_engine):
+        """'analytics' has only datadog (1 vendor) → excluded from results."""
+        result = compute_alternatives(populated_engine)
+        categories = [r["category"] for r in result]
+        assert "analytics" not in categories
+
+
+class TestSectorAverages:
+    """Tests for compute_sector_averages()."""
+
+    def test_sector_averages(self, populated_engine):
+        """Both seed sectors (Manufacturing and Fintech) appear in results."""
+        result = compute_sector_averages(populated_engine)
+        assert "Manufacturing" in result
+        assert "Fintech" in result
+
+    def test_sector_average_values(self, populated_engine):
+        """Manufacturing (only acme.com with 3 SPs) has avg_sp_count=3."""
+        result = compute_sector_averages(populated_engine)
+        mfg = result["Manufacturing"]
+        assert mfg["avg_sp_count"] == pytest.approx(3.0)
+        assert mfg["count"] == 1
+
+    def test_sector_averages_keys(self, populated_engine):
+        """Each sector entry has all required metric keys."""
+        required_keys = {
+            "avg_sp_count", "avg_adequate_pct", "avg_risky_pct",
+            "avg_basis_pct", "avg_lockin_pct", "avg_xborder_count",
+            "avg_max_depth", "avg_transparency_score", "avg_composite_score",
+            "count",
+        }
+        result = compute_sector_averages(populated_engine)
+        for sector, data in result.items():
+            assert required_keys.issubset(set(data.keys())), (
+                f"Sector '{sector}' missing keys: {required_keys - set(data.keys())}"
+            )
+
+    def test_sector_averages_count(self, populated_engine):
+        """Each sector count matches number of seed companies in that sector."""
+        result = compute_sector_averages(populated_engine)
+        # acme.com is the only Manufacturing seed
+        assert result["Manufacturing"]["count"] == 1
+        # globex.com is the only Fintech seed
+        assert result["Fintech"]["count"] == 1
+
+
+class TestCompositeScore:
+    """Tests for _grade() / _score_to_grade() boundary values."""
+
+    def test_grade_a(self):
+        """Scores 75 and 100 → grade A."""
+        assert _grade(75) == "A"
+        assert _grade(100) == "A"
+
+    def test_grade_b(self):
+        """Scores 50 and 74 → grade B."""
+        assert _grade(50) == "B"
+        assert _grade(74) == "B"
+
+    def test_grade_c(self):
+        """Scores 25 and 49 → grade C."""
+        assert _grade(25) == "C"
+        assert _grade(49) == "C"
+
+    def test_grade_d(self):
+        """Scores 0 and 24 → grade D."""
+        assert _grade(0) == "D"
+        assert _grade(24) == "D"
