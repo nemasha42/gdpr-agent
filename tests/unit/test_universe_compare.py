@@ -22,6 +22,9 @@ from gdpr_universe.compare import (
     compute_shared_sps,
     compute_alternatives,
     compute_sector_averages,
+    refresh_compare,
+    get_compare_data,
+    compute_side_by_side,
 )
 
 
@@ -503,3 +506,47 @@ class TestCompositeScore:
         """Scores 0 and 24 → grade D."""
         assert _grade(0) == "D"
         assert _grade(24) == "D"
+
+
+class TestCompareCache:
+    """Tests for refresh_compare(), get_compare_data(), and compute_side_by_side()."""
+
+    def test_refresh_stores_all_keys(self, populated_engine):
+        """refresh_compare returns all 4 expected cache keys."""
+        result = refresh_compare(populated_engine)
+        assert set(result["keys_updated"]) == {
+            "compare_matrix",
+            "compare_shared_sps",
+            "compare_alternatives",
+            "compare_sector_averages",
+        }
+
+    def test_get_compare_data_after_refresh(self, populated_engine):
+        """After refresh, matrix has 2 entries and other fields are not None."""
+        refresh_compare(populated_engine)
+        data = get_compare_data(populated_engine)
+        assert data["matrix"] is not None
+        assert len(data["matrix"]) == 2
+        assert data["shared_sps"] is not None
+        assert data["alternatives"] is not None
+        assert data["sector_averages"] is not None
+
+    def test_get_compare_data_empty_before_refresh(self, engine):
+        """Before refresh, all values are None (empty DB, no cache entries)."""
+        data = get_compare_data(engine)
+        assert data["matrix"] is None
+        assert data["shared_sps"] is None
+        assert data["alternatives"] is None
+        assert data["sector_averages"] is None
+
+    def test_side_by_side_overlap(self, populated_engine):
+        """acme.com and globex.com share stripe.com and aws.com → both in shared_by_all."""
+        result = compute_side_by_side(populated_engine, ["acme.com", "globex.com"])
+        shared = set(result["overlap"]["shared_by_all"])
+        assert "stripe.com" in shared
+        assert "aws.com" in shared
+
+    def test_side_by_side_validation(self, populated_engine):
+        """Passing a single domain raises ValueError."""
+        with pytest.raises(ValueError):
+            compute_side_by_side(populated_engine, ["acme.com"])

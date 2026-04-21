@@ -14,14 +14,16 @@ Cross-company analysis functions:
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Engine
 
 from gdpr_universe.analytics import get_cached
-from gdpr_universe.db import get_session
+from gdpr_universe.db import AnalyticsCache, get_session
 from gdpr_universe.graph_builder import _SAFEGUARDED_COUNTRIES
 from gdpr_universe.graph_queries import ADEQUATE_COUNTRIES
 from gdpr_universe.routes.dashboard import _derive_quality
@@ -493,3 +495,152 @@ def compute_sector_averages(engine: Engine) -> dict[str, dict]:
         result[sector] = averages
 
     return result
+
+
+def refresh_compare(engine: Engine) -> dict:
+    """Recompute all comparison metrics and store in AnalyticsCache.
+
+    Returns {"keys_updated": [list of key names]}.
+    """
+    now = datetime.now(timezone.utc)
+    results: dict[str, object] = {
+        "compare_matrix": compute_company_metrics(engine),
+        "compare_shared_sps": compute_shared_sps(engine, top_n=20),
+        "compare_alternatives": compute_alternatives(engine),
+        "compare_sector_averages": compute_sector_averages(engine),
+    }
+
+    with get_session(engine) as session:
+        for key, value in results.items():
+            json_value = json.dumps(value, default=str)
+            existing = session.query(AnalyticsCache).filter(AnalyticsCache.key == key).first()
+            if existing:
+                existing.value = json_value
+                existing.computed_at = now
+            else:
+                session.add(AnalyticsCache(key=key, value=json_value, computed_at=now))
+
+    return {"keys_updated": list(results.keys())}
+
+
+def get_compare_data(engine: Engine) -> dict:
+    """Read all comparison data from AnalyticsCache.
+
+    Returns a dict with keys: matrix, shared_sps, alternatives, sector_averages.
+    Values are None if not yet computed.
+    """
+    key_map = {
+        "compare_matrix": "matrix",
+        "compare_shared_sps": "shared_sps",
+        "compare_alternatives": "alternatives",
+        "compare_sector_averages": "sector_averages",
+    }
+    result: dict[str, object] = {alias: None for alias in key_map.values()}
+    for cache_key, alias in key_map.items():
+        cached = get_cached(engine, cache_key)
+        if cached is not None:
+            result[alias] = cached
+    return result
+
+
+def compute_side_by_side(engine: Engine, domains: list[str]) -> dict:
+    """Compute overlap data for 2-5 selected companies.
+
+    Args:
+        engine:  SQLAlchemy engine pointing at the universe SQLite DB.
+        domains: List of 2-5 seed company domains to compare.
+
+    Returns a dict with:
+        companies: list of per-domain dicts (domain, company_name, hq_country_code,
+                   sector, metrics, grade, sps)
+        overlap:   shared_by_all, shared_by_some, total_unique, combined_xborder_pct
+
+    Raises:
+        ValueError: if len(domains) is not between 2 and 5 inclusive.
+    """
+    if not (2 <= len(domains) <= 5):
+        raise ValueError(f"domains must have 2–5 entries, got {len(domains)}")
+
+    # Fetch cached matrix rows, or compute fresh if cache is empty.
+    cached_matrix = get_cached(engine, "compare_matrix")
+    if cached_matrix:
+        matrix_by_domain: dict[str, dict] = {r["domain"]: r for r in cached_matrix}
+    else:
+        fresh = compute_company_metrics(engine)
+        matrix_by_domain = {r["domain"]: r for r in fresh}
+
+    # Load SP lists from edges table for requested domains.
+    # Use expanding bindparam so SQLAlchemy generates the correct number of
+    # placeholders for SQLite (IN (?, ?, ...)).
+    with get_session(engine) as session:
+        sp_rows = session.execute(
+            text(
+                "SELECT parent_domain, child_domain "
+                "FROM edges "
+                "WHERE parent_domain IN :domains"
+            ).bindparams(bindparam("domains", expanding=True)),
+            {"domains": list(domains)},
+        ).fetchall()
+
+    # Build per-domain SP sets.
+    sps_by_domain: dict[str, set[str]] = {d: set() for d in domains}
+    for parent, child in sp_rows:
+        if parent in sps_by_domain:
+            sps_by_domain[parent].add(child)
+
+    # Compute overlap metrics.
+    all_sp_sets = [sps_by_domain[d] for d in domains]
+    shared_by_all_set: set[str] = all_sp_sets[0].copy()
+    for s in all_sp_sets[1:]:
+        shared_by_all_set &= s
+
+    all_unique: set[str] = set()
+    for s in all_sp_sets:
+        all_unique |= s
+
+    # shared_by_some: SP → which selected domains use it (at least 2 domains, not all).
+    shared_by_some: dict[str, list[str]] = {}
+    for sp in all_unique - shared_by_all_set:
+        users = [d for d in domains if sp in sps_by_domain[d]]
+        if len(users) >= 2:
+            shared_by_some[sp] = users
+
+    # combined_xborder_pct: weighted average of each domain's xborder pct.
+    xborder_parts: list[float] = []
+    for d in domains:
+        row = matrix_by_domain.get(d, {})
+        total = row.get("xborder_total") or 0
+        count = row.get("xborder_count") or 0
+        if total > 0:
+            xborder_parts.append(count / total * 100)
+    combined_xborder_pct = round(sum(xborder_parts) / len(xborder_parts)) if xborder_parts else 0
+
+    companies = []
+    for d in domains:
+        row = matrix_by_domain.get(d, {})
+        companies.append({
+            "domain": d,
+            "company_name": row.get("company_name", d),
+            "hq_country_code": row.get("hq_country_code", ""),
+            "sector": row.get("sector", ""),
+            "metrics": {
+                k: row.get(k)
+                for k in (
+                    "sp_count", "category_count", "adequate_pct", "risky_pct",
+                    "basis_pct", "lockin_pct", "xborder_count", "xborder_total",
+                    "max_depth", "transparency_score", "composite_score",
+                )
+            },
+            "grade": row.get("grade", "D"),
+            "sps": sorted(sps_by_domain[d]),
+        })
+
+    return {
+        "companies": companies,
+        "overlap": {
+            "shared_by_all": sorted(shared_by_all_set),
+            "shared_by_some": {sp: sorted(users) for sp, users in shared_by_some.items()},
+            "total_unique": len(all_unique),
+            "combined_xborder_pct": combined_xborder_pct,
+        },
+    }
