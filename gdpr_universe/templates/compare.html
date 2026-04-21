@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Compare — GDPR Universe{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="mb-0">Company Benchmarking</h4>
@@ -7,7 +8,351 @@
         <button type="submit" class="btn btn-primary btn-sm">Refresh</button>
     </form>
 </div>
+
+{# ── Filter form ── #}
+<form class="d-flex gap-2 align-items-center mb-3 flex-wrap" method="get" action="/compare">
+    {% if filter_country or filter_sector or filter_category %}
+    <a href="/compare" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem">Clear</a>
+    {% endif %}
+    <select name="country" class="form-select form-select-sm filter-select" style="max-width:160px" onchange="this.form.submit()">
+        <option value="">All countries</option>
+        {% for cc in available_countries %}
+        <option value="{{ cc }}" {% if filter_country == cc %}selected{% endif %}>{{ cc }}</option>
+        {% endfor %}
+    </select>
+    <select name="sector" class="form-select form-select-sm filter-select" style="max-width:180px" onchange="this.form.submit()">
+        <option value="">All sectors</option>
+        {% for s in available_sectors %}
+        <option value="{{ s }}" {% if filter_sector == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+    </select>
+    <select name="category" class="form-select form-select-sm filter-select" style="max-width:200px" onchange="this.form.submit()">
+        <option value="">All SP categories</option>
+        {% for cat in available_categories %}
+        <option value="{{ cat }}" {% if filter_category == cat %}selected{% endif %}>{{ cat }}</option>
+        {% endfor %}
+    </select>
+</form>
+
 {% if not has_data %}
 <div class="alert alert-warning py-2">No comparison data cached yet. Click <strong>Refresh</strong> to compute.</div>
 {% endif %}
+
+{% if has_data and matrix %}
+
+{# ── Charts Row 1 (4 cols) ── #}
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1rem">
+
+    <div class="card">
+        <div class="card-header" style="background:#fafbfc;font-size:0.82rem">
+            <strong>SP Count</strong>
+            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.6rem;font-weight:700;cursor:help" title="Number of subprocessors used by each company">i</span>
+        </div>
+        <div class="card-body p-2">
+            <canvas id="chart-sp-count" style="height:200px"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="background:#fafbfc;font-size:0.82rem">
+            <strong>Jurisdiction Risk</strong>
+            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.6rem;font-weight:700;cursor:help" title="% of SPs in adequate, safeguarded, or risky jurisdictions">i</span>
+        </div>
+        <div class="card-body p-2">
+            <canvas id="chart-jurisdiction" style="height:200px"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="background:#fafbfc;font-size:0.82rem">
+            <strong>Cross-border Transfers</strong>
+            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.6rem;font-weight:700;cursor:help" title="Data flows to non-EU/EEA subprocessors">i</span>
+        </div>
+        <div class="card-body p-2">
+            <canvas id="chart-xborder" style="height:200px"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="background:#fafbfc;font-size:0.82rem">
+            <strong>Most Shared SPs</strong>
+            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.6rem;font-weight:700;cursor:help" title="Subprocessors used by the highest % of seed companies">i</span>
+        </div>
+        <div class="card-body p-2">
+            <canvas id="chart-shared-sps" style="height:200px"></canvas>
+        </div>
+    </div>
+
+</div>
+
+{# ── Charts Row 2 (3 cols) ── #}
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
+
+    <div class="card">
+        <div class="card-header" style="background:#fafbfc;font-size:0.82rem">
+            <strong>Vendor Lock-in</strong>
+            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.6rem;font-weight:700;cursor:help" title="% of SPs unique to this company (not used by other seeds)">i</span>
+        </div>
+        <div class="card-body p-2">
+            <canvas id="chart-lockin" style="height:200px"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="background:#fafbfc;font-size:0.82rem">
+            <strong>Geographic Concentration</strong>
+            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.6rem;font-weight:700;cursor:help" title="How concentrated SPs are in one country">i</span>
+        </div>
+        <div class="card-body p-2">
+            <canvas id="chart-geo-concentration" style="height:200px"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="background:#fafbfc;font-size:0.82rem">
+            <strong>Transparency</strong>
+            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.6rem;font-weight:700;cursor:help" title="Disclosure posture based on official SP list, documented purposes, and data quality">i</span>
+        </div>
+        <div class="card-body p-2">
+            <canvas id="chart-transparency" style="height:200px"></canvas>
+        </div>
+    </div>
+
+</div>
+
+{# ── Sector Peer Benchmarking ── #}
+{% if sector_averages %}
+<div class="card mb-3">
+    <div class="card-header" style="background:#fafbfc"><strong>Sector Peer Benchmarking</strong></div>
+    <div class="card-body p-0">
+        {% for sector_name, avgs in sector_averages.items() %}
+        <div class="px-3 py-2 border-bottom">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+                <span class="fw-semibold" style="font-size:0.85rem">{{ sector_name }}</span>
+                <span class="text-muted" style="font-size:0.75rem">
+                    Avg: {{ avgs.avg_sp_count }} SPs &middot;
+                    {{ avgs.avg_adequate_pct }}% adequate &middot;
+                    composite {{ avgs.avg_composite_score }}
+                </span>
+            </div>
+            {% for row in matrix %}
+            {% if row.sector == sector_name %}
+            <div class="d-flex align-items-center gap-3 mb-1" style="font-size:0.78rem">
+                <span class="text-truncate" style="min-width:130px;max-width:180px">
+                    <img src="https://www.google.com/s2/favicons?domain={{ row.domain }}&sz=16" alt="" width="12" height="12" class="me-1">
+                    {{ row.company_name }}
+                </span>
+                {# SP count delta #}
+                {% set sp_delta = row.sp_count - avgs.avg_sp_count %}
+                <span class="{{ 'text-danger' if sp_delta > 0 else 'text-success' }}">
+                    {{ '▲' if sp_delta > 0 else '▼' }} {{ sp_delta | abs }} SPs
+                </span>
+                {# Adequate pct delta #}
+                {% set adeq_delta = row.adequate_pct - avgs.avg_adequate_pct %}
+                <span class="{{ 'text-success' if adeq_delta >= 0 else 'text-danger' }}">
+                    {{ '▲' if adeq_delta >= 0 else '▼' }} {{ adeq_delta | abs | round(1) }}% adequate
+                </span>
+                {# Composite score delta #}
+                {% set comp_delta = row.composite_score - avgs.avg_composite_score %}
+                <span class="{{ 'text-success' if comp_delta >= 0 else 'text-danger' }}">
+                    {{ '▲' if comp_delta >= 0 else '▼' }} {{ comp_delta | abs | round(1) }} score
+                </span>
+                <span class="badge {% if row.grade == 'A' %}bg-success{% elif row.grade == 'B' %}bg-warning text-dark{% elif row.grade == 'C' %}bg-danger{% else %}bg-secondary{% endif %}">{{ row.grade }}</span>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{# ── Common Alternatives ── #}
+{% if alternatives %}
+<div class="card mb-3">
+    <div class="card-header" style="background:#fafbfc"><strong>Common Alternatives by Function</strong></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Function</th>
+                        <th>Vendors Used</th>
+                        <th>Used By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in alternatives %}
+                    <tr>
+                        <td class="fw-semibold" style="white-space:nowrap">{{ group.category | replace("_", " ") | title }}</td>
+                        <td>
+                            {% for vendor in group.vendors %}
+                            <span class="badge me-1 mb-1"
+                                  style="background:{{ ['#0d6efd','#6f42c1','#198754','#fd7e14','#dc3545','#20c997'][loop.index0 % 6] }};font-weight:400">
+                                <img src="https://www.google.com/s2/favicons?domain={{ vendor.domain }}&sz=12" alt="" width="10" height="10" class="me-1">
+                                {{ vendor.name }}
+                            </span>
+                            {% endfor %}
+                        </td>
+                        <td style="font-size:0.78rem">
+                            {% set all_users = [] %}
+                            {% for vendor in group.vendors %}
+                            {% for seed in vendor.used_by %}
+                            {% if seed not in all_users %}{% set _ = all_users.append(seed) %}{% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                            {{ all_users | join(', ') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Comparison Matrix ── #}
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center" style="background:#fafbfc">
+        <strong>Comparison Matrix</strong>
+        <div class="d-flex gap-2 align-items-center">
+            <input type="text" id="compare-search" class="form-control form-control-sm" placeholder="Search companies…" style="width:200px">
+            <button id="compare-btn" class="btn btn-sm btn-primary" disabled>Compare Selected</button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table id="compare-matrix" class="table table-hover table-sm mb-0">
+                <thead style="font-size:0.78rem">
+                    <tr>
+                        <th style="width:32px"></th>
+                        <th data-sort="name">
+                            Company
+                            <span class="sort-arrow ms-1 text-muted" style="font-size:0.65rem"></span>
+                        </th>
+                        <th data-sort="country" class="text-center">Country</th>
+                        <th data-sort="sector">Sector</th>
+                        <th data-sort="sp_count" class="text-end">
+                            SPs
+                            <span class="sort-arrow ms-1 text-muted" style="font-size:0.65rem"></span>
+                            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.55rem;font-weight:700;cursor:help" title="Number of subprocessors used by each company">i</span>
+                        </th>
+                        <th data-sort="adequate_pct" class="text-end">
+                            Adequate
+                            <span class="sort-arrow ms-1 text-muted" style="font-size:0.65rem"></span>
+                            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.55rem;font-weight:700;cursor:help" title="% of SPs in jurisdictions with EU adequacy decision or DPF">i</span>
+                        </th>
+                        <th data-sort="risky_pct" class="text-end">
+                            Risky
+                            <span class="sort-arrow ms-1 text-muted" style="font-size:0.65rem"></span>
+                            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.55rem;font-weight:700;cursor:help" title="% of SPs in non-adequate, non-safeguarded jurisdictions">i</span>
+                        </th>
+                        <th data-sort="basis_pct" class="text-end">
+                            Basis
+                            <span class="sort-arrow ms-1 text-muted" style="font-size:0.65rem"></span>
+                            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.55rem;font-weight:700;cursor:help" title="% of SPs with documented transfer basis">i</span>
+                        </th>
+                        <th data-sort="lockin_pct" class="text-end">
+                            Lock-in
+                            <span class="sort-arrow ms-1 text-muted" style="font-size:0.65rem"></span>
+                            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.55rem;font-weight:700;cursor:help" title="% of SPs unique to this company (not used by other seeds)">i</span>
+                        </th>
+                        <th data-sort="xborder_count" class="text-end">
+                            X-border
+                            <span class="sort-arrow ms-1 text-muted" style="font-size:0.65rem"></span>
+                            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.55rem;font-weight:700;cursor:help" title="Number of SPs outside EU/EEA">i</span>
+                        </th>
+                        <th data-sort="transparency_score" class="text-end">
+                            Transp.
+                            <span class="sort-arrow ms-1 text-muted" style="font-size:0.65rem"></span>
+                            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.55rem;font-weight:700;cursor:help" title="Transparency score based on disclosure posture">i</span>
+                        </th>
+                        <th data-sort="composite_score" class="text-end">
+                            Score
+                            <span class="sort-arrow ms-1 text-muted" style="font-size:0.65rem"></span>
+                            <span class="ms-1" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#e9ecef;color:#6c757d;font-size:0.55rem;font-weight:700;cursor:help" title="Composite GDPR posture (A-D). Weighted: jurisdiction 30%, basis 25%, transparency 20%, lock-in 15%, geo concentration 10%">i</span>
+                        </th>
+                        <th class="text-center">Grade</th>
+                    </tr>
+                </thead>
+                <tbody id="compare-tbody">
+                    {% for row in matrix %}
+                    <tr class="compare-row"
+                        data-domain="{{ row.domain }}"
+                        data-name="{{ row.company_name | lower }}"
+                        data-country="{{ row.hq_country_code }}"
+                        data-sector="{{ row.sector | lower }}"
+                        data-sp_count="{{ row.sp_count }}"
+                        data-adequate_pct="{{ row.adequate_pct }}"
+                        data-risky_pct="{{ row.risky_pct }}"
+                        data-basis_pct="{{ row.basis_pct }}"
+                        data-lockin_pct="{{ row.lockin_pct }}"
+                        data-xborder_count="{{ row.xborder_count }}"
+                        data-transparency_score="{{ row.transparency_score }}"
+                        data-composite_score="{{ row.composite_score }}">
+                        <td>
+                            <input type="checkbox" class="form-check-input compare-checkbox" value="{{ row.domain }}">
+                        </td>
+                        <td class="company-name">
+                            <img src="https://www.google.com/s2/favicons?domain={{ row.domain }}&sz=16" alt="" width="14" height="14" class="me-1">
+                            <a href="/company/{{ row.domain }}" class="text-decoration-none">{{ row.company_name }}</a>
+                        </td>
+                        <td class="text-center">{{ row.hq_country_code }}</td>
+                        <td style="font-size:0.78rem">{{ row.sector }}</td>
+                        <td class="text-end">{{ row.sp_count }}</td>
+                        {# Adequate % — green≥70, yellow≥40, red<40 #}
+                        <td class="text-end"
+                            style="background:{% if row.adequate_pct >= 70 %}#d1e7dd{% elif row.adequate_pct >= 40 %}#fff3cd{% else %}#f8d7da{% endif %}">
+                            {{ row.adequate_pct }}%
+                        </td>
+                        {# Risky % — green≤10, yellow≤20, red>20 #}
+                        <td class="text-end"
+                            style="background:{% if row.risky_pct <= 10 %}#d1e7dd{% elif row.risky_pct <= 20 %}#fff3cd{% else %}#f8d7da{% endif %}">
+                            {{ row.risky_pct }}%
+                        </td>
+                        {# Basis % — green≥70, yellow≥40, red<40 #}
+                        <td class="text-end"
+                            style="background:{% if row.basis_pct >= 70 %}#d1e7dd{% elif row.basis_pct >= 40 %}#fff3cd{% else %}#f8d7da{% endif %}">
+                            {{ row.basis_pct }}%
+                        </td>
+                        {# Lock-in % — green≤30, yellow≤50, red>50 #}
+                        <td class="text-end"
+                            style="background:{% if row.lockin_pct <= 30 %}#d1e7dd{% elif row.lockin_pct <= 50 %}#fff3cd{% else %}#f8d7da{% endif %}">
+                            {{ row.lockin_pct }}%
+                        </td>
+                        <td class="text-end">{{ row.xborder_count }}/{{ row.xborder_total }}</td>
+                        <td class="text-end">{{ row.transparency_score }}</td>
+                        <td class="text-end fw-semibold">{{ row.composite_score }}</td>
+                        <td class="text-center">
+                            <span class="badge {% if row.grade == 'A' %}bg-success{% elif row.grade == 'B' %}bg-warning text-dark{% elif row.grade == 'C' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                {{ row.grade }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {# Hidden selected summary row shown by JS when search filters out selected rows #}
+        <div id="compare-hidden-selected" style="display:none" class="px-3 py-2 border-top bg-light">
+            <span class="text-muted" style="font-size:0.82rem">
+                <strong id="hidden-selected-count">0</strong> selected rows hidden by search filter.
+            </span>
+        </div>
+    </div>
+</div>
+
+{# ── Side-by-side container (populated by JS) ── #}
+<div id="side-by-side"></div>
+
+{% endif %}
+
+{# ── JSON data blob for Chart.js ── #}
+<script id="compare-data" type="application/json">{{ compare_data | tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/compare.js') }}"></script>
 {% endblock %}
