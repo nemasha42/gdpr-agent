@@ -15,7 +15,9 @@ from collections import Counter
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from gdpr_universe.analytics import get_cached
 from gdpr_universe.db import get_session
+from gdpr_universe.graph_builder import _SAFEGUARDED_COUNTRIES
 from gdpr_universe.graph_queries import ADEQUATE_COUNTRIES
 from gdpr_universe.routes.dashboard import _derive_quality
 
@@ -26,16 +28,6 @@ _EU_EEA = frozenset({
     "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE",
     "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT",
     "RO", "SK", "SI", "ES", "SE", "NO", "IS", "LI", "CH",
-})
-
-# Known transfer basis values that are considered "documented"
-_DOCUMENTED_BASES = frozenset({
-    "SCCs", "SCC", "Standard Contractual Clauses",
-    "BCRs", "BCR", "Binding Corporate Rules",
-    "adequacy", "Adequacy Decision", "adequacy_decision",
-    "DPF", "Privacy Shield",
-    "consent", "Consent",
-    "legitimate interests",
 })
 
 
@@ -54,16 +46,24 @@ def _quality_points(quality: str) -> int:
     return {"high": 40, "medium": 20}.get(quality, 0)
 
 
-def _transparency_score(quality: str, basis_pct: float) -> float:
+def _transparency_score(quality: str, basis_pct: float, field_coverage_pct: float) -> float:
     """Transparency sub-score (0-100).
 
     Formula:
         quality_pts (high=40, medium=20, low/unknown=0)
-        + basis_pct * 30 / 100
-        + basis_pct * 30 / 100   (counted twice per spec)
+        + basis_pct          * 30 / 100
+        + field_coverage_pct * 30 / 100
     Capped at 100.
+
+    field_coverage_pct is the percentage of edge fields (purposes, data_categories,
+    transfer_basis) populated for this seed's SPs, read from AnalyticsCache
+    "field_coverage" key. Defaults to 0 when analytics cache is not yet populated.
     """
-    pts = _quality_points(quality) + (basis_pct * 30 / 100) + (basis_pct * 30 / 100)
+    pts = (
+        _quality_points(quality)
+        + (basis_pct * 30 / 100)
+        + (field_coverage_pct * 30 / 100)
+    )
     return min(pts, 100.0)
 
 
@@ -178,6 +178,19 @@ def compute_company_metrics(engine: Engine, *, category: str = "") -> list[dict]
         row[0]: (row[1], row[2]) for row in fetch_rows
     }
 
+    # field_coverage from analytics cache: {domain: pct (0-100)}
+    field_coverage_cache: dict[str, float] = {}
+    fc_data = get_cached(engine, "field_coverage")
+    if fc_data is not None:
+        for entry in fc_data:
+            domain_key = entry.get("domain")
+            pct = entry.get("pct", 0)
+            if domain_key:
+                try:
+                    field_coverage_cache[domain_key] = float(pct)
+                except (TypeError, ValueError):
+                    field_coverage_cache[domain_key] = 0.0
+
     # Group edges by parent seed domain
     # edges_by_seed: {seed_domain: [(child_domain, depth, transfer_basis, country_code, category)]}
     edges_by_seed: dict[str, list[tuple[str, int, str | None, str | None, str | None]]] = {}
@@ -207,7 +220,7 @@ def compute_company_metrics(engine: Engine, *, category: str = "") -> list[dict]
             # Zero-SP company — all percentage metrics are 0, avoid ZeroDivisionError
             source_url, fetch_status = fetch_by_domain.get(domain, (None, None))
             quality = _derive_quality(source_url, fetch_status)
-            t_score = _transparency_score(quality, 0.0)
+            t_score = _transparency_score(quality, 0.0, 0.0)
             c_score = _composite_score(0.0, 0.0, t_score, 0.0, 0.0)
             results.append({
                 "domain": domain,
@@ -243,11 +256,12 @@ def compute_company_metrics(engine: Engine, *, category: str = "") -> list[dict]
         categories: set[str] = set()
 
         for child_domain, depth, transfer_basis, country_code, svc_cat in sp_edges:
-            # Adequacy
+            # Adequacy / risk classification
             code = country_code or ""
             if code in ADEQUATE_COUNTRIES:
                 adequate_count += 1
-            elif code:
+            elif code and code not in _SAFEGUARDED_COUNTRIES:
+                # Only truly risky: known country, not adequate, not safeguarded
                 risky_count += 1
 
             # Transfer basis
@@ -280,7 +294,9 @@ def compute_company_metrics(engine: Engine, *, category: str = "") -> list[dict]
         basis_pct = basis_count / sp_count * 100
         lockin_pct = lockin_count / sp_count * 100
 
-        xborder_total = len({c for _, _, _, c, _ in sp_edges if c and c not in _EU_EEA})
+        # xborder_total is the denominator (= sp_count) so callers can compute
+        # xborder percentage as xborder_count / xborder_total
+        xborder_total = sp_count
 
         # Geo top
         if country_counter:
@@ -290,11 +306,12 @@ def compute_company_metrics(engine: Engine, *, category: str = "") -> list[dict]
             geo_top_country = ""
             geo_top_pct = 0.0
 
-        # Quality
+        # Quality and field coverage from analytics cache
         source_url, fetch_status = fetch_by_domain.get(domain, (None, None))
         quality = _derive_quality(source_url, fetch_status)
+        field_coverage_pct = field_coverage_cache.get(domain, 0.0)
 
-        t_score = _transparency_score(quality, basis_pct)
+        t_score = _transparency_score(quality, basis_pct, field_coverage_pct)
         c_score = _composite_score(adequate_pct, basis_pct, t_score, lockin_pct, geo_top_pct)
 
         results.append({

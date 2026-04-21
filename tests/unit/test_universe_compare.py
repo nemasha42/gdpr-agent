@@ -15,7 +15,11 @@ from gdpr_universe.db import (
     get_session,
     init_db,
 )
-from gdpr_universe.compare import compute_company_metrics
+from gdpr_universe.compare import (
+    _grade,
+    _transparency_score,
+    compute_company_metrics,
+)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -255,3 +259,91 @@ class TestCompanyMetrics:
         assert row["quality"] in ("unknown", "low", "medium", "high")
         # Grade must be one of A/B/C/D
         assert row["grade"] in ("A", "B", "C", "D")
+
+    def test_risky_pct(self, engine):
+        """risky_pct only counts SPs with known, non-adequate, non-safeguarded countries.
+
+        IN (India) is safeguarded → must NOT count as risky.
+        CN (China) is neither adequate nor safeguarded → must count as risky.
+        """
+        with get_session(engine) as session:
+            session.add(Company(
+                domain="riskco.com", company_name="Risk Co",
+                hq_country="UK", hq_country_code="GB",
+                sector="Tech", is_seed=True,
+            ))
+            # Safeguarded — should NOT raise risky_count
+            session.add(Company(
+                domain="india-sp.com", company_name="India SP",
+                hq_country="India", hq_country_code="IN",
+                service_category="analytics", is_seed=False,
+            ))
+            # Truly risky — should raise risky_count
+            session.add(Company(
+                domain="china-sp.com", company_name="China SP",
+                hq_country="China", hq_country_code="CN",
+                service_category="analytics", is_seed=False,
+            ))
+            # Adequate — should NOT raise risky_count
+            session.add(Company(
+                domain="us-sp.com", company_name="US SP",
+                hq_country="United States", hq_country_code="US",
+                service_category="infrastructure", is_seed=False,
+            ))
+            session.add(Edge(
+                parent_domain="riskco.com", child_domain="india-sp.com",
+                depth=0, transfer_basis="SCCs",
+                purposes=json.dumps(["analytics"]),
+                data_categories=json.dumps(["personal"]),
+            ))
+            session.add(Edge(
+                parent_domain="riskco.com", child_domain="china-sp.com",
+                depth=0, transfer_basis="SCCs",
+                purposes=json.dumps(["analytics"]),
+                data_categories=json.dumps(["personal"]),
+            ))
+            session.add(Edge(
+                parent_domain="riskco.com", child_domain="us-sp.com",
+                depth=0, transfer_basis="SCCs",
+                purposes=json.dumps(["hosting"]),
+                data_categories=json.dumps(["personal"]),
+            ))
+
+        rows = compute_company_metrics(engine)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["sp_count"] == 3
+        # Only CN is truly risky → 1/3 ≈ 33.3%
+        assert row["risky_pct"] == pytest.approx(100 / 3, rel=0.01)
+
+    def test_xborder_total_equals_sp_count(self, populated_engine):
+        """xborder_total must equal sp_count (it is the denominator for xborder percentage)."""
+        rows = compute_company_metrics(populated_engine)
+        for row in rows:
+            assert row["xborder_total"] == row["sp_count"], (
+                f"{row['domain']}: xborder_total={row['xborder_total']} != sp_count={row['sp_count']}"
+            )
+
+    def test_grade_boundaries(self):
+        """_grade() returns correct letter at each boundary score."""
+        assert _grade(75.0) == "A"
+        assert _grade(74.9) == "B"
+        assert _grade(50.0) == "B"
+        assert _grade(49.9) == "C"
+        assert _grade(25.0) == "C"
+        assert _grade(24.9) == "D"
+        assert _grade(0.0) == "D"
+
+    def test_transparency_score_uses_field_coverage(self):
+        """_transparency_score third component is field_coverage_pct, not basis_pct again."""
+        # high quality=40pts, basis_pct=100 → +30pts, field_coverage_pct=0 → +0pts = 70
+        score_no_coverage = _transparency_score("high", 100.0, 0.0)
+        assert score_no_coverage == pytest.approx(70.0)
+
+        # high quality=40pts, basis_pct=100 → +30pts, field_coverage_pct=100 → +30pts = 100 (capped)
+        score_full_coverage = _transparency_score("high", 100.0, 100.0)
+        assert score_full_coverage == pytest.approx(100.0)
+
+        # medium quality=20pts, basis_pct=0, field_coverage_pct=50 → 20 + 0 + 15 = 35
+        score_mixed = _transparency_score("medium", 0.0, 50.0)
+        assert score_mixed == pytest.approx(35.0)
