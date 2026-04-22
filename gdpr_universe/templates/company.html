@@ -28,7 +28,33 @@
         {% else %}
         <span class="fetch-status fetch-status-pending">pending</span>
         {% endif %}
+        {% if data_quality == 'high' %}
+        <span class="badge bg-success">high quality</span>
+        {% elif data_quality == 'medium' %}
+        <span class="badge bg-warning text-dark">medium quality</span>
+        {% elif data_quality == 'low' %}
+        <span class="badge bg-danger">low quality</span>
+        {% else %}
+        <span class="badge bg-secondary">quality unknown</span>
+        {% endif %}
     </div>
+</div>
+
+<div class="alert py-2 mb-3 {% if data_quality == 'high' %}alert-success{% elif data_quality == 'medium' %}alert-warning{% elif data_quality == 'low' %}alert-danger{% else %}alert-secondary{% endif %}" style="font-size:0.82rem">
+    <strong>Data quality:
+        {% if data_quality == 'high' %}High
+        {% elif data_quality == 'medium' %}Medium
+        {% elif data_quality == 'low' %}Low
+        {% else %}Unknown{% endif %}
+    </strong>
+    — {{ quality_reason }}
+    {% if latest_fetch and latest_fetch.source_url %}
+    <br><span class="text-muted">Source:</span>
+    <a href="{{ latest_fetch.source_url }}" target="_blank" rel="noopener" class="text-break">{{ latest_fetch.source_url }}</a>
+    {% endif %}
+    {% if latest_fetch and latest_fetch.fetched_at %}
+    <span class="text-muted ms-2">Fetched: {{ latest_fetch.fetched_at }}</span>
+    {% endif %}
 </div>
 
 {# ── Two-column layout ── #}

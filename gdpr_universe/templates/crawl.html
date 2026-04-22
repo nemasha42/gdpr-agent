@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Crawl — GDPR Universe{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Crawl Scheduler</h4>
+</div>
+
+{# ── Layer selector with cost estimates ── #}
+<div class="card mb-4">
+    <div class="card-header"><strong>Layer Depth Selector</strong></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:40px"></th>
+                        <th>Layer</th>
+                        <th class="text-center">Pending</th>
+                        <th class="text-center">Done</th>
+                        <th class="text-center">Not Found</th>
+                        <th class="text-center">Errors</th>
+                        <th class="text-end">Est. Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for w in waves %}
+                    <tr class="layer-row {% if w.pending == 0 %}text-muted{% endif %}" data-wave="{{ w.wave }}" data-pending="{{ w.pending }}">
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input layer-check"
+                                   value="{{ w.wave }}"
+                                   {% if w.pending == 0 %}disabled{% endif %}
+                                   {% if crawl_running %}disabled{% endif %}>
+                        </td>
+                        <td>
+                            <strong>Layer {{ w.wave }}</strong>
+                            <span class="text-muted" style="font-size:0.75rem">
+                                {% if w.wave == 0 %}— seed companies
+                                {% else %}— depth {{ w.wave }} subprocessors{% endif %}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            {% if w.pending > 0 %}
+                            <span class="fw-bold">{{ w.pending }}</span>
+                            {% else %}<span class="text-muted">0</span>{% endif %}
+                        </td>
+                        <td class="text-center"><span class="text-success">{{ w.ok }}</span></td>
+                        <td class="text-center"><span class="text-warning">{{ w.not_found }}</span></td>
+                        <td class="text-center"><span class="text-danger">{{ w.errors }}</span></td>
+                        <td class="text-end">
+                            {% if w.pending > 0 %}
+                            <span style="font-size:0.8rem">${{ '%.2f' % (w.pending * 0.04) }}</span>
+                            <span class="text-muted" style="font-size:0.68rem">
+                                ({{ w.pending }} x $0.04)
+                            </span>
+                            {% else %}
+                            <span class="text-muted" style="font-size:0.8rem">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="table-light">
+                        <td></td>
+                        <td><strong>Selected total</strong></td>
+                        <td class="text-center fw-bold" id="selected-domains">0</td>
+                        <td colspan="3"></td>
+                        <td class="text-end fw-bold" id="selected-cost">$0.00</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div class="p-3 d-flex justify-content-between align-items-center">
+            <span class="text-muted" style="font-size:0.75rem">
+                Cost estimate assumes ~$0.04/domain (scrape + LLM fallback). Actual cost varies: $0 if scraped successfully, ~$0.03–0.05 if LLM needed.
+            </span>
+            <button class="btn btn-primary btn-sm" id="start-crawl-btn" disabled
+                    {% if crawl_running %}disabled{% endif %}>
+                Start Crawl
+            </button>
+        </div>
+    </div>
+</div>
+
+{# ── Progress panel ── #}
+<div class="card mb-4" id="progress-panel" style="{% if not crawl_running %}display:none{% endif %}">
+    <div class="card-header"><strong>Crawl in progress</strong></div>
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span id="progress-domain" class="text-muted">Starting...</span>
+            <span id="progress-count" class="text-muted">0 / 0</span>
+        </div>
+        <div class="progress" style="height:8px">
+            <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+        </div>
+    </div>
+</div>
+
+{# ── Recent fetch log ── #}
+<div class="card">
+    <div class="card-header"><strong>Recent Fetches</strong></div>
+    <div class="card-body p-0">
+        {% if recent_fetches %}
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr>
+                    <th>Domain</th>
+                    <th>Status</th>
+                    <th>SPs</th>
+                    <th>Source</th>
+                    <th>Fetched</th>
+                </tr></thead>
+                <tbody>
+                    {% for f in recent_fetches %}
+                    <tr>
+                        <td>
+                            <img src="https://www.google.com/s2/favicons?domain={{ f.domain }}&sz=16" alt="" width="14" height="14" class="me-1">
+                            <a href="/company/{{ f.domain }}">{{ f.domain }}</a>
+                        </td>
+                        <td><span class="fetch-status fetch-status-{{ f.fetch_status }}">{{ f.fetch_status }}</span></td>
+                        <td>{{ f.sp_count or 0 }}</td>
+                        <td class="text-truncate" style="max-width:250px;font-size:0.75rem">
+                            {% if f.source_url %}
+                            <a href="{{ f.source_url }}" target="_blank" rel="noopener" title="{{ f.source_url }}">{{ f.source_url | replace('https://', '') | replace('http://', '') | truncate(45) }}</a>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size:0.75rem" class="text-muted">{{ f.fetched_at }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted p-3 mb-0">No fetches yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const panel = document.getElementById('progress-panel');
+    const bar = document.getElementById('progress-bar');
+    const domainEl = document.getElementById('progress-domain');
+    const countEl = document.getElementById('progress-count');
+    const startBtn = document.getElementById('start-crawl-btn');
+    const checks = document.querySelectorAll('.layer-check');
+    const selectedDomainsEl = document.getElementById('selected-domains');
+    const selectedCostEl = document.getElementById('selected-cost');
+    let polling = {{ 'true' if crawl_running else 'false' }};
+
+    // Update totals when checkboxes change
+    function updateTotals() {
+        let totalDomains = 0;
+        checks.forEach(cb => {
+            if (cb.checked) {
+                const row = cb.closest('tr');
+                totalDomains += parseInt(row.dataset.pending) || 0;
+            }
+        });
+        selectedDomainsEl.textContent = totalDomains;
+        selectedCostEl.textContent = '$' + (totalDomains * 0.04).toFixed(2);
+        startBtn.disabled = totalDomains === 0;
+    }
+
+    checks.forEach(cb => cb.addEventListener('change', updateTotals));
+
+    // Start crawl — runs selected waves sequentially (lowest first)
+    startBtn.addEventListener('click', function() {
+        const selectedWaves = [];
+        checks.forEach(cb => {
+            if (cb.checked) selectedWaves.push(parseInt(cb.value));
+        });
+        selectedWaves.sort((a, b) => a - b);
+
+        if (selectedWaves.length === 0) return;
+
+        const totalDomains = parseInt(selectedDomainsEl.textContent);
+        const cost = selectedCostEl.textContent;
+        const msg = `Start crawl for layers ${selectedWaves.join(', ')}?\n\n` +
+                    `${totalDomains} domains, estimated cost: ${cost}\n\n` +
+                    `This uses the Anthropic API.`;
+        if (!confirm(msg)) return;
+
+        startBtn.disabled = true;
+        checks.forEach(cb => cb.disabled = true);
+        panel.style.display = '';
+
+        // Start first wave, then chain
+        function runWave(idx) {
+            if (idx >= selectedWaves.length) {
+                // All waves done
+                setTimeout(() => location.reload(), 1500);
+                return;
+            }
+            const wave = selectedWaves[idx];
+            fetch('/crawl', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({wave: wave, max_llm: 500})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error && idx === 0) {
+                    alert(data.error);
+                    location.reload();
+                    return;
+                }
+                polling = true;
+                pollStatus(() => runWave(idx + 1));
+            });
+        }
+
+        runWave(0);
+    });
+
+    function pollStatus(onDone) {
+        if (!polling) return;
+        fetch('/crawl/status')
+            .then(r => r.json())
+            .then(data => {
+                if (data.running) {
+                    panel.style.display = '';
+                    const pct = data.total > 0 ? Math.round(data.current / data.total * 100) : 0;
+                    bar.style.width = pct + '%';
+                    domainEl.textContent = (data.wave !== null ? 'Layer ' + data.wave + ': ' : '') + (data.domain || 'Starting...');
+                    countEl.textContent = data.current + ' / ' + data.total;
+                    setTimeout(() => pollStatus(onDone), 2000);
+                } else {
+                    polling = false;
+                    bar.style.width = '100%';
+                    domainEl.textContent = 'Done!';
+                    if (onDone) setTimeout(onDone, 500);
+                }
+            });
+    }
+
+    if (polling) pollStatus(() => location.reload());
+})();
+</script>
+{% endblock %}

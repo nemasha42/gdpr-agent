@@ -12,6 +12,55 @@ from gdpr_universe.graph_queries import sharing_counts
 
 bp = Blueprint("dashboard", __name__)
 
+# ── Subprocessor page URL patterns that indicate an official source ──
+_OFFICIAL_SP_PATTERNS = (
+    "/sub-processor", "/subprocessor", "/sub_processor",
+    "/third-party", "/third-parties", "/vendors",
+    "/trust-center", "/trust_center",
+    "/data-processing", "/data_processing",
+)
+_PRIVACY_PATTERNS = (
+    "/privacy", "/gdpr", "/legal", "/cookie",
+    "/data-protection", "/compliance",
+)
+
+
+def _derive_quality(source_url: str | None, fetch_status: str | None) -> str:
+    """Derive a quality label from the source URL and fetch status.
+
+    Returns: 'high', 'medium', 'low', or 'unknown'.
+    """
+    if not source_url:
+        if fetch_status == "ok":
+            return "low"
+        return "unknown"
+
+    url_lower = source_url.lower()
+    if any(p in url_lower for p in _OFFICIAL_SP_PATTERNS):
+        return "high"
+    if any(p in url_lower for p in _PRIVACY_PATTERNS):
+        return "medium"
+    return "low"
+
+
+def _quality_reason(source_url: str | None, fetch_status: str | None) -> str:
+    """Return a human-readable reason for the quality rating."""
+    if not source_url:
+        if fetch_status == "ok":
+            return "Data exists but source URL was not recorded (manual entry or early crawl)"
+        if fetch_status == "not_found":
+            return "No subprocessor page found for this domain"
+        if fetch_status == "error":
+            return "Fetch attempt failed with an error"
+        return "Not yet fetched"
+
+    url_lower = source_url.lower()
+    if any(p in url_lower for p in _OFFICIAL_SP_PATTERNS):
+        return "Official subprocessor/vendor list page"
+    if any(p in url_lower for p in _PRIVACY_PATTERNS):
+        return "Privacy or legal page (may have partial SP info)"
+    return "Generic webpage — subprocessor list not confirmed"
+
 
 def _get_engine() -> Engine:
     return current_app.config["DB_ENGINE"]
@@ -81,6 +130,7 @@ def _get_company_rows(
         "sector": "c.sector",
         "sp_count": "sp_count",
         "fetch_status": "fetch_status",
+        "data_quality": "fl.source_url",
     }
     sort_col = allowed_sorts.get(sort, "c.company_name")
     order_dir = "DESC" if order == "desc" else "ASC"
@@ -102,14 +152,15 @@ def _get_company_rows(
     sql = text(
         f"SELECT c.domain, c.company_name, c.hq_country_code, c.sector, "
         f"       COALESCE(sp.cnt, 0) AS sp_count, "
-        f"       fl.fetch_status "
+        f"       fl.fetch_status, "
+        f"       fl.source_url "
         f"FROM companies c "
         f"LEFT JOIN ("
         f"    SELECT parent_domain, COUNT(DISTINCT child_domain) AS cnt "
         f"    FROM edges GROUP BY parent_domain"
         f") sp ON sp.parent_domain = c.domain "
         f"LEFT JOIN ("
-        f"    SELECT domain, fetch_status FROM fetch_log "
+        f"    SELECT domain, fetch_status, source_url FROM fetch_log "
         f"    WHERE id IN (SELECT MAX(id) FROM fetch_log GROUP BY domain)"
         f") fl ON fl.domain = c.domain "
         f"WHERE {where} "
@@ -127,6 +178,9 @@ def _get_company_rows(
             "sector": row[3] or "",
             "sp_count": row[4],
             "fetch_status": row[5] or "pending",
+            "source_url": row[6] or "",
+            "data_quality": _derive_quality(row[6], row[5]),
+            "quality_reason": _quality_reason(row[6], row[5]),
         }
         for row in rows
     ]

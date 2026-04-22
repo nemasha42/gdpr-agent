@@ -7,19 +7,27 @@
   const dataEl = document.getElementById('graph-data');
   if (!dataEl) return;
 
-  const graphData = JSON.parse(dataEl.textContent);
+  let graphData;
+  try {
+    graphData = JSON.parse(dataEl.textContent);
+  } catch (e) {
+    console.error('[universe-graph] JSON parse failed:', e);
+    return;
+  }
   const { nodes, edges, stats } = graphData;
+  console.log('[universe-graph] data loaded:', nodes.length, 'nodes,', edges.length, 'edges');
 
   // Mode: "full" (dashboard) or "neighborhood" (company detail)
   const mode = dataEl.getAttribute('data-mode') || 'full';
   const centerDomain = dataEl.getAttribute('data-center') || null;
 
   const svg = d3.select('#universe-graph');
-  if (svg.empty()) return;
+  if (svg.empty()) { console.error('[universe-graph] SVG element not found'); return; }
 
   const container = svg.node().parentElement;
-  let width = container.clientWidth;
-  let height = container.clientHeight;
+  let width = container.clientWidth || container.getBoundingClientRect().width || 600;
+  let height = container.clientHeight || container.getBoundingClientRect().height || 400;
+  console.log('[universe-graph] container dims:', width, 'x', height);
 
   svg.attr('viewBox', [0, 0, width, height]);
 
@@ -118,10 +126,17 @@
   }
 
   // ── Simulation ────────────────────────────────────────────────────────────
-  const simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(edges).id(d => d.id).distance(80).strength(0.3))
-    .force('charge', d3.forceManyBody().strength(-120))
-    .force('collision', d3.forceCollide().radius(d => nodeSize(d) + 4));
+  let simulation;
+  try {
+    simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(edges).id(d => d.id).distance(80).strength(0.3))
+      .force('charge', d3.forceManyBody().strength(-120))
+      .force('collision', d3.forceCollide().radius(d => nodeSize(d) + 4));
+    console.log('[universe-graph] simulation started');
+  } catch (e) {
+    console.error('[universe-graph] simulation init failed:', e);
+    return;
+  }
 
   if (mode === 'neighborhood') {
     // Center force — no layering

@@ -10,6 +10,7 @@ from sqlalchemy.engine import Engine
 
 from gdpr_universe.db import Company, Edge, FetchLog, IndexConstituent, get_session
 from gdpr_universe.graph_builder import build_neighborhood_graph
+from gdpr_universe.routes.dashboard import _derive_quality, _quality_reason
 
 bp = Blueprint("company", __name__)
 
@@ -71,10 +72,16 @@ def detail(domain: str):
         if latest_fetch is not None:
             session.expunge(latest_fetch)
 
-    # 5. Neighborhood graph
+    # 5. Derive data quality
+    _src_url = latest_fetch.source_url if latest_fetch else None
+    _fetch_st = latest_fetch.fetch_status if latest_fetch else None
+    data_quality = _derive_quality(_src_url, _fetch_st)
+    quality_reason = _quality_reason(_src_url, _fetch_st)
+
+    # 6. Neighborhood graph
     graph_data = build_neighborhood_graph(engine, domain, hops=2)
 
-    # 6. Render
+    # 7. Render
     return render_template(
         "company.html",
         active_tab="",
@@ -82,5 +89,7 @@ def detail(domain: str):
         indices=indices,
         sps=sps,
         latest_fetch=latest_fetch,
+        data_quality=data_quality,
+        quality_reason=quality_reason,
         graph_json=graph_data,
     )

@@ -45,7 +45,7 @@
                                 {% if search %}{% set base_qs = base_qs ~ '&search=' ~ search %}{% endif %}
                                 {% if filter_country %}{% set base_qs = base_qs ~ '&country=' ~ filter_country %}{% endif %}
                                 {% if filter_sector %}{% set base_qs = base_qs ~ '&sector=' ~ filter_sector %}{% endif %}
-                                {% for col_key, col_label in [('company_name','Name'),('hq_country_code','Country'),('sector','Sector'),('sp_count','SPs'),('fetch_status','Status')] %}
+                                {% for col_key, col_label in [('company_name','Name'),('hq_country_code','Country'),('sector','Sector'),('sp_count','SPs'),('fetch_status','Status'),('data_quality','Quality')] %}
                                 <th>
                                     <a href="?sort={{ col_key }}&order={{ 'desc' if sort == col_key and order == 'asc' else 'asc' }}{{ base_qs }}"
                                        class="text-decoration-none text-muted sort-link{% if sort == col_key %} active-sort{% endif %}">
@@ -71,6 +71,23 @@
                                 <td>{{ c.sector }}</td>
                                 <td>{{ c.sp_count }}</td>
                                 <td><span class="fetch-status fetch-status-{{ c.fetch_status }}">{{ c.fetch_status }}</span></td>
+                                <td style="font-size:0.78rem">
+                                    {% if c.data_quality == 'high' %}
+                                    <span class="badge bg-success" style="cursor:help" title="{{ c.quality_reason }}">high</span>
+                                    {% elif c.data_quality == 'medium' %}
+                                    <span class="badge bg-warning text-dark" style="cursor:help" title="{{ c.quality_reason }}">med</span>
+                                    {% elif c.data_quality == 'low' %}
+                                    <span class="badge bg-danger" style="cursor:help" title="{{ c.quality_reason }}">low</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary" style="cursor:help" title="{{ c.quality_reason }}">?</span>
+                                    {% endif %}
+                                    {% if c.source_url %}
+                                    <a href="{{ c.source_url }}" target="_blank" rel="noopener"
+                                       class="text-muted text-truncate d-inline-block align-middle"
+                                       style="max-width:120px;font-size:0.68rem;vertical-align:middle"
+                                       title="{{ c.source_url }}">{{ c.source_url | replace('https://', '') | replace('http://', '') | replace('www.', '') | truncate(35) }}</a>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

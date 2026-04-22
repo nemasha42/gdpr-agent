@@ -26,6 +26,14 @@ def analytics():
         "chain_depth": get_cached(engine, "chain_depth"),
         "sp_countries": get_cached(engine, "sp_countries"),
         "category_edges": get_cached(engine, "category_edges"),
+        # Data quality panels
+        "edge_completeness": get_cached(engine, "edge_completeness"),
+        "source_breakdown": get_cached(engine, "source_breakdown"),
+        "fetch_staleness": get_cached(engine, "fetch_staleness"),
+        "fetch_success": get_cached(engine, "fetch_success"),
+        "field_coverage": get_cached(engine, "field_coverage"),
+        "country_coverage": get_cached(engine, "country_coverage"),
+        "quality_breakdown": get_cached(engine, "quality_breakdown"),
     }
 
     has_data = any(v is not None for v in data.values())

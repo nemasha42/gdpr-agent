@@ -152,5 +152,215 @@
         </div>
     </div>
 </div>
+
+{# ══════════════════════════════════════════════════════════════ #}
+{# DATA QUALITY & SOURCE PROVENANCE                              #}
+{# ══════════════════════════════════════════════════════════════ #}
+<h5 class="mt-4 mb-3 text-muted">Data Quality &amp; Source Provenance</h5>
+<div class="row g-3">
+
+    {# ── 7. Edge Completeness Scorecard ── #}
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header"><strong>Edge Completeness</strong></div>
+            <div class="card-body p-0">
+                {% if edge_completeness %}
+                {% set total_edges = edge_completeness.values() | sum %}
+                <ul class="list-group list-group-flush">
+                    {% for score, count in edge_completeness.items() %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            <strong>{{ score }}/4</strong> fields
+                            <span class="text-muted" style="font-size:0.75rem">
+                                ({{ (count * 100 / total_edges) | round(0) | int }}%)
+                            </span>
+                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress" style="width:80px;height:6px">
+                                <div class="progress-bar {% if score | int >= 3 %}bg-success{% elif score | int >= 1 %}bg-warning{% else %}bg-danger{% endif %}"
+                                     style="width:{{ (count * 100 / total_edges) | round(0) | int }}%"></div>
+                            </div>
+                            <span class="badge bg-secondary rounded-pill">{{ count }}</span>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}<p class="text-muted p-3 mb-0">No data.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 8. Source Breakdown ── #}
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header"><strong>Data Source</strong></div>
+            <div class="card-body p-0">
+                {% if source_breakdown %}
+                {% set total_src = source_breakdown.values() | sum %}
+                <ul class="list-group list-group-flush">
+                    {% for source, count in source_breakdown.items() %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            {{ source | replace("_", " ") | title }}
+                            <span class="text-muted" style="font-size:0.75rem">
+                                ({{ (count * 100 / total_src) | round(0) | int }}%)
+                            </span>
+                        </span>
+                        <span class="badge bg-primary rounded-pill">{{ count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}<p class="text-muted p-3 mb-0">No data.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 9. Fetch Staleness ── #}
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header"><strong>Data Freshness</strong></div>
+            <div class="card-body p-0">
+                {% if fetch_staleness %}
+                <ul class="list-group list-group-flush">
+                    {% for bucket, count in fetch_staleness.items() %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ bucket }}
+                        <span class="badge rounded-pill {% if '7 day' in bucket %}bg-success{% elif '30 day' in bucket %}bg-info{% elif '90 day' in bucket and '>' not in bucket %}bg-warning{% else %}bg-danger{% endif %}">{{ count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}<p class="text-muted p-3 mb-0">No data.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 10. Fetch Success Rate ── #}
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header"><strong>Fetch Success Rate</strong></div>
+            <div class="card-body p-0">
+                {% if fetch_success %}
+                {% set total_fetches = fetch_success.values() | sum %}
+                <ul class="list-group list-group-flush">
+                    {% for status, count in fetch_success.items() %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            {{ status }}
+                            <span class="text-muted" style="font-size:0.75rem">
+                                ({{ (count * 100 / total_fetches) | round(0) | int }}%)
+                            </span>
+                        </span>
+                        <span class="badge rounded-pill {% if status == 'ok' %}bg-success{% elif status == 'not_found' %}bg-warning{% else %}bg-danger{% endif %}">{{ count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}<p class="text-muted p-3 mb-0">No data.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 11. Quality Breakdown ── #}
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header"><strong>Data Quality (Seeds)</strong></div>
+            <div class="card-body p-0">
+                {% if quality_breakdown %}
+                {% set total_q = quality_breakdown.values() | sum %}
+                <ul class="list-group list-group-flush">
+                    {% for quality, count in quality_breakdown.items() %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            {% if quality == 'high' %}Official SP page
+                            {% elif quality == 'medium' %}Privacy/legal page
+                            {% elif quality == 'low' %}No verified source
+                            {% else %}Unknown{% endif %}
+                            <span class="text-muted" style="font-size:0.75rem">
+                                ({{ (count * 100 / total_q) | round(0) | int }}%)
+                            </span>
+                        </span>
+                        <span class="badge rounded-pill {% if quality == 'high' %}bg-success{% elif quality == 'medium' %}bg-warning text-dark{% elif quality == 'low' %}bg-danger{% else %}bg-secondary{% endif %}">{{ count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}<p class="text-muted p-3 mb-0">No data.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 12. Country Coverage ── #}
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header"><strong>SP Country Coverage</strong></div>
+            <div class="card-body p-0">
+                {% if country_coverage %}
+                {% set total_sps = country_coverage.values() | sum %}
+                <ul class="list-group list-group-flush">
+                    {% for status, count in country_coverage.items() %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            {% if status == 'known' %}Country identified{% else %}Country unknown{% endif %}
+                            <span class="text-muted" style="font-size:0.75rem">
+                                ({{ (count * 100 / total_sps) | round(0) | int }}%)
+                            </span>
+                        </span>
+                        <span class="badge rounded-pill {% if status == 'known' %}bg-success{% else %}bg-danger{% endif %}">{{ count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}<p class="text-muted p-3 mb-0">No data.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── 12. Field Coverage per Seed ── #}
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header"><strong>Enrichment by Seed</strong></div>
+            <div class="card-body p-0">
+                {% if field_coverage %}
+                <div class="table-responsive" style="max-height:320px;overflow-y:auto">
+                    <table class="table table-sm mb-0">
+                        <thead style="position:sticky;top:0;background:#fff"><tr>
+                            <th>Company</th>
+                            <th class="text-center" title="Purposes">Purp</th>
+                            <th class="text-center" title="Data Categories">Cat</th>
+                            <th class="text-center" title="Transfer Basis">Basis</th>
+                            <th class="text-end">Score</th>
+                        </tr></thead>
+                        <tbody>
+                            {% for row in field_coverage %}
+                            <tr>
+                                <td class="text-truncate" style="max-width:140px">
+                                    <img src="https://www.google.com/s2/favicons?domain={{ row.domain }}&sz=16" alt="" width="14" height="14" class="me-1">
+                                    {{ row.company_name or row.domain }}
+                                </td>
+                                <td class="text-center">
+                                    {% if row.has_purposes == row.total %}<span class="text-success">&#10003;</span>
+                                    {% elif row.has_purposes > 0 %}{{ row.has_purposes }}/{{ row.total }}
+                                    {% else %}<span class="text-danger">&#10007;</span>{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if row.has_categories == row.total %}<span class="text-success">&#10003;</span>
+                                    {% elif row.has_categories > 0 %}{{ row.has_categories }}/{{ row.total }}
+                                    {% else %}<span class="text-danger">&#10007;</span>{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if row.has_basis == row.total %}<span class="text-success">&#10003;</span>
+                                    {% elif row.has_basis > 0 %}{{ row.has_basis }}/{{ row.total }}
+                                    {% else %}<span class="text-danger">&#10007;</span>{% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge {% if row.pct >= 75 %}bg-success{% elif row.pct >= 25 %}bg-warning text-dark{% else %}bg-danger{% endif %}">{{ row.pct }}%</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}<p class="text-muted p-3 mb-0">No data.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 {% endif %}
 {% endblock %}
